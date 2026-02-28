@@ -31,6 +31,8 @@ npm run dev          # Vite dev server (port 5173)
 npm run build        # tsc + vite build (type-check then bundle)
 npm test             # vitest run (all tests)
 npm run test:watch   # vitest watch mode
+npm run test:e2e     # playwright e2e tests (auto-starts dev server)
+npm run test:e2e:ui  # playwright UI mode (interactive test runner)
 npm run server       # HTTP session server (port 3001)
 npm run mcp          # MCP server (stdio transport)
 ```
@@ -61,7 +63,8 @@ src/
 
 - One custom element per file, registered via `@customElement('tag-name')` decorator
 - Shoelace components imported per-component (tree-shaking, not full bundle)
-- Tests colocated next to source: `src/lib/foo.ts` -> `src/lib/foo.test.ts`
+- Unit tests colocated next to source: `src/lib/foo.ts` -> `src/lib/foo.test.ts`
+- E2E tests in `e2e/` directory using Playwright (config: `playwright.config.ts`)
 - `experimentalDecorators: true` + `useDefineForClassFields: false` in tsconfig (required for Lit)
 
 ## Skill Quick Reference
