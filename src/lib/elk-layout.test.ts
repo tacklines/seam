@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { runElkLayout, eventNodeId, NODE_W, NODE_H } from './elk-layout.js';
+import { runElkLayout, eventNodeId, elkSectionToPath, straightEdgePath, NODE_W, NODE_H } from './elk-layout.js';
+import type { EdgeSection } from './elk-layout.js';
 import type { LoadedFile } from '../schema/types.js';
 
 /** Minimal LoadedFile factory for tests */
@@ -224,6 +225,107 @@ describe('runElkLayout', () => {
 
       expect(result.width).toBeGreaterThan(NODE_W);
       expect(result.height).toBeGreaterThan(NODE_H);
+    });
+  });
+
+  describe('edge group sections', () => {
+    it('when outbound edge exists, edge group has sections array', async () => {
+      // Source: discovered during implementation
+      const files = [
+        makeFile('ops', [
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
+        ]),
+      ];
+
+      const result = await runElkLayout(files);
+
+      const childId = eventNodeId('Order', 'OrderPlaced');
+      const group = result.edgeGroups.find((g) => g.from === childId && g.to === 'PaymentService');
+      // sections may be populated or empty depending on ELK output, but array exists
+      expect(group).toBeDefined();
+      expect(Array.isArray(group?.sections)).toBe(true);
+    });
+  });
+});
+
+describe('elkSectionToPath', () => {
+  describe('given a section with no bend points', () => {
+    it('when called, returns an M...L straight path', () => {
+      // Source: discovered during implementation
+      const section: EdgeSection = {
+        startPoint: { x: 10, y: 20 },
+        endPoint: { x: 100, y: 80 },
+      };
+      const path = elkSectionToPath(section);
+      expect(path).toBe('M10 20 L100 80');
+    });
+
+    it('when called with empty bend points array, returns a straight path', () => {
+      // Source: discovered during implementation
+      const section: EdgeSection = {
+        startPoint: { x: 0, y: 0 },
+        endPoint: { x: 50, y: 50 },
+        bendPoints: [],
+      };
+      const path = elkSectionToPath(section);
+      expect(path).toBe('M0 0 L50 50');
+    });
+  });
+
+  describe('given a section with bend points', () => {
+    it('when called with one bend point, returns a path starting with M and containing Q', () => {
+      // Source: discovered during implementation
+      const section: EdgeSection = {
+        startPoint: { x: 0, y: 0 },
+        endPoint: { x: 100, y: 100 },
+        bendPoints: [{ x: 50, y: 20 }],
+      };
+      const path = elkSectionToPath(section);
+      expect(path).toMatch(/^M0 0/);
+      expect(path).toContain('Q');
+    });
+
+    it('when called with multiple bend points, produces a smooth path', () => {
+      // Source: discovered during implementation
+      const section: EdgeSection = {
+        startPoint: { x: 0, y: 0 },
+        endPoint: { x: 200, y: 0 },
+        bendPoints: [
+          { x: 50, y: 50 },
+          { x: 100, y: 0 },
+          { x: 150, y: 50 },
+        ],
+      };
+      const path = elkSectionToPath(section);
+      expect(path).toMatch(/^M0 0/);
+      // Should end near endPoint
+      expect(path).toContain('200');
+    });
+  });
+});
+
+describe('straightEdgePath', () => {
+  describe('given zero perpendicular offset', () => {
+    it('when called, returns a simple M...L straight line', () => {
+      // Source: discovered during implementation
+      const path = straightEdgePath(10, 20, 100, 80, 0);
+      expect(path).toBe('M10 20 L100 80');
+    });
+  });
+
+  describe('given non-zero perpendicular offset', () => {
+    it('when called, returns a cubic bezier path with C control points', () => {
+      // Source: discovered during implementation
+      const path = straightEdgePath(0, 0, 100, 0, 20);
+      expect(path).toMatch(/^M0 0 C/);
+    });
+
+    it('when called with negative offset, produces a path on the opposite side', () => {
+      // Source: discovered during implementation
+      const pathPos = straightEdgePath(0, 0, 100, 0, 20);
+      const pathNeg = straightEdgePath(0, 0, 100, 0, -20);
+      // Different offsets produce different paths
+      expect(pathPos).not.toBe(pathNeg);
     });
   });
 });

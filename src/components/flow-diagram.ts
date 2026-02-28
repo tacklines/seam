@@ -4,7 +4,7 @@ import type { LoadedFile } from '../schema/types.js';
 import type { Confidence, Direction } from '../schema/types.js';
 import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
-import { runElkLayout, NODE_W, NODE_H } from '../lib/elk-layout.js';
+import { runElkLayout, NODE_W, NODE_H, elkSectionToPath, straightEdgePath } from '../lib/elk-layout.js';
 import type { LayoutNode, LayoutCompound, LayoutEdgeGroup } from '../lib/elk-layout.js';
 import { isEdgeGroupVisible } from '../lib/edge-filters.js';
 import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
@@ -489,6 +489,35 @@ export class FlowDiagram extends LitElement {
     return node.y + NODE_H / 2;
   }
 
+  /**
+   * Get the SVG marker-end URL for a given confidence level.
+   * Color-matched arrowheads for visual clarity.
+   */
+  private _arrowMarker(confidence: string): string {
+    switch (confidence) {
+      case 'CONFIRMED': return 'url(#arrow-confirmed)';
+      case 'LIKELY': return 'url(#arrow-likely)';
+      case 'POSSIBLE': return 'url(#arrow-possible)';
+      default: return 'url(#arrow-default)';
+    }
+  }
+
+  /**
+   * Build an SVG path from ELK section data if available, otherwise fall back to a straight/offset line.
+   * elkSection carries absolute coordinates from the ELK layout engine.
+   */
+  private _edgePath(
+    x1: number, y1: number,
+    x2: number, y2: number,
+    perpOffset: number,
+    elkSection?: { startPoint: { x: number; y: number }; endPoint: { x: number; y: number }; bendPoints?: { x: number; y: number }[] } | undefined,
+  ): string {
+    if (elkSection) {
+      return elkSectionToPath(elkSection);
+    }
+    return straightEdgePath(x1, y1, x2, y2, perpOffset);
+  }
+
   private _renderEdgeGroup(group: LayoutEdgeGroup, nodeMap: Map<string, LayoutNode>, matchedNodeIds: Set<string>): unknown {
     const from = nodeMap.get(group.from);
     const to = nodeMap.get(group.to);
@@ -507,53 +536,49 @@ export class FlowDiagram extends LitElement {
     const toCx = this._nodeCx(to);
     const toCy = this._nodeCy(to);
 
-    // Self-loop (internal events)
+    // ── Self-loop (internal events) ──────────────────────────────────────────
     if (from.id === to.id) {
       return group.edges.map((edge, i) => {
-        const loopOffset = i * 16;
-        const rx = fromCx + NODE_W / 2;
-        const ry = fromCy;
-        const bulge = 28 + loopOffset;
-        const tipY = ry + 1;
+        const loopOffset = i * 20;
+        // Loop hangs off the right side of the node
+        const rx = from.x + NODE_W; // right edge of node
+        const ry = from.y + NODE_H / 2; // vertical center
+        const loopW = 32 + loopOffset;
+        const loopH = 20 + loopOffset;
+        // Arc: start at right-center, loop right and back
+        const startX = rx;
+        const startY = ry - 6;
+        const endX = rx;
+        const endY = ry + 6;
+        const pathId = `loop-${group.from.replace(/[^a-zA-Z0-9]/g, '_')}-${i}`;
         const color = CONFIDENCE_COLOR[edge.confidence] ?? '#64748b';
         const tooltipText = `${edge.label}\nTrigger: ${edge.trigger}\nConfidence: ${edge.confidence}`;
+
+        // Cubic bezier: go out to the right and loop back
+        const cpX = rx + loopW;
+        const loopPath = `M${startX} ${startY} C${cpX} ${startY - loopH} ${cpX} ${endY + loopH} ${endX} ${endY}`;
 
         return svg`
           <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
             @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
             @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
             @mouseleave=${() => this._hideTooltip()}>
-            <path
-              d="M${rx} ${ry - 6} C${rx + bulge} ${ry - bulge} ${rx + bulge} ${ry + bulge} ${rx} ${tipY + 6}"
-              fill="none"
-              stroke=${color}
-              stroke-width="1.5"
-              marker-end="url(#arrowhead)"
-            />
-            <rect
-              x=${rx + bulge - 2}
-              y=${ry - 7}
-              width=${edge.label.length * 6.2 + 8}
-              height="14"
-              rx="3"
-              fill="white"
-              fill-opacity="0.92"
-            />
-            <text
-              x=${rx + bulge + 2}
-              y=${ry + 4}
-              fill=${color}
-              font-size="10"
-              font-family="'JetBrains Mono', monospace"
-            >${edge.label}</text>
+            <defs>
+              <path id=${pathId} d=${loopPath} />
+            </defs>
+            <use href="#${pathId}" fill="none" stroke=${color} stroke-width="1.5"
+              marker-end=${this._arrowMarker(edge.confidence)} />
+            <text font-size="9" font-family="'JetBrains Mono', monospace" fill=${color}>
+              <textPath href="#${pathId}" startOffset="50%" text-anchor="middle">${edge.label}</textPath>
+            </text>
           </g>
         `;
       });
     }
 
-    // Multi-edge bundling
+    // ── Multi-edge bundling (4+ edges) ──────────────────────────────────────
     const count = group.edges.length;
-    const isBundled = count > 3;
+    const isBundled = count >= 4;
 
     // Compute direction vector from source center to target center
     const dx = toCx - fromCx;
@@ -569,12 +594,12 @@ export class FlowDiagram extends LitElement {
     const y2 = toCy - ny * (NODE_H / 2);
 
     if (isBundled) {
+      // Use the first available ELK section as the routed path for the bundle
+      const bundleSection = group.sections?.[0];
+      const bundlePathId = `bundle-${group.from.replace(/[^a-zA-Z0-9]/g, '_')}-${group.to.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      const bundlePath = this._edgePath(x1, y1, x2, y2, 0, bundleSection);
       const mx = (x1 + x2) / 2;
       const my = (y1 + y2) / 2;
-      const cpx1 = x1 + dx * 0.35;
-      const cpy1 = y1 + dy * 0.35;
-      const cpx2 = x1 + dx * 0.65;
-      const cpy2 = y1 + dy * 0.65;
       const tooltipText = group.edges.map((e) => `${e.label} (${e.confidence})`).join('\n');
 
       return svg`
@@ -582,21 +607,20 @@ export class FlowDiagram extends LitElement {
           @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
           @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
           @mouseleave=${() => this._hideTooltip()}>
-          <path
-            d="M${x1} ${y1} C${cpx1} ${cpy1} ${cpx2} ${cpy2} ${x2} ${y2}"
-            fill="none"
-            stroke="#64748b"
-            stroke-width="2.5"
-            stroke-opacity="0.6"
-            marker-end="url(#arrowhead)"
-          />
-          <circle cx=${mx} cy=${my} r="12" fill="#475569" />
+          <defs>
+            <path id=${bundlePathId} d=${bundlePath} />
+          </defs>
+          <use href="#${bundlePathId}" fill="none" stroke="#64748b" stroke-width="3.5"
+            stroke-opacity="0.55" marker-end="url(#arrow-bundle)" />
+          <!-- Count badge at midpoint -->
+          <circle cx=${mx} cy=${my} r="13" fill="#475569" />
           <text x=${mx} y=${my + 4} text-anchor="middle" fill="white" font-size="11" font-weight="700">${count}</text>
         </g>
       `;
     }
 
-    // Regular edges (1-3 per group), offset perpendicular to avoid overlap
+    // ── Regular edges (1-3 per group) ───────────────────────────────────────
+    // Offset edges perpendicular to each other to avoid overlap
     const perpX = -ny;
     const perpY = nx;
     const spreadTotal = (count - 1) * 14;
@@ -608,46 +632,40 @@ export class FlowDiagram extends LitElement {
       const ox2 = x2 + perpX * offset;
       const oy2 = y2 + perpY * offset;
 
-      // Bezier control points
-      const cpx1 = ox1 + dx * 0.35 + perpX * offset * 0.3;
-      const cpy1 = oy1 + dy * 0.35 + perpY * offset * 0.3;
-      const cpx2 = ox1 + dx * 0.65 + perpX * offset * 0.3;
-      const cpy2 = oy1 + dy * 0.65 + perpY * offset * 0.3;
-
-      const mx = (ox1 + ox2) / 2;
-      const my = (oy1 + oy2) / 2;
       const color = CONFIDENCE_COLOR[edge.confidence] ?? '#64748b';
       const tooltipText = `${edge.label}\nTrigger: ${edge.trigger}\nConfidence: ${edge.confidence}`;
+
+      // Use ELK section if available for this edge index, else computed offset line
+      const elkSection = group.sections?.[i];
+      const pathData = this._edgePath(ox1, oy1, ox2, oy2, offset, elkSection);
+
+      // Stable path ID for textPath referencing
+      const pathId = `edge-${group.from.replace(/[^a-zA-Z0-9]/g, '_')}-${group.to.replace(/[^a-zA-Z0-9]/g, '_')}-${i}`;
 
       return svg`
         <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
           @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
           @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
           @mouseleave=${() => this._hideTooltip()}>
-          <path
-            d="M${ox1} ${oy1} C${cpx1} ${cpy1} ${cpx2} ${cpy2} ${ox2} ${oy2}"
-            fill="none"
-            stroke=${color}
-            stroke-width="1.5"
-            marker-end="url(#arrowhead)"
-          />
-          <rect
-            x=${mx - edge.label.length * 3 - 4}
-            y=${my - 8}
-            width=${edge.label.length * 6.2 + 8}
-            height="14"
-            rx="3"
-            fill="white"
-            fill-opacity="0.92"
-          />
+          <defs>
+            <path id=${pathId} d=${pathData} />
+          </defs>
+          <!-- Wider invisible hit area for easier hover -->
+          <use href="#${pathId}" fill="none" stroke="transparent" stroke-width="10" />
+          <!-- Visible edge line -->
+          <use href="#${pathId}" fill="none" stroke=${color} stroke-width="1.5"
+            marker-end=${this._arrowMarker(edge.confidence)} />
+          <!-- Label along path using textPath for natural placement -->
           <text
-            x=${mx}
-            y=${my + 3}
-            text-anchor="middle"
-            fill=${color}
             font-size="10"
             font-family="'JetBrains Mono', monospace"
-          >${edge.label}</text>
+            fill=${color}
+            paint-order="stroke"
+            stroke="white"
+            stroke-width="3"
+            stroke-linejoin="round">
+            <textPath href="#${pathId}" startOffset="50%" text-anchor="middle">${edge.label}</textPath>
+          </text>
         </g>
       `;
     });
@@ -860,8 +878,21 @@ export class FlowDiagram extends LitElement {
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+            <!-- Per-confidence-color arrowhead markers for crisp directional arrows -->
+            <marker id="arrow-confirmed" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 8 3, 0 6" fill="${CONFIDENCE_COLOR['CONFIRMED']}" />
+            </marker>
+            <marker id="arrow-likely" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 8 3, 0 6" fill="${CONFIDENCE_COLOR['LIKELY']}" />
+            </marker>
+            <marker id="arrow-possible" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 8 3, 0 6" fill="${CONFIDENCE_COLOR['POSSIBLE']}" />
+            </marker>
+            <marker id="arrow-default" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 8 3, 0 6" fill="#64748b" />
+            </marker>
+            <marker id="arrow-bundle" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 8 3, 0 6" fill="#475569" />
             </marker>
             <filter id="shadow" x="-4%" y="-4%" width="108%" height="116%">
               <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.10" />

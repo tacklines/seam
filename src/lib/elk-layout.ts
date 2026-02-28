@@ -57,10 +57,28 @@ export interface LayoutEdge {
   direction: string;
 }
 
+/** A single point in a path */
+export interface PathPoint {
+  x: number;
+  y: number;
+}
+
+/** Edge routing data returned by ELK for one edge */
+export interface EdgeSection {
+  startPoint: PathPoint;
+  endPoint: PathPoint;
+  bendPoints?: PathPoint[];
+}
+
 export interface LayoutEdgeGroup {
   from: string;
   to: string;
   edges: LayoutEdge[];
+  /**
+   * ELK-computed edge sections indexed by edge position in `edges` array.
+   * May be undefined if ELK did not return routing data for this group.
+   */
+  sections?: EdgeSection[];
 }
 
 export interface ElkLayoutResult {
@@ -81,6 +99,75 @@ export interface ElkLayoutResult {
  */
 export function eventNodeId(aggregate: string, eventName: string): string {
   return `${aggregate}::${eventName}`;
+}
+
+/**
+ * Build an SVG path string from an ELK EdgeSection.
+ *
+ * ELK SPLINES routing returns startPoint, optional bendPoints, endPoint.
+ * We render this as a smooth polyline using quadratic Bezier curves
+ * through each bend point, producing a visually clean routed path.
+ *
+ * Source: discovered during implementation
+ */
+export function elkSectionToPath(section: EdgeSection): string {
+  const { startPoint, endPoint, bendPoints } = section;
+
+  if (!bendPoints || bendPoints.length === 0) {
+    // Straight line
+    return `M${startPoint.x} ${startPoint.y} L${endPoint.x} ${endPoint.y}`;
+  }
+
+  const all = [startPoint, ...bendPoints, endPoint];
+  let d = `M${all[0].x} ${all[0].y}`;
+
+  if (all.length === 2) {
+    d += ` L${all[1].x} ${all[1].y}`;
+  } else {
+    // Smooth curve through all points using cubic bezier with chord-length tangents
+    // Use a simple approach: straight segments with rounded joins via quadratic bezier
+    for (let i = 1; i < all.length - 1; i++) {
+      const mid = {
+        x: (all[i].x + all[i + 1].x) / 2,
+        y: (all[i].y + all[i + 1].y) / 2,
+      };
+      d += ` Q${all[i].x} ${all[i].y} ${mid.x} ${mid.y}`;
+    }
+    const last = all[all.length - 1];
+    d += ` L${last.x} ${last.y}`;
+  }
+
+  return d;
+}
+
+/**
+ * Build an SVG path string for a straight edge between two points.
+ * Returns a cubic bezier with mild curvature proportional to distance
+ * to avoid stacking on top of other edges.
+ *
+ * Source: discovered during implementation
+ */
+export function straightEdgePath(
+  x1: number, y1: number,
+  x2: number, y2: number,
+  perpOffset = 0,
+): string {
+  if (perpOffset === 0) {
+    return `M${x1} ${y1} L${x2} ${y2}`;
+  }
+  // Perpendicular offset vector
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = -dy / dist;
+  const ny = dx / dist;
+
+  const cpx1 = x1 + dx * 0.35 + nx * perpOffset;
+  const cpy1 = y1 + dy * 0.35 + ny * perpOffset;
+  const cpx2 = x1 + dx * 0.65 + nx * perpOffset;
+  const cpy2 = y1 + dy * 0.65 + ny * perpOffset;
+
+  return `M${x1} ${y1} C${cpx1} ${cpy1} ${cpx2} ${cpy2} ${x2} ${y2}`;
 }
 
 /**
@@ -156,24 +243,22 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
   }));
 
   // Build ELK edges (connect event child nodes to external nodes)
+  // Track edge ID -> group key so we can attach ELK section data after layout
   let edgeCounter = 0;
   const elkEdges: Array<{ id: string; sources: string[]; targets: string[] }> = [];
+  const edgeIdToGroupKey = new Map<string, string>();
 
   for (const file of files) {
     for (const event of file.data.domain_events) {
       const childId = eventNodeId(event.aggregate, event.name);
       if (event.integration.direction === 'outbound' && event.integration.channel) {
-        elkEdges.push({
-          id: `e${edgeCounter++}`,
-          sources: [childId],
-          targets: [event.integration.channel],
-        });
+        const id = `e${edgeCounter++}`;
+        elkEdges.push({ id, sources: [childId], targets: [event.integration.channel] });
+        edgeIdToGroupKey.set(id, `${childId}::${event.integration.channel}`);
       } else if (event.integration.direction === 'inbound' && event.integration.channel) {
-        elkEdges.push({
-          id: `e${edgeCounter++}`,
-          sources: [event.integration.channel],
-          targets: [childId],
-        });
+        const id = `e${edgeCounter++}`;
+        elkEdges.push({ id, sources: [event.integration.channel], targets: [childId] });
+        edgeIdToGroupKey.set(id, `${event.integration.channel}::${childId}`);
       }
       // internal events: no ELK edge (self-contained within aggregate)
     }
@@ -252,7 +337,7 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
   }
 
   // Build edge groups for rendering
-  // Group by (sourceAgg, targetExternal) or (sourceExternal, targetAgg) for display
+  // Group by (fromId, toId) for display
   const groupMap = new Map<string, LayoutEdgeGroup>();
 
   for (const file of files) {
@@ -277,7 +362,7 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
       const key = `${fromId}::${toId}`;
       let group = groupMap.get(key);
       if (!group) {
-        group = { from: fromId, to: toId, edges: [] };
+        group = { from: fromId, to: toId, edges: [], sections: [] };
         groupMap.set(key, group);
       }
       group.edges.push({
@@ -286,6 +371,26 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
         confidence: event.confidence,
         direction: event.integration.direction,
       });
+    }
+  }
+
+  // Extract ELK-computed edge sections (bend points) and attach to groups
+  // ELK returns edges at the root level with sections containing routed paths
+  for (const elkEdge of laid.edges ?? []) {
+    const groupKey = edgeIdToGroupKey.get(elkEdge.id ?? '');
+    if (!groupKey) continue;
+    const group = groupMap.get(groupKey);
+    if (!group) continue;
+
+    if (elkEdge.sections && elkEdge.sections.length > 0) {
+      const sec = elkEdge.sections[0];
+      const section: EdgeSection = {
+        startPoint: { x: sec.startPoint.x, y: sec.startPoint.y },
+        endPoint: { x: sec.endPoint.x, y: sec.endPoint.y },
+        bendPoints: sec.bendPoints?.map((p) => ({ x: p.x, y: p.y })),
+      };
+      group.sections = group.sections ?? [];
+      group.sections.push(section);
     }
   }
 
