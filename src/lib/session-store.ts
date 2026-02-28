@@ -8,6 +8,17 @@ import {
   ContractBundle,
   IntegrationReport,
 } from '../schema/types.js';
+import { EventStore } from '../contexts/session/event-store.js';
+import type {
+  SessionCreated,
+  ParticipantJoined,
+  ArtifactSubmitted,
+  ResolutionRecorded,
+  OwnershipAssigned,
+  ItemFlagged,
+  ContractGenerated,
+  ComplianceCheckCompleted,
+} from '../contexts/session/domain-events.js';
 
 export interface Participant {
   id: string;
@@ -82,6 +93,11 @@ export function serializeSession(session: Session): SerializedSession {
 
 export class SessionStore {
   private sessions: Map<string, Session> = new Map();
+  private eventStore: EventStore | null;
+
+  constructor(eventStore?: EventStore) {
+    this.eventStore = eventStore ?? null;
+  }
 
   createSession(creatorName: string): { session: Session; creatorId: string } {
     let code = generateCode();
@@ -108,6 +124,18 @@ export class SessionStore {
     };
 
     this.sessions.set(code, session);
+
+    if (this.eventStore) {
+      this.eventStore.append(code, {
+        type: 'SessionCreated',
+        eventId: generateId(),
+        sessionCode: code,
+        timestamp: session.createdAt,
+        creatorName,
+        creatorId,
+      } satisfies SessionCreated);
+    }
+
     return { session, creatorId };
   }
 
@@ -123,6 +151,19 @@ export class SessionStore {
     };
 
     session.participants.set(participantId, participant);
+
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'ParticipantJoined',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: participant.joinedAt,
+        participantId,
+        participantName,
+        participantType: 'human',
+      } satisfies ParticipantJoined);
+    }
+
     return { session, participantId };
   }
 
@@ -144,6 +185,25 @@ export class SessionStore {
     };
 
     session.submissions.push(submission);
+
+    if (this.eventStore) {
+      // Count how many times this participant has submitted this fileName
+      const version = session.submissions.filter(
+        (s) => s.participantId === participantId && s.fileName === fileName
+      ).length;
+      this.eventStore.append(session.code, {
+        type: 'ArtifactSubmitted',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: submission.submittedAt,
+        artifactId: generateId(),
+        participantId,
+        fileName,
+        artifactType: 'candidate-events',
+        version,
+      } satisfies ArtifactSubmitted);
+    }
+
     return submission;
   }
 
@@ -175,6 +235,20 @@ export class SessionStore {
       resolvedAt: new Date().toISOString(),
     };
     session.jam.resolutions.push(full);
+
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'ResolutionRecorded',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: full.resolvedAt,
+        overlapLabel: full.overlapLabel,
+        resolution: full.resolution,
+        chosenApproach: full.chosenApproach,
+        resolvedBy: full.resolvedBy,
+      } satisfies ResolutionRecorded);
+    }
+
     return full;
   }
 
@@ -193,6 +267,19 @@ export class SessionStore {
       (o) => o.aggregate !== full.aggregate
     );
     session.jam.ownershipMap.push(full);
+
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'OwnershipAssigned',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: full.assignedAt,
+        aggregate: full.aggregate,
+        ownerRole: full.ownerRole,
+        assignedBy: full.assignedBy,
+      } satisfies OwnershipAssigned);
+    }
+
     return full;
   }
 
@@ -208,6 +295,19 @@ export class SessionStore {
       flaggedAt: new Date().toISOString(),
     };
     session.jam.unresolved.push(full);
+
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'ItemFlagged',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: full.flaggedAt,
+        description: full.description,
+        flaggedBy: full.flaggedBy,
+        ...(full.relatedOverlap !== undefined ? { relatedOverlap: full.relatedOverlap } : {}),
+      } satisfies ItemFlagged);
+    }
+
     return full;
   }
 
@@ -221,6 +321,18 @@ export class SessionStore {
     const session = this.sessions.get(code.toUpperCase());
     if (!session) return null;
     session.contracts = bundle;
+
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'ContractGenerated',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: new Date().toISOString(),
+        contractId: generateId(),
+        version: 1,
+      } satisfies ContractGenerated);
+    }
+
     return bundle;
   }
 
@@ -233,6 +345,21 @@ export class SessionStore {
     const session = this.sessions.get(code.toUpperCase());
     if (!session) return null;
     session.integrationReport = report;
+
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'ComplianceCheckCompleted',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: new Date().toISOString(),
+        contractId: generateId(),
+        passed: report.overallStatus === 'pass',
+        failures: report.checks
+          .filter((c) => c.status === 'fail')
+          .map((c) => c.message),
+      } satisfies ComplianceCheckCompleted);
+    }
+
     return report;
   }
 

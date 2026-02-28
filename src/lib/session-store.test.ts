@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SessionStore, serializeSession } from './session-store.js';
-import type { CandidateEventsFile } from '../schema/types.js';
+import { EventStore } from '../contexts/session/event-store.js';
+import type { CandidateEventsFile, IntegrationReport } from '../schema/types.js';
 
 const makeFile = (role: string): CandidateEventsFile => ({
   metadata: {
@@ -329,6 +330,254 @@ describe('SessionStore', () => {
       expect(serialized.code).toBe(session.code);
       expect(serialized.createdAt).toBe(session.createdAt);
       expect(serialized.submissions).toEqual(session.submissions);
+    });
+  });
+
+  describe('event emission', () => {
+    const makeIntegrationReport = (status: 'pass' | 'fail' = 'pass'): IntegrationReport => ({
+      generatedAt: new Date().toISOString(),
+      sourceContracts: [],
+      checks: status === 'fail'
+        ? [{ name: 'check1', status: 'fail', message: 'something failed' }]
+        : [{ name: 'check1', status: 'pass', message: 'ok' }],
+      overallStatus: status,
+      summary: status === 'pass' ? 'All checks passed' : 'Some checks failed',
+    });
+
+    it('emits no events when EventStore is not provided (backward compat)', () => {
+      const store = new SessionStore();
+      const { session, creatorId } = store.createSession('Alice');
+      store.joinSession(session.code, 'Bob');
+      store.submitYaml(session.code, creatorId, 'alice.yaml', makeFile('engineer'));
+      // No assertion needed — if an error were thrown the test would fail.
+      // The point is that no EventStore is required.
+      expect(session.code).toHaveLength(6);
+    });
+
+    it('createSession emits a SessionCreated event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session, creatorId } = store.createSession('Alice');
+
+      const events = eventStore.getEvents(session.code);
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('SessionCreated');
+      expect((events[0] as { creatorName: string }).creatorName).toBe('Alice');
+      expect((events[0] as { creatorId: string }).creatorId).toBe(creatorId);
+      expect(events[0].sessionCode).toBe(session.code);
+    });
+
+    it('joinSession emits a ParticipantJoined event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      const result = store.joinSession(session.code, 'Bob')!;
+
+      const events = eventStore.getEvents(session.code);
+      const joinEvent = events.find((e) => e.type === 'ParticipantJoined');
+      expect(joinEvent).toBeDefined();
+      expect((joinEvent as { participantId: string }).participantId).toBe(result.participantId);
+      expect((joinEvent as { participantName: string }).participantName).toBe('Bob');
+    });
+
+    it('joinSession emits no event for unknown session code', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      store.joinSession('XXXXXX', 'Bob');
+      expect(eventStore.getSessionCodes()).toHaveLength(0);
+    });
+
+    it('submitYaml emits an ArtifactSubmitted event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session, creatorId } = store.createSession('Alice');
+      store.submitYaml(session.code, creatorId, 'alice.yaml', makeFile('engineer'));
+
+      const events = eventStore.getEvents(session.code);
+      const submitEvent = events.find((e) => e.type === 'ArtifactSubmitted');
+      expect(submitEvent).toBeDefined();
+      expect((submitEvent as { participantId: string }).participantId).toBe(creatorId);
+      expect((submitEvent as { fileName: string }).fileName).toBe('alice.yaml');
+      expect((submitEvent as { artifactType: string }).artifactType).toBe('candidate-events');
+    });
+
+    it('submitYaml emits no event for unknown session code', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      store.submitYaml('XXXXXX', 'some-id', 'file.yaml', makeFile('engineer'));
+      expect(eventStore.getSessionCodes()).toHaveLength(0);
+    });
+
+    it('resolveConflict emits a ResolutionRecorded event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.startJam(session.code);
+      store.resolveConflict(session.code, {
+        overlapLabel: 'OrderPlaced vs OrderCreated',
+        resolution: 'Merged into OrderPlaced',
+        chosenApproach: 'merge',
+        resolvedBy: ['Alice', 'Bob'],
+      });
+
+      const events = eventStore.getEvents(session.code);
+      const resEvent = events.find((e) => e.type === 'ResolutionRecorded');
+      expect(resEvent).toBeDefined();
+      expect((resEvent as { overlapLabel: string }).overlapLabel).toBe('OrderPlaced vs OrderCreated');
+      expect((resEvent as { chosenApproach: string }).chosenApproach).toBe('merge');
+      expect((resEvent as { resolvedBy: string[] }).resolvedBy).toEqual(['Alice', 'Bob']);
+    });
+
+    it('resolveConflict emits no event when jam not started', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.resolveConflict(session.code, {
+        overlapLabel: 'test',
+        resolution: 'test',
+        chosenApproach: 'merge',
+        resolvedBy: [],
+      });
+
+      const events = eventStore.getEvents(session.code);
+      expect(events.find((e) => e.type === 'ResolutionRecorded')).toBeUndefined();
+    });
+
+    it('assignOwnership emits an OwnershipAssigned event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.startJam(session.code);
+      store.assignOwnership(session.code, {
+        aggregate: 'Order',
+        ownerRole: 'Sales',
+        assignedBy: 'Alice',
+      });
+
+      const events = eventStore.getEvents(session.code);
+      const ownEvent = events.find((e) => e.type === 'OwnershipAssigned');
+      expect(ownEvent).toBeDefined();
+      expect((ownEvent as { aggregate: string }).aggregate).toBe('Order');
+      expect((ownEvent as { ownerRole: string }).ownerRole).toBe('Sales');
+      expect((ownEvent as { assignedBy: string }).assignedBy).toBe('Alice');
+    });
+
+    it('flagUnresolved emits an ItemFlagged event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.startJam(session.code);
+      store.flagUnresolved(session.code, {
+        description: 'Unclear payment aggregate ownership',
+        flaggedBy: 'Alice',
+      });
+
+      const events = eventStore.getEvents(session.code);
+      const flagEvent = events.find((e) => e.type === 'ItemFlagged');
+      expect(flagEvent).toBeDefined();
+      expect((flagEvent as { description: string }).description).toBe('Unclear payment aggregate ownership');
+      expect((flagEvent as { flaggedBy: string }).flaggedBy).toBe('Alice');
+    });
+
+    it('flagUnresolved includes relatedOverlap when provided', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.startJam(session.code);
+      store.flagUnresolved(session.code, {
+        description: 'TBD',
+        flaggedBy: 'Alice',
+        relatedOverlap: 'OrderPlaced vs OrderCreated',
+      });
+
+      const events = eventStore.getEvents(session.code);
+      const flagEvent = events.find((e) => e.type === 'ItemFlagged');
+      expect((flagEvent as { relatedOverlap?: string }).relatedOverlap).toBe('OrderPlaced vs OrderCreated');
+    });
+
+    it('loadContracts emits a ContractGenerated event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.loadContracts(session.code, {
+        generatedAt: new Date().toISOString(),
+        eventContracts: [],
+        boundaryContracts: [],
+      });
+
+      const events = eventStore.getEvents(session.code);
+      const contractEvent = events.find((e) => e.type === 'ContractGenerated');
+      expect(contractEvent).toBeDefined();
+      expect((contractEvent as { version: number }).version).toBe(1);
+    });
+
+    it('loadContracts emits no event for unknown session code', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      store.loadContracts('XXXXXX', {
+        generatedAt: new Date().toISOString(),
+        eventContracts: [],
+        boundaryContracts: [],
+      });
+      expect(eventStore.getSessionCodes()).toHaveLength(0);
+    });
+
+    it('loadIntegrationReport emits a ComplianceCheckCompleted event with passed=true', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.loadIntegrationReport(session.code, makeIntegrationReport('pass'));
+
+      const events = eventStore.getEvents(session.code);
+      const complianceEvent = events.find((e) => e.type === 'ComplianceCheckCompleted');
+      expect(complianceEvent).toBeDefined();
+      expect((complianceEvent as { passed: boolean }).passed).toBe(true);
+      expect((complianceEvent as { failures: string[] }).failures).toHaveLength(0);
+    });
+
+    it('loadIntegrationReport emits a ComplianceCheckCompleted event with passed=false on failure', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.loadIntegrationReport(session.code, makeIntegrationReport('fail'));
+
+      const events = eventStore.getEvents(session.code);
+      const complianceEvent = events.find((e) => e.type === 'ComplianceCheckCompleted');
+      expect(complianceEvent).toBeDefined();
+      expect((complianceEvent as { passed: boolean }).passed).toBe(false);
+      expect((complianceEvent as { failures: string[] }).failures).toContain('something failed');
+    });
+
+    it('sendMessage does not emit any domain event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session, creatorId } = store.createSession('Alice');
+      const initialCount = eventStore.getEvents(session.code).length;
+      store.sendMessage(session.code, creatorId, 'Hello!');
+      expect(eventStore.getEvents(session.code).length).toBe(initialCount);
+    });
+
+    it('startJam does not emit any domain event', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      const initialCount = eventStore.getEvents(session.code).length;
+      store.startJam(session.code);
+      expect(eventStore.getEvents(session.code).length).toBe(initialCount);
+    });
+
+    it('emits events with valid eventId, sessionCode, and timestamp fields', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+
+      const events = eventStore.getEvents(session.code);
+      expect(events).toHaveLength(1);
+      const event = events[0];
+      expect(event.eventId).toBeTruthy();
+      expect(event.sessionCode).toBe(session.code);
+      expect(typeof event.timestamp).toBe('string');
+      expect(() => new Date(event.timestamp)).not.toThrow();
     });
   });
 });
