@@ -75,5 +75,10 @@
 - `--import-realm` flag with volume mount to `/opt/keycloak/data/import/` is the cleanest way to get a pre-configured realm on first boot (added: 2026-02-28, dispatch: a6r.25)
 - Storing credentials as plaintext `"value"` in realm JSON is safe for dev imports — Keycloak hashes them on first write (added: 2026-02-28, dispatch: a6r.25)
 
+## A2A Protocol
+- Zod v4 requires `z.record(z.string(), z.unknown())` — single-arg `z.record(z.unknown())` is a type error (added: 2026-02-28, dispatch: a6r.26)
+- A2A spec v0.2.5 uses `message/send` as primary method name, not `tasks/send` (added: 2026-02-28, dispatch: a6r.26)
+- A2A task execution: synchronous in-memory ops work as `submitted → working → completed` in one request cycle; async ops would need background worker + polling (added: 2026-02-28, dispatch: a6r.26)
+
 ## Cross-Agent Notes
 - (none yet)

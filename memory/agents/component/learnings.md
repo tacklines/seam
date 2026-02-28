@@ -4,6 +4,11 @@
 - One custom element per file, registered via `@customElement('tag-name')` decorator
 - Shoelace components imported per-component (tree-shaking, not full bundle)
 - `experimentalDecorators: true` + `useDefineForClassFields: false` in tsconfig (required for Lit)
+- Components organized by domain feature: shared/, session/, artifact/, comparison/, visualization/ under src/components/ (added: 2026-02-28, dispatch: a6r.12)
+
+## File Move Patterns
+- When moving TS files to deeper paths, run two sed passes: one for `from '...'` imports, one for `import('...')` inline type expressions — the latter hides in method signatures (added: 2026-02-28, dispatch: a6r.12)
+- `shared/` subdirectory for cross-domain UI primitives (event-card, assumption-list, aggregate-nav, filter-panel) avoids circular dependencies between domain directories (added: 2026-02-28, dispatch: a6r.12)
 
 ## Gotchas
 - ELK TypeScript types: `elk.layout()` returns `ElkNode` — annotate children/edges with explicit `ElkNode` type to avoid implicit-any on `.x`/`.y` access (added: 2026-02-28, dispatch: multi-human-workflows-ort)

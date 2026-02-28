@@ -41,5 +41,10 @@
 - `assignOwnership` already had upsert semantics (filter-then-push); other operations needed explicit guards (added: 2026-02-28, dispatch: a6r.27)
 - Content hashing via `JSON.stringify(data)` is sufficient for detecting identical re-submissions — CandidateEventsFile is plain serializable, no crypto hash needed (added: 2026-02-28, dispatch: a6r.27)
 
+## ELK Layout
+- ELK `layered` algorithm ignores `elk.aspectRatio` for disconnected component packing — only affects force-based algorithms. Use post-processing union-find + bounding-box reflow for landscape packing (added: 2026-02-28, dispatch: x42)
+- Column count formula `ceil(sqrt(n * aspectRatio))` gives correct landscape packing for any number of disconnected components (added: 2026-02-28, dispatch: x42)
+- When reflowing positions, update three coordinate systems: compound positions, child node absolute positions (parent offset + child relative), and edge section bend points (added: 2026-02-28, dispatch: x42)
+
 ## Cross-Agent Notes
 - (none yet)
