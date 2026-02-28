@@ -1,7 +1,6 @@
 import http from 'node:http';
 import { serializeSession } from '../lib/session-store.js';
-import { sessionStore as store, persistSessions } from './store.js';
-import { eventStore } from './gateway.js';
+import { sessionStore as store, eventStore } from './store.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
 import type { EventStore } from '../contexts/session/event-store.js';
@@ -129,7 +128,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const { session, creatorId } = store.createSession(creatorName.trim());
-      persistSessions();
       sendJson(res, 201, {
         code: session.code,
         participantId: creatorId,
@@ -154,7 +152,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const { session, participantId } = result;
-      persistSessions();
       sendJson(res, 200, {
         participantId,
         session: serializeSession(session),
@@ -194,7 +191,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      persistSessions();
       sendJson(res, 200, { submission });
       return;
     }
@@ -208,7 +204,6 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session not found' });
         return;
       }
-      persistSessions();
       sendJson(res, 200, { jam });
       return;
     }
@@ -237,7 +232,6 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session not found or jam not started' });
         return;
       }
-      persistSessions();
       sendJson(res, 200, { resolution: result });
       return;
     }
@@ -264,7 +258,6 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session not found or jam not started' });
         return;
       }
-      persistSessions();
       sendJson(res, 200, { assignment: result });
       return;
     }
@@ -294,7 +287,6 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session not found or jam not started' });
         return;
       }
-      persistSessions();
       sendJson(res, 200, { item: result });
       return;
     }
@@ -347,7 +339,6 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session not found or participant not in session' });
         return;
       }
-      persistSessions();
       sendJson(res, 201, { message: msg });
       return;
     }
