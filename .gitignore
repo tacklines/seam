@@ -12,6 +12,9 @@ CLAUDE.local.md
 # Memory scratch (ephemeral)
 memory/scratch/
 
+# Beads issue tracker (local only)
+.beads/
+
 # OS
 .DS_Store
 .claude/worktrees/

@@ -31,14 +31,6 @@ members:
       - "src/lib/**"
       - "src/fixtures/**"
 
-  - name: backend
-    role: "Rust backend services, API endpoints, data persistence, business logic"
-    tools: [Read, Write, Edit, Glob, Grep, Bash]
-    owns:
-      - "backend/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-
   - name: tester
     role: "Test strategy, coverage, edge cases, type-checking"
     tools: [Read, Write, Edit, Glob, Grep, Bash]
