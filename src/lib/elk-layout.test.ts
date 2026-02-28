@@ -223,6 +223,63 @@ describe('runElkLayout', () => {
     });
   });
 
+  describe('horizontal packing of disconnected bounded contexts', () => {
+    it('when three disconnected aggregates exist, layout is wider than it is tall', async () => {
+      // Regression: ELK was stacking disconnected components vertically.
+      // With separateConnectedComponents=true and aspectRatio=1.6, ELK should
+      // pack them side-by-side producing a wider-than-tall layout.
+      const files = [
+        makeFile('ops', [
+          { name: 'EventA', aggregate: 'AggregateA', direction: 'internal' },
+          { name: 'EventB', aggregate: 'AggregateB', direction: 'internal' },
+          { name: 'EventC', aggregate: 'AggregateC', direction: 'internal' },
+        ]),
+      ];
+
+      const result = await runElkLayout(files);
+
+      // Three disconnected aggregates should be packed horizontally
+      expect(result.compounds).toHaveLength(3);
+      // Overall layout should be landscape-oriented (wider than tall)
+      expect(result.width).toBeGreaterThan(result.height);
+    });
+
+    it('when three disconnected aggregates exist, they are not all in a single vertical column', async () => {
+      // A single vertical column would have all compounds at roughly the same x coordinate.
+      // With horizontal packing, compounds should span a meaningful x range (> NODE_W).
+      const files = [
+        makeFile('ops', [
+          { name: 'EventA', aggregate: 'AggregateA', direction: 'internal' },
+          { name: 'EventB', aggregate: 'AggregateB', direction: 'internal' },
+          { name: 'EventC', aggregate: 'AggregateC', direction: 'internal' },
+        ]),
+      ];
+
+      const result = await runElkLayout(files);
+
+      const xs = result.compounds.map((c) => c.x);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      // Compounds should spread across more than one node width horizontally
+      expect(maxX - minX).toBeGreaterThan(NODE_W);
+    });
+
+    it('when four disconnected aggregates exist, layout is wider than tall', async () => {
+      const files = [
+        makeFile('ops', [
+          { name: 'E1', aggregate: 'Agg1', direction: 'internal' },
+          { name: 'E2', aggregate: 'Agg2', direction: 'internal' },
+          { name: 'E3', aggregate: 'Agg3', direction: 'internal' },
+          { name: 'E4', aggregate: 'Agg4', direction: 'internal' },
+        ]),
+      ];
+
+      const result = await runElkLayout(files);
+
+      expect(result.width).toBeGreaterThan(result.height);
+    });
+  });
+
   describe('edge group sections', () => {
     it('when outbound edge exists, edge group has sections array', async () => {
       // Source: discovered during implementation
