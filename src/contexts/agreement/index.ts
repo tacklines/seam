@@ -1,1 +1,1 @@
-// Agreement bounded context — barrel exports
+export * from './agreement-service.js';

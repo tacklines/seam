@@ -13,12 +13,10 @@ import type {
   SessionCreated,
   ParticipantJoined,
   ArtifactSubmitted,
-  ResolutionRecorded,
-  OwnershipAssigned,
-  ItemFlagged,
   ContractGenerated,
   ComplianceCheckCompleted,
 } from '../contexts/session/domain-events.js';
+import { AgreementService } from '../contexts/agreement/agreement-service.js';
 
 export interface Participant {
   id: string;
@@ -74,7 +72,7 @@ function generateCode(): string {
   return code;
 }
 
-function generateId(): string {
+export function generateId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
@@ -94,9 +92,11 @@ export function serializeSession(session: Session): SerializedSession {
 export class SessionStore {
   private sessions: Map<string, Session> = new Map();
   private eventStore: EventStore | null;
+  private agreementService: AgreementService;
 
   constructor(eventStore?: EventStore) {
     this.eventStore = eventStore ?? null;
+    this.agreementService = new AgreementService(this.getSession.bind(this), eventStore);
   }
 
   createSession(creatorName: string): { session: Session; creatorId: string } {
@@ -212,109 +212,32 @@ export class SessionStore {
   }
 
   startJam(code: string): JamArtifacts | null {
-    const session = this.sessions.get(code.toUpperCase());
-    if (!session) return null;
-    if (session.jam) return session.jam;
-    session.jam = {
-      startedAt: new Date().toISOString(),
-      ownershipMap: [],
-      resolutions: [],
-      unresolved: [],
-    };
-    return session.jam;
+    return this.agreementService.startJam(code.toUpperCase());
   }
 
   resolveConflict(
     code: string,
     resolution: Omit<ConflictResolution, 'resolvedAt'>
   ): ConflictResolution | null {
-    const session = this.sessions.get(code.toUpperCase());
-    if (!session?.jam) return null;
-    const full: ConflictResolution = {
-      ...resolution,
-      resolvedAt: new Date().toISOString(),
-    };
-    session.jam.resolutions.push(full);
-
-    if (this.eventStore) {
-      this.eventStore.append(session.code, {
-        type: 'ResolutionRecorded',
-        eventId: generateId(),
-        sessionCode: session.code,
-        timestamp: full.resolvedAt,
-        overlapLabel: full.overlapLabel,
-        resolution: full.resolution,
-        chosenApproach: full.chosenApproach,
-        resolvedBy: full.resolvedBy,
-      } satisfies ResolutionRecorded);
-    }
-
-    return full;
+    return this.agreementService.resolveConflict(code.toUpperCase(), resolution);
   }
 
   assignOwnership(
     code: string,
     assignment: Omit<OwnershipAssignment, 'assignedAt'>
   ): OwnershipAssignment | null {
-    const session = this.sessions.get(code.toUpperCase());
-    if (!session?.jam) return null;
-    const full: OwnershipAssignment = {
-      ...assignment,
-      assignedAt: new Date().toISOString(),
-    };
-    // Replace existing assignment for the same aggregate
-    session.jam.ownershipMap = session.jam.ownershipMap.filter(
-      (o) => o.aggregate !== full.aggregate
-    );
-    session.jam.ownershipMap.push(full);
-
-    if (this.eventStore) {
-      this.eventStore.append(session.code, {
-        type: 'OwnershipAssigned',
-        eventId: generateId(),
-        sessionCode: session.code,
-        timestamp: full.assignedAt,
-        aggregate: full.aggregate,
-        ownerRole: full.ownerRole,
-        assignedBy: full.assignedBy,
-      } satisfies OwnershipAssigned);
-    }
-
-    return full;
+    return this.agreementService.assignOwnership(code.toUpperCase(), assignment);
   }
 
   flagUnresolved(
     code: string,
     item: Omit<UnresolvedItem, 'id' | 'flaggedAt'>
   ): UnresolvedItem | null {
-    const session = this.sessions.get(code.toUpperCase());
-    if (!session?.jam) return null;
-    const full: UnresolvedItem = {
-      ...item,
-      id: generateId(),
-      flaggedAt: new Date().toISOString(),
-    };
-    session.jam.unresolved.push(full);
-
-    if (this.eventStore) {
-      this.eventStore.append(session.code, {
-        type: 'ItemFlagged',
-        eventId: generateId(),
-        sessionCode: session.code,
-        timestamp: full.flaggedAt,
-        description: full.description,
-        flaggedBy: full.flaggedBy,
-        ...(full.relatedOverlap !== undefined ? { relatedOverlap: full.relatedOverlap } : {}),
-      } satisfies ItemFlagged);
-    }
-
-    return full;
+    return this.agreementService.flagUnresolved(code.toUpperCase(), item);
   }
 
   exportJam(code: string): JamArtifacts | null {
-    const session = this.sessions.get(code.toUpperCase());
-    if (!session?.jam) return null;
-    return session.jam;
+    return this.agreementService.exportJam(code.toUpperCase());
   }
 
   loadContracts(code: string, bundle: ContractBundle): ContractBundle | null {
