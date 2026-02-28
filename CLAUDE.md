@@ -35,6 +35,7 @@ npm run test:e2e     # playwright e2e tests (auto-starts dev server)
 npm run test:e2e:ui  # playwright UI mode (interactive test runner)
 npm run server       # HTTP session server (port 3001)
 npm run mcp          # MCP server (stdio transport)
+docker compose up -d # Keycloak (port 8080, admin/admin)
 ```
 
 ## Project Structure
