@@ -48,6 +48,13 @@ export class AgreementService {
   ): ConflictResolution | null {
     const session = this.getSession(code);
     if (!session?.jam) return null;
+
+    // Idempotency: if this overlapLabel has already been resolved, return the existing resolution
+    const existing = session.jam.resolutions.find(
+      (r) => r.overlapLabel === resolution.overlapLabel
+    );
+    if (existing) return existing;
+
     const full: ConflictResolution = {
       ...resolution,
       resolvedAt: new Date().toISOString(),

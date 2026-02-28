@@ -166,6 +166,13 @@ export class SessionStore {
     const session = this.sessions.get(code.toUpperCase());
     if (!session) return null;
 
+    // Idempotency: if a participant with the same name already exists, return them
+    for (const [existingId, existing] of session.participants) {
+      if (existing.name === participantName) {
+        return { session, participantId: existingId };
+      }
+    }
+
     const participantId = generateId();
     const participant: Participant = {
       id: participantId,
@@ -201,6 +208,46 @@ export class SessionStore {
     if (session.status === 'closed') return null;
     if (!session.participants.has(participantId)) return null;
 
+    // Idempotency: find existing submission for same participant+fileName
+    const existingIndex = session.submissions.findIndex(
+      (s) => s.participantId === participantId && s.fileName === fileName
+    );
+
+    const contentHash = JSON.stringify(data);
+
+    if (existingIndex !== -1) {
+      const existing = session.submissions[existingIndex];
+      // If content is identical, return the existing submission without mutation
+      if (JSON.stringify(existing.data) === contentHash) {
+        return existing;
+      }
+      // Content changed — update in-place (replace the existing entry)
+      const updated: Submission = {
+        participantId,
+        fileName,
+        data,
+        submittedAt: new Date().toISOString(),
+      };
+      session.submissions[existingIndex] = updated;
+
+      if (this.eventStore) {
+        const version = 2; // existing was version 1; this is an update
+        this.eventStore.append(session.code, {
+          type: 'ArtifactSubmitted',
+          eventId: generateId(),
+          sessionCode: session.code,
+          timestamp: updated.submittedAt,
+          artifactId: generateId(),
+          participantId,
+          fileName,
+          artifactType: 'candidate-events',
+          version,
+        } satisfies ArtifactSubmitted);
+      }
+
+      return updated;
+    }
+
     const submission: Submission = {
       participantId,
       fileName,
@@ -211,10 +258,6 @@ export class SessionStore {
     session.submissions.push(submission);
 
     if (this.eventStore) {
-      // Count how many times this participant has submitted this fileName
-      const version = session.submissions.filter(
-        (s) => s.participantId === participantId && s.fileName === fileName
-      ).length;
       this.eventStore.append(session.code, {
         type: 'ArtifactSubmitted',
         eventId: generateId(),
@@ -224,7 +267,7 @@ export class SessionStore {
         participantId,
         fileName,
         artifactType: 'candidate-events',
-        version,
+        version: 1,
       } satisfies ArtifactSubmitted);
     }
 

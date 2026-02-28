@@ -310,6 +310,194 @@ describe('SessionStore', () => {
     });
   });
 
+  describe('idempotency', () => {
+    describe('joinSession', () => {
+      it('returns the same participantId when the same name joins twice', () => {
+        const store = new SessionStore();
+        const { session } = store.createSession('Alice');
+        const first = store.joinSession(session.code, 'Bob')!;
+        const second = store.joinSession(session.code, 'Bob')!;
+        expect(second.participantId).toBe(first.participantId);
+      });
+
+      it('does not add a duplicate participant entry when the same name joins twice', () => {
+        const store = new SessionStore();
+        const { session } = store.createSession('Alice');
+        store.joinSession(session.code, 'Bob');
+        store.joinSession(session.code, 'Bob');
+        expect(session.participants.size).toBe(2); // Alice + Bob (only once)
+      });
+
+      it('does not emit a second ParticipantJoined event on duplicate join', () => {
+        const eventStore = new EventStore();
+        const store = new SessionStore(eventStore);
+        const { session } = store.createSession('Alice');
+        store.joinSession(session.code, 'Bob');
+        store.joinSession(session.code, 'Bob');
+        const joinEvents = eventStore.getEvents(session.code).filter((e) => e.type === 'ParticipantJoined');
+        expect(joinEvents).toHaveLength(1);
+      });
+
+      it('still allows two different participants with different names', () => {
+        const store = new SessionStore();
+        const { session } = store.createSession('Alice');
+        store.joinSession(session.code, 'Bob');
+        store.joinSession(session.code, 'Carol');
+        expect(session.participants.size).toBe(3);
+      });
+    });
+
+    describe('submitYaml', () => {
+      it('returns the existing submission when content is identical (no duplicate)', () => {
+        const store = new SessionStore();
+        const { session, creatorId } = store.createSession('Alice');
+        const data = makeFile('engineer');
+        const first = store.submitYaml(session.code, creatorId, 'alice.yaml', data)!;
+        const second = store.submitYaml(session.code, creatorId, 'alice.yaml', data)!;
+        expect(second).toBe(first); // same object reference — no mutation
+        expect(session.submissions).toHaveLength(1);
+      });
+
+      it('does not emit a second ArtifactSubmitted event for identical re-submission', () => {
+        const eventStore = new EventStore();
+        const store = new SessionStore(eventStore);
+        const { session, creatorId } = store.createSession('Alice');
+        const data = makeFile('engineer');
+        store.submitYaml(session.code, creatorId, 'alice.yaml', data);
+        store.submitYaml(session.code, creatorId, 'alice.yaml', data);
+        const submitEvents = eventStore.getEvents(session.code).filter((e) => e.type === 'ArtifactSubmitted');
+        expect(submitEvents).toHaveLength(1);
+      });
+
+      it('updates in-place when content changes for the same participant+fileName', () => {
+        const store = new SessionStore();
+        const { session, creatorId } = store.createSession('Alice');
+        const original = makeFile('engineer');
+        const updated = makeFile('engineer-v2');
+        store.submitYaml(session.code, creatorId, 'alice.yaml', original);
+        const result = store.submitYaml(session.code, creatorId, 'alice.yaml', updated)!;
+        expect(session.submissions).toHaveLength(1); // still only one entry
+        expect(result.data).toBe(updated);
+        expect(session.submissions[0].data).toBe(updated);
+      });
+
+      it('emits a second ArtifactSubmitted event when content changes', () => {
+        const eventStore = new EventStore();
+        const store = new SessionStore(eventStore);
+        const { session, creatorId } = store.createSession('Alice');
+        store.submitYaml(session.code, creatorId, 'alice.yaml', makeFile('engineer'));
+        store.submitYaml(session.code, creatorId, 'alice.yaml', makeFile('engineer-v2'));
+        const submitEvents = eventStore.getEvents(session.code).filter((e) => e.type === 'ArtifactSubmitted');
+        expect(submitEvents).toHaveLength(2);
+      });
+
+      it('allows different participants to submit files with the same name', () => {
+        const store = new SessionStore();
+        const { session, creatorId } = store.createSession('Alice');
+        const bobResult = store.joinSession(session.code, 'Bob')!;
+        store.submitYaml(session.code, creatorId, 'events.yaml', makeFile('engineer'));
+        store.submitYaml(session.code, bobResult.participantId, 'events.yaml', makeFile('designer'));
+        expect(session.submissions).toHaveLength(2);
+      });
+    });
+
+    describe('resolveConflict', () => {
+      it('returns the existing resolution when the same overlapLabel is resolved twice', () => {
+        const store = new SessionStore();
+        const { session } = store.createSession('Alice');
+        store.startJam(session.code);
+        const first = store.resolveConflict(session.code, {
+          overlapLabel: 'OrderPlaced vs OrderCreated',
+          resolution: 'Merged into OrderPlaced',
+          chosenApproach: 'merge',
+          resolvedBy: ['Alice'],
+        })!;
+        const second = store.resolveConflict(session.code, {
+          overlapLabel: 'OrderPlaced vs OrderCreated',
+          resolution: 'Different resolution',
+          chosenApproach: 'custom',
+          resolvedBy: ['Bob'],
+        })!;
+        expect(second).toBe(first); // same object — first resolution wins
+      });
+
+      it('does not create duplicate resolutions for the same overlapLabel', () => {
+        const store = new SessionStore();
+        const { session } = store.createSession('Alice');
+        store.startJam(session.code);
+        store.resolveConflict(session.code, {
+          overlapLabel: 'A vs B',
+          resolution: 'first',
+          chosenApproach: 'merge',
+          resolvedBy: ['Alice'],
+        });
+        store.resolveConflict(session.code, {
+          overlapLabel: 'A vs B',
+          resolution: 'second',
+          chosenApproach: 'custom',
+          resolvedBy: ['Bob'],
+        });
+        const jam = store.exportJam(session.code)!;
+        expect(jam.resolutions).toHaveLength(1);
+        expect(jam.resolutions[0].resolution).toBe('first');
+      });
+
+      it('does not emit a second ResolutionRecorded event on duplicate resolve', () => {
+        const eventStore = new EventStore();
+        const store = new SessionStore(eventStore);
+        const { session } = store.createSession('Alice');
+        store.startJam(session.code);
+        store.resolveConflict(session.code, {
+          overlapLabel: 'X vs Y',
+          resolution: 'merged',
+          chosenApproach: 'merge',
+          resolvedBy: ['Alice'],
+        });
+        store.resolveConflict(session.code, {
+          overlapLabel: 'X vs Y',
+          resolution: 'other',
+          chosenApproach: 'custom',
+          resolvedBy: ['Bob'],
+        });
+        const resEvents = eventStore.getEvents(session.code).filter((e) => e.type === 'ResolutionRecorded');
+        expect(resEvents).toHaveLength(1);
+      });
+
+      it('allows resolving different overlapLabels independently', () => {
+        const store = new SessionStore();
+        const { session } = store.createSession('Alice');
+        store.startJam(session.code);
+        store.resolveConflict(session.code, { overlapLabel: 'A vs B', resolution: 'r1', chosenApproach: 'merge', resolvedBy: ['Alice'] });
+        store.resolveConflict(session.code, { overlapLabel: 'C vs D', resolution: 'r2', chosenApproach: 'custom', resolvedBy: ['Bob'] });
+        const jam = store.exportJam(session.code)!;
+        expect(jam.resolutions).toHaveLength(2);
+      });
+    });
+
+    describe('assignOwnership', () => {
+      it('replaces the owner when the same aggregate is assigned twice (upsert)', () => {
+        const store = new SessionStore();
+        const { session } = store.createSession('Alice');
+        store.startJam(session.code);
+        store.assignOwnership(session.code, { aggregate: 'Order', ownerRole: 'Sales', assignedBy: 'Alice' });
+        store.assignOwnership(session.code, { aggregate: 'Order', ownerRole: 'Fulfillment', assignedBy: 'Bob' });
+        const jam = store.exportJam(session.code)!;
+        expect(jam.ownershipMap).toHaveLength(1);
+        expect(jam.ownershipMap[0].ownerRole).toBe('Fulfillment');
+      });
+
+      it('calling assignOwnership twice with the same value produces one entry', () => {
+        const store = new SessionStore();
+        const { session } = store.createSession('Alice');
+        store.startJam(session.code);
+        store.assignOwnership(session.code, { aggregate: 'Order', ownerRole: 'Sales', assignedBy: 'Alice' });
+        store.assignOwnership(session.code, { aggregate: 'Order', ownerRole: 'Sales', assignedBy: 'Alice' });
+        const jam = store.exportJam(session.code)!;
+        expect(jam.ownershipMap).toHaveLength(1);
+      });
+    });
+  });
+
   describe('serializeSession', () => {
     it('converts participants Map to array', () => {
       const store = new SessionStore();
