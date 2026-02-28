@@ -19,6 +19,7 @@ import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
 import './file-drop-zone.js';
+import './session-lobby.js';
 import './card-view.js';
 import './flow-diagram.js';
 import './flow-minimap.js';
@@ -170,6 +171,7 @@ export class AppShell extends LitElement {
   @state() private _searchMatchCount = 0;
   @state() private _searchCurrentMatch = -1;
   @state() private _detailNodeData: DetailNodeData | null = null;
+  @state() private _soloMode = false;
   private unsubscribe?: () => void;
 
   connectedCallback() {
@@ -188,7 +190,15 @@ export class AppShell extends LitElement {
     const { files } = this.appState;
 
     if (files.length === 0) {
-      return html`<file-drop-zone mode="hero"></file-drop-zone>`;
+      if (this._soloMode) {
+        return html`<file-drop-zone mode="hero"></file-drop-zone>`;
+      }
+      return html`
+        <session-lobby
+          @session-files-ready=${this._onSessionFilesReady}
+          @solo-mode=${this._onSoloMode}
+        ></session-lobby>
+      `;
     }
 
     return this.renderAppLayout();
@@ -322,6 +332,17 @@ export class AppShell extends LitElement {
       <!-- Hidden file drop zone triggered by "Add files" button -->
       <file-drop-zone mode="compact" style="display:none" id="hidden-drop"></file-drop-zone>
     `;
+  }
+
+  private _onSessionFilesReady(e: CustomEvent<{ files: import('../schema/types.js').LoadedFile[] }>) {
+    store.clearErrors();
+    for (const file of e.detail.files) {
+      store.addFile(file);
+    }
+  }
+
+  private _onSoloMode() {
+    this._soloMode = true;
   }
 
   private onTabChange(e: CustomEvent) {
