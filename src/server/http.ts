@@ -2,11 +2,16 @@ import http from 'node:http';
 import { serializeSession } from '../lib/session-store.js';
 import { sessionStore as store, eventStore } from './store.js';
 import { createWebSocketServer } from './websocket.js';
+import { A2ATaskStore, createA2AHandlers, isA2ARoute, parseA2ABody, buildAgentCard } from './a2a.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
 
 const PORT = Number(process.env.PORT ?? 3002);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+
+// A2A task store and handlers (singleton, shared with HTTP request handling)
+const a2aTaskStore = new A2ATaskStore();
+const a2aHandlers = createA2AHandlers(a2aTaskStore, store);
 
 function addCorsHeaders(res: ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
@@ -289,6 +294,23 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       sendJson(res, 200, { session: serializeSession(session) });
+      return;
+    }
+
+    // GET /.well-known/agent.json — A2A Agent Card
+    if (method === 'GET' && url === '/.well-known/agent.json') {
+      const baseUrl = `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers.host ?? `localhost:${PORT}`}`;
+      const card = a2aHandlers.onAgentCard(baseUrl);
+      sendJson(res, 200, card);
+      return;
+    }
+
+    // POST /a2a — A2A JSON-RPC endpoint
+    if (method === 'POST' && url === '/a2a') {
+      const rawBody = await parseBody(req) as unknown;
+      // parseBody already JSON.parsed the body; pass it directly
+      const rpcResponse = a2aHandlers.onRpc(rawBody);
+      sendJson(res, 200, rpcResponse);
       return;
     }
 
