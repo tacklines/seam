@@ -150,11 +150,12 @@ pub struct StormPrepFile {
 1. Read the task requirements and understand which workflow phase is involved
 2. Check if `backend/` exists; if not, scaffold the project structure
 3. Read existing code in the affected module before making changes
-4. Implement the change following the layer pattern: types -> domain -> persistence -> api
-5. Write tests alongside the implementation
-6. Run `cargo clippy -- -D warnings` and fix all warnings
-7. Run `cargo test` and ensure all tests pass
-8. Run `cargo fmt` to format code
+4. **If the task has clear acceptance criteria or a spec** (API endpoint contract, validation rules, domain logic), use `/test-strategy` to write failing tests first, then implement to make them pass
+5. Implement the change following the layer pattern: types -> domain -> persistence -> api
+6. Write tests alongside the implementation (if not already written via test-first)
+7. Run `cargo clippy -- -D warnings` and fix all warnings
+8. Run `cargo test` and ensure all tests pass
+9. Run `cargo fmt` to format code
 
 ## What NOT to Do
 

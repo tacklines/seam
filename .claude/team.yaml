@@ -6,6 +6,14 @@ defaults:
   budget: 0.50
   permission-mode: dontAsk
 
+practices:
+  test-first: |
+    When a task has clear acceptance criteria, a formal spec, or a reproducible bug,
+    use /test-strategy before writing implementation code. This classifies the knowledge
+    source (codified/articulated/tacit) and determines the right testing approach (TDD
+    test-first, or test-after for exploratory work). Skip only for trivial changes
+    (config tweaks, typo fixes, purely additive docs).
+
 members:
   - name: architect
     role: "System design, schema contracts, state management patterns"
@@ -17,8 +25,9 @@ members:
       - "CLAUDE.md"
 
   - name: component
-    role: "Lit web components, Shoelace integration, visual rendering"
+    role: "Lit web components, Shoelace integration, visual rendering, Playwright visual verification"
     tools: [Read, Write, Edit, Glob, Grep, Bash]
+    mcp: [playwright]
     owns:
       - "src/components/**"
       - "index.html"
@@ -32,9 +41,12 @@ members:
       - "src/fixtures/**"
 
   - name: tester
-    role: "Test strategy, coverage, edge cases, type-checking"
+    role: "Test strategy, coverage, edge cases, type-checking, Playwright e2e tests"
     tools: [Read, Write, Edit, Glob, Grep, Bash]
+    mcp: [playwright]
     owns:
       - "src/lib/*.test.ts"
       - "vitest.config.ts"
       - "tsconfig.json"
+      - "e2e/**"
+      - "playwright.config.ts"

@@ -1,7 +1,7 @@
 ---
 name: lit-component
 description: Use when creating a new Lit web component or significantly modifying an existing one in src/components/. Not for pure logic changes in lib/.
-tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm run dev:*), Bash(npx tsc --noEmit:*), Bash(npm test:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm run dev:*), Bash(npx tsc --noEmit:*), Bash(npm test:*), Bash(npm run test:e2e:*)
 model: sonnet
 permissionMode: default
 ---
@@ -9,6 +9,15 @@ permissionMode: default
 # Lit Component Builder
 
 Creates and modifies Lit web components for the multi-human-workflows visualizer, following the project's established patterns.
+
+## Test-First Workflow
+
+Before implementing a new component or significant modification, consider whether `/test-strategy` applies:
+- **New component with defined behavior** (e.g., "shows a list of events filtered by role") -- run `/test-strategy` to write e2e tests first, then implement to make them pass
+- **Bug fix in a component** -- write the failing e2e test first, then fix
+- **Exploratory/visual work** (e.g., "try a new layout for the sidebar") -- skip test-first; test-after or manual verification is appropriate
+
+When in doubt, default to test-first. The `/test-strategy` skill will classify the task and determine the right approach automatically.
 
 ## Key Responsibilities
 
@@ -122,6 +131,21 @@ Components MUST NOT import from:
 - Do not use framework state management (Redux, MobX, etc.)
 - Do not register multiple custom elements in one file
 
+## Visual Verification with Playwright MCP
+
+Use the Playwright MCP tools for interactive visual verification during development:
+- `playwright_navigate` -- load the dev server at `http://localhost:5173`
+- `playwright_screenshot` -- capture component rendering for design review
+- `playwright_click`, `playwright_fill` -- test interactive behavior
+- `playwright_get_visible_text` -- verify rendered text content
+- `playwright_get_visible_html` -- inspect rendered DOM structure
+
+This replaces "check it in the browser manually" with reproducible, tool-assisted verification. Use MCP tools to:
+- Verify a new component renders correctly after creation
+- Test hover states, click handlers, and interactive behaviors
+- Capture screenshots for design stakeholder review
+- Debug layout or rendering issues visually
+
 ## Investigation Protocol
 
 1. Before creating a new component, READ at least 2 existing components to confirm patterns:
@@ -129,7 +153,7 @@ Components MUST NOT import from:
    - `src/components/app-shell.ts` (store-connected component)
 2. VERIFY the tag name is not already registered by grepping for `@customElement`
 3. After writing, run `npx tsc --noEmit` to verify types compile
-4. CONFIRM the component renders by checking it is imported somewhere (parent component or index.ts)
+4. CONFIRM the component renders using Playwright MCP tools (navigate + screenshot) or by checking it is imported somewhere (parent component or index.ts)
 
 ## Context Management
 
@@ -161,4 +185,4 @@ Report to orchestrator:
 - [ ] Store subscription cleanup in `disconnectedCallback` (if applicable)
 - [ ] No business logic in the component
 - [ ] `npx tsc --noEmit` passes
-- [ ] Component renders in dev server
+- [ ] Component renders correctly (verified via Playwright MCP screenshot or dev server)

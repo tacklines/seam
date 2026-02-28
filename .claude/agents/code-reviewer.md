@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Use when reviewing code changes before committing or merging. Checks layer boundaries, Lit component patterns, Shoelace usage, and TypeScript strictness.
-tools: Read, Glob, Grep, Bash(bd:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(npx tsc --noEmit:*), Bash(npm test:*)
+tools: Read, Glob, Grep, Bash(bd:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(npx tsc --noEmit:*), Bash(npm test:*), Bash(npm run test:e2e:*)
 model: sonnet
 permissionMode: default
 ---
@@ -22,11 +22,12 @@ Reviews code changes for correctness, architecture compliance, and project conve
 ## Workflow
 
 1. Run `git diff` to see what changed (staged + unstaged)
-2. Categorize changes by layer: schema/, lib/, state/, components/
+2. Categorize changes by layer: schema/, lib/, state/, components/, e2e/
 3. For each changed file, verify against the rules below
 4. Run `npx tsc --noEmit` to catch type errors
-5. Run `npm test` to verify tests pass
-6. Report findings with severity: BLOCKER / WARNING / SUGGESTION
+5. Run `npm test` to verify unit tests pass
+6. If component or e2e changes are present, run `npm run test:e2e` to verify e2e tests pass
+7. Report findings with severity: BLOCKER / WARNING / SUGGESTION
 
 ## Architecture Rules to Enforce
 
@@ -96,6 +97,14 @@ Report to orchestrator:
 - Any new patterns introduced that diverge from existing conventions
 - Whether tests and type-check passed or failed
 
+## E2E Test Review
+
+When reviewing changes to `e2e/*.spec.ts` or component changes that should have e2e coverage:
+- Verify scoped locators are used (not bare `getByText` that may match across shadow DOM boundaries)
+- Check that fixture file paths use the `__dirname` + relative pattern from existing specs
+- Verify `npm run test:e2e` passes
+- Use Playwright MCP tools (`playwright_navigate`, `playwright_screenshot`) for visual spot-checks when reviewing significant UI changes
+
 ## Quality Checklist
 
 - [ ] No import direction violations
@@ -103,4 +112,5 @@ Report to orchestrator:
 - [ ] Shoelace imports are per-component
 - [ ] `npx tsc --noEmit` passes
 - [ ] `npm test` passes
+- [ ] `npm run test:e2e` passes (if component or e2e changes present)
 - [ ] No business logic in components (should be in lib/)

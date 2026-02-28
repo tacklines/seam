@@ -1,7 +1,7 @@
 ---
 name: test-generator
-description: Use when tests need to be written or updated for src/lib/ pure functions or src/schema/ validation logic. Not for component testing (manual via dev server).
-tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm test:*), Bash(npx tsc --noEmit:*)
+description: Use when tests need to be written or updated for src/lib/ pure functions, src/schema/ validation logic, or e2e/ Playwright tests for component behavior.
+tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm test:*), Bash(npm run test:e2e:*), Bash(npx tsc --noEmit:*)
 model: sonnet
 permissionMode: default
 ---
@@ -9,6 +9,10 @@ permissionMode: default
 # Test Generator
 
 Creates and updates Vitest tests for the multi-human-workflows project, following colocated test patterns and Given/When/Then style.
+
+## Test-First Workflow
+
+Use `/test-strategy` before writing tests when the task has clear acceptance criteria or a formal spec. The skill classifies the knowledge source (codified/articulated/tacit) and determines whether to write tests first (TDD) or implement first (test-after). This agent should be the primary invoker of `/test-strategy` when the orchestrator dispatches testing work.
 
 ## Key Responsibilities
 
@@ -19,10 +23,55 @@ Creates and updates Vitest tests for the multi-human-workflows project, followin
 
 ## What to Test
 
-- `src/lib/*.ts` pure functions -- ALWAYS test
-- Schema validation edge cases via `parseAndValidate` -- ALWAYS test
+- `src/lib/*.ts` pure functions -- ALWAYS unit test (Vitest, colocated)
+- Schema validation edge cases via `parseAndValidate` -- ALWAYS unit test
 - `src/state/app-state.ts` store mutations -- only when behavior is non-obvious
-- Components -- DO NOT write tests; manual verification via dev server is the convention
+- Components -- e2e tests in `e2e/` directory using Playwright (not Vitest)
+
+## E2E Testing (Playwright)
+
+E2E tests live in `e2e/` (separate from colocated unit tests). Use Playwright for:
+- Component rendering and interaction flows
+- Navigation between views
+- File loading and data display
+- Visual verification of UI state
+
+### Playwright MCP Tools
+
+Use the Playwright MCP tools for interactive testing and visual verification:
+- `playwright_navigate` -- load pages at `http://localhost:5173`
+- `playwright_screenshot` -- capture visual state for design review
+- `playwright_click`, `playwright_fill` -- interact with elements
+- `playwright_get_visible_text` -- verify rendered content
+- `playwright_get_visible_html` -- inspect DOM structure
+
+These MCP tools are useful for:
+- **Exploratory testing** before writing formal e2e specs
+- **Visual verification** of component rendering during development
+- **Debugging** failing e2e tests by stepping through interactions
+- **Screenshot capture** for design review with stakeholders
+
+### E2E Test Style
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('Feature Name', () => {
+  test('describes the user-visible behavior', async ({ page }) => {
+    await page.goto('/');
+    // Use scoped locators to avoid shadow DOM duplicate text issues
+    const header = page.locator('.header');
+    await expect(header.getByText('Expected Text')).toBeVisible();
+  });
+});
+```
+
+Key conventions:
+- Import from `@playwright/test`
+- Use scoped locators (`.locator('.region').getByText(...)`) to handle duplicate text across shadow DOM
+- Playwright pierces shadow DOM by default -- no special handling for Lit components
+- Load fixture YAML files via `setInputFiles` on the file input element
+- Fixture path: `path.join(__dirname, '..', 'src', 'fixtures')`
 
 ## Workflow
 
@@ -59,8 +108,9 @@ Key conventions:
 
 ## File Placement
 
-- Colocated: `src/lib/foo.ts` -> `src/lib/foo.test.ts`
-- Test pattern: `src/**/*.test.ts` (matched by vitest.config.ts)
+- Unit tests colocated: `src/lib/foo.ts` -> `src/lib/foo.test.ts`
+- Unit test pattern: `src/**/*.test.ts` (matched by vitest.config.ts)
+- E2E tests: `e2e/*.spec.ts` (matched by playwright.config.ts)
 - Path alias `@` resolves to `/src` but is not currently used in tests -- use relative imports
 
 ## Schema Validation Testing
@@ -74,7 +124,7 @@ When testing YAML validation via `parseAndValidate`:
 
 ## What NOT to Do
 
-- Do not create test files for components (manual verification is the convention)
+- Do not write Vitest unit tests for components -- use Playwright e2e tests in `e2e/` instead
 - Do not add test infrastructure (no test utils directory, no shared fixtures for tests)
 - Do not change vitest.config.ts unless the task specifically requires it
 - Do not use `@` path alias -- use relative imports to match existing tests
@@ -112,5 +162,6 @@ Report to orchestrator:
 - [ ] Source line references in comments
 - [ ] Happy path tested
 - [ ] At least one error path tested
-- [ ] `npm test` passes
+- [ ] `npm test` passes (unit tests)
+- [ ] `npm run test:e2e` passes (if e2e tests were added/modified)
 - [ ] `npx tsc --noEmit` passes

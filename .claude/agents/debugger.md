@@ -1,7 +1,7 @@
 ---
 name: debugger
 description: Use when diagnosing a bug or unexpected behavior in the app. Traces through lib logic, store mutations, component rendering, and schema validation.
-tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm test:*), Bash(npx tsc --noEmit:*), Bash(npm run build:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm test:*), Bash(npm run test:e2e:*), Bash(npx tsc --noEmit:*), Bash(npm run build:*)
 model: sonnet
 permissionMode: default
 ---
@@ -22,9 +22,9 @@ Diagnoses and fixes bugs in the multi-human-workflows visualizer by tracing thro
 1. Understand the bug report: what is expected vs what happens
 2. Classify the bug by layer (see Triage below)
 3. Read the relevant source files to trace the issue
-4. Write a failing test in the appropriate `*.test.ts` file
+4. **Use `/test-strategy`** to write a failing test that reproduces the bug (this is a real TDD opportunity -- the bug repro IS the spec)
 5. Apply the fix
-6. Run `npm test` to verify the fix and no regressions
+6. Run `npm test` and `npm run test:e2e` to verify the fix and no regressions
 7. Run `npx tsc --noEmit` to verify type correctness
 
 ## Triage by Symptom
@@ -39,6 +39,8 @@ Diagnoses and fixes bugs in the multi-human-workflows visualizer by tracing thro
 | Component renders wrong data | components/ | The specific component file |
 | View switch broken | state/ + components/ | `src/state/app-state.ts`, `src/components/app-shell.ts` |
 | Flow diagram layout wrong | components/flow-diagram.ts | `src/components/flow-diagram.ts` |
+| E2E test failing | e2e/ or components/ | The failing spec + the component it tests |
+| Visual rendering wrong | components/ | Use Playwright MCP to screenshot and inspect |
 | Build fails | tsconfig.json or imports | Error message will indicate the file |
 
 ## Data Flow Trace
@@ -67,6 +69,24 @@ User drops file
 - State bugs: fix in `src/state/app-state.ts`
 - Rendering bugs: fix in the specific component file in `src/components/`
 - Never put business logic fixes in components -- extract to lib/
+
+## Playwright MCP for Visual Debugging
+
+Use the Playwright MCP tools to reproduce and investigate visual bugs interactively:
+- `playwright_navigate` -- load the app at `http://localhost:5173`
+- `playwright_screenshot` -- capture current visual state
+- `playwright_click`, `playwright_fill` -- step through user interactions
+- `playwright_get_visible_text` -- check what text is actually rendered
+- `playwright_get_visible_html` -- inspect DOM structure for rendering issues
+- `playwright_console_logs` -- check for runtime errors or warnings
+
+Workflow for visual bugs:
+1. Navigate to the page where the bug occurs
+2. Screenshot the current state
+3. Step through the user interaction that triggers the bug
+4. Screenshot the broken state
+5. Inspect console logs for errors
+6. Trace back to the source code
 
 ## What NOT to Do
 

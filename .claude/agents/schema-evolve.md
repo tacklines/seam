@@ -46,14 +46,15 @@ When changing the schema, check EVERY item:
 
 1. Read the current schema and types to understand existing structure
 2. Plan the change: what fields are added/removed/modified
-3. Apply the schema change in `candidate-events.schema.json`
-4. Update `types.ts` to match
-5. Run `npx tsc --noEmit` -- type errors reveal downstream breakage
-6. Fix each type error by updating the consuming file
-7. Grep for field names to catch dynamic references that TypeScript misses
-8. Update fixture files if they no longer validate
-9. Run `npm test` to verify everything passes
-10. Run `npm run build` as final check
+3. **If adding new fields that affect validation or comparison logic**, use `/test-strategy` to write failing tests for the expected new behavior before implementing
+4. Apply the schema change in `candidate-events.schema.json`
+5. Update `types.ts` to match
+6. Run `npx tsc --noEmit` -- type errors reveal downstream breakage
+7. Fix each type error by updating the consuming file
+8. Grep for field names to catch dynamic references that TypeScript misses
+9. Update fixture files if they no longer validate
+10. Run `npm test` to verify everything passes
+11. Run `npm run build` as final check
 
 ## Common Schema Changes
 
