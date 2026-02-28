@@ -17,6 +17,7 @@
     "src/lib/session-store.ts",
     "src/lib/yaml-validator-server.ts",
     "src/lib/prep-completeness.ts",
+    "src/lib/workflow-engine.ts",
     "src/schema/**/*"
   ]
 }

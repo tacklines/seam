@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { sessionStore } from './store.js';
 import { parseAndValidate } from '../lib/yaml-validator-server.js';
 import { computePrepStatus, computeSessionStatus } from '../lib/prep-completeness.js';
+import { computeWorkflowStatus } from '../lib/workflow-engine.js';
 
 async function main(): Promise<void> {
   const server = new McpServer({
@@ -470,6 +471,37 @@ async function main(): Promise<void> {
             details: report.checks,
           }),
         }],
+      };
+    }
+  );
+
+  // Tool: workflow_phase
+  server.registerTool(
+    'workflow_phase',
+    {
+      description:
+        'Get the current workflow phase, all phase statuses, artifact inventory, and suggested next action for a session',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const status = computeWorkflowStatus({
+        participantCount: session.participants.size,
+        submissionCount: session.submissions.length,
+        jam: session.jam,
+        contracts: session.contracts,
+        integrationReport: session.integrationReport,
+      });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(status) }],
       };
     }
   );
