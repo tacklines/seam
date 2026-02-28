@@ -12,6 +12,7 @@ import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3
 import { select } from 'd3-selection';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
 import { store } from '../state/app-state.js';
+import { StoreController } from './controllers/store-controller.js';
 
 // Hardcoded palette matching --agg-color-N and --agg-bg-N CSS vars
 // (SVG attributes can't resolve CSS custom properties)
@@ -215,9 +216,13 @@ export class FlowDiagram extends LitElement {
   @state() private _tooltip: { x: number; y: number; content: TemplateResult | string } | null = null;
   @state() private _matchedNodeIndices: number[] = [];
   @state() private _currentMatchIndex = -1;
-  @state() private _filters: { confidence: Set<Confidence>; direction: Set<Direction> } = store.get().filters;
+  private _storeFiltersCtrl = new StoreController(this, (s) => s.filters);
   @state() private _layoutMode: 'elk' | 'force' = 'elk';
   @state() private _focusedNodeId: string | null = null;
+
+  private get _filters() {
+    return this._storeFiltersCtrl.value;
+  }
 
   /** Adjacency list built from _edgeGroups for keyboard navigation (nodeId -> adjacent nodeIds) */
   private _adjacencyMap: Map<string, string[]> = new Map();
@@ -235,7 +240,6 @@ export class FlowDiagram extends LitElement {
   private _prevFiles: LoadedFile[] = [];
   private _prevSearchQuery = '';
   private _updatingFromMinimap = false;
-  private _unsubscribeStore: (() => void) | null = null;
 
   // ── Zoom level thresholds ──
   private static readonly ZOOM_LOW_MAX = 0.6;
@@ -352,15 +356,10 @@ export class FlowDiagram extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    this._unsubscribeStore = store.subscribe((_event) => {
-      this._filters = store.get().filters;
-    });
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    this._unsubscribeStore?.();
-    this._unsubscribeStore = null;
   }
 
   firstUpdated(): void {

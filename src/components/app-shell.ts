@@ -1,9 +1,10 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { store, type AppState } from '../state/app-state.js';
-import { compareFiles } from '../lib/comparison.js';
 import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
+import { StoreController } from './controllers/store-controller.js';
+import { ComparisonController } from './controllers/comparison-controller.js';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
 import type { FlowDiagram } from './flow-diagram.js';
 import type { DetailNodeData } from './detail-panel.js';
@@ -162,7 +163,9 @@ export class AppShell extends LitElement {
     }
   `;
 
-  @state() private appState: AppState = store.get();
+  private _storeCtrl = new StoreController(this, (s) => s);
+  private _comparisonCtrl = new ComparisonController(this);
+
   @state() private _minimapNodes: MinimapNode[] = [];
   @state() private _minimapEdges: MinimapEdge[] = [];
   @state() private _viewTransform: ViewTransform = { x: 0, y: 0, k: 1 };
@@ -172,18 +175,9 @@ export class AppShell extends LitElement {
   @state() private _searchCurrentMatch = -1;
   @state() private _detailNodeData: DetailNodeData | null = null;
   @state() private _soloMode = false;
-  private unsubscribe?: () => void;
 
-  connectedCallback() {
-    super.connectedCallback();
-    this.unsubscribe = store.subscribe((_event) => {
-      this.appState = store.get();
-    });
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    this.unsubscribe?.();
+  private get appState(): AppState {
+    return this._storeCtrl.value;
   }
 
   render() {
@@ -206,7 +200,8 @@ export class AppShell extends LitElement {
 
   private renderAppLayout() {
     const { files, activeView, filters, errors, sidebarCollapsed, selectedAggregate } = this.appState;
-    const conflictCount = files.length >= 2 ? compareFiles(files).length : 0;
+    this._comparisonCtrl.setFiles(files);
+    const conflictCount = this._comparisonCtrl.conflictCount;
 
     return html`
       ${errors.length > 0

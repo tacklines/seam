@@ -1,8 +1,9 @@
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { LoadedFile, DomainEvent, Confidence, Direction } from '../schema/types.js';
-import { getAllAggregates, groupByAggregate } from '../lib/grouping.js';
+import type { LoadedFile, Confidence, Direction } from '../schema/types.js';
+import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColor } from '../lib/aggregate-colors.js';
+import { EventFilterController } from './controllers/event-filter-controller.js';
 
 import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -133,37 +134,14 @@ export class CardView extends LitElement {
   @property({ attribute: false }) directionFilter = new Set<Direction>(['inbound', 'outbound', 'internal']);
   @property({ type: String }) selectedAggregate: string | null = null;
 
-  private filterEvents(events: DomainEvent[]): DomainEvent[] {
-    return events.filter(
-      (e) =>
-        this.confidenceFilter.has(e.confidence) &&
-        this.directionFilter.has(e.integration.direction)
-    );
-  }
+  private _eventFilterCtrl = new EventFilterController(this);
 
-  private countByConfidence(events: DomainEvent[]): Record<Confidence, number> {
-    const counts: Record<Confidence, number> = { CONFIRMED: 0, LIKELY: 0, POSSIBLE: 0 };
-    for (const e of events) {
-      counts[e.confidence]++;
-    }
-    return counts;
-  }
-
-  private countByDirection(events: DomainEvent[]): Record<Direction, number> {
-    const counts: Record<Direction, number> = { inbound: 0, outbound: 0, internal: 0 };
-    for (const e of events) {
-      counts[e.integration.direction]++;
-    }
-    return counts;
-  }
-
-  private renderStatsBar(allFiltered: DomainEvent[]) {
-    const conf = this.countByConfidence(allFiltered);
-    const dir = this.countByDirection(allFiltered);
+  private renderStatsBar() {
+    const { total, byConfidence: conf, byDirection: dir } = this._eventFilterCtrl.stats;
 
     return html`
       <div class="stats-bar">
-        <span class="stat-label">${allFiltered.length} events</span>
+        <span class="stat-label">${total} events</span>
 
         <div class="stat-group">
           <span class="stat-item">
@@ -203,15 +181,16 @@ export class CardView extends LitElement {
       return html`<div class="empty">Load a storm-prep YAML file to view events</div>`;
     }
 
+    this._eventFilterCtrl.setFiles(this.files);
+    this._eventFilterCtrl.setFilters(this.confidenceFilter, this.directionFilter);
+
     const allAggregates = getAllAggregates(this.files);
-    const allFiltered = this.files.flatMap((f) => this.filterEvents(f.data.domain_events));
 
     return html`
-      ${this.renderStatsBar(allFiltered)}
+      ${this.renderStatsBar()}
 
       ${this.files.map((file) => {
-        const filtered = this.filterEvents(file.data.domain_events);
-        const groups = groupByAggregate(filtered);
+        const groups = this._eventFilterCtrl.groupsForFile(file);
 
         return html`
           <div class="role-section">

@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { LoadedFile } from '../schema/types.js';
-import { compareFiles, type Overlap } from '../lib/comparison.js';
+import { ComparisonController } from './controllers/comparison-controller.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import './conflict-card.js';
@@ -124,16 +124,18 @@ export class ComparisonView extends LitElement {
 
   @property({ attribute: false }) files: LoadedFile[] = [];
 
+  private _comparisonCtrl = new ComparisonController(this);
+
   render() {
     if (this.files.length < 2) {
       return html`<div class="empty">Load two or more storm-prep YAML files to compare roles</div>`;
     }
 
-    const overlaps = compareFiles(this.files);
+    this._comparisonCtrl.setFiles(this.files);
 
-    const conflicts = overlaps.filter((o) => o.kind === 'assumption-conflict');
-    const sharedEvents = overlaps.filter((o) => o.kind === 'same-name');
-    const sharedAggregates = overlaps.filter((o) => o.kind === 'same-aggregate');
+    const conflicts = this._comparisonCtrl.conflicts;
+    const sharedEvents = this._comparisonCtrl.sharedEvents;
+    const sharedAggregates = this._comparisonCtrl.sharedAggregates;
 
     return html`
       <!-- Dashboard Header -->
