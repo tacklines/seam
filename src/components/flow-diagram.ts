@@ -221,6 +221,18 @@ export class FlowDiagram extends LitElement {
   private _updatingFromMinimap = false;
   private _unsubscribeStore: (() => void) | null = null;
 
+  // ── Zoom level thresholds ──
+  private static readonly ZOOM_LOW_MAX = 0.6;
+  private static readonly ZOOM_HIGH_MIN = 1.2;
+
+  /** Computed zoom level tier based on the current pan/zoom scale */
+  private get _zoomLevel(): 'low' | 'medium' | 'high' {
+    const k = this.viewTransform.k;
+    if (k < FlowDiagram.ZOOM_LOW_MAX) return 'low';
+    if (k < FlowDiagram.ZOOM_HIGH_MIN) return 'medium';
+    return 'high';
+  }
+
   /** Previous node positions for two-frame animation */
   private _prevNodePositions: Map<string, { x: number; y: number }> = new Map();
   /** Previous compound positions for two-frame animation */
@@ -631,10 +643,24 @@ export class FlowDiagram extends LitElement {
     return straightEdgePath(x1, y1, x2, y2, perpOffset);
   }
 
+  /** True when edge crosses aggregate boundaries or involves an external node */
+  private _isInterAggregateEdge(group: LayoutEdgeGroup): boolean {
+    const fromAgg = group.from.includes('::') ? group.from.split('::')[0] : null;
+    const toAgg = group.to.includes('::') ? group.to.split('::')[0] : null;
+    if (!fromAgg || !toAgg) return true;
+    return fromAgg !== toAgg;
+  }
+
   private _renderEdgeGroup(group: LayoutEdgeGroup, nodeMap: Map<string, LayoutNode>, matchedNodeIds: Set<string>): unknown {
     const from = nodeMap.get(group.from);
     const to = nodeMap.get(group.to);
     if (!from || !to) return nothing;
+
+    // Semantic zoom: at low zoom only inter-aggregate edges are shown
+    const zoomLevel = this._zoomLevel;
+    if (zoomLevel === 'low' && !this._isInterAggregateEdge(group)) {
+      return nothing;
+    }
 
     // Filter-based ghosting: opacity 0.1 when no edges in group pass active filters
     const passesFilter = isEdgeGroupVisible(group, this._filters.confidence, this._filters.direction);
@@ -643,6 +669,7 @@ export class FlowDiagram extends LitElement {
 
     const edgeOpacity = !passesFilter ? 0.1 : searchDimmed ? 0.2 : 1;
     const pointerEvents = !passesFilter ? 'none' : 'auto';
+    const showEdgeLabels = zoomLevel === 'high';
 
     const fromCx = this._nodeCx(from);
     const fromCy = this._nodeCy(from);
@@ -698,9 +725,11 @@ export class FlowDiagram extends LitElement {
             </defs>
             <use href="#${pathId}" fill="none" stroke=${color} stroke-width="1.5"
               marker-end=${this._arrowMarker(edge.confidence)} />
-            <text font-size="9" font-family="'JetBrains Mono', monospace" fill=${color}>
-              <textPath href="#${pathId}" startOffset="50%" text-anchor="middle">${edge.label}</textPath>
-            </text>
+            ${showEdgeLabels ? svg`
+              <text font-size="9" font-family="'JetBrains Mono', monospace" fill=${color}>
+                <textPath href="#${pathId}" startOffset="50%" text-anchor="middle">${edge.label}</textPath>
+              </text>
+            ` : nothing}
           </g>
         `;
       });
@@ -825,16 +854,18 @@ export class FlowDiagram extends LitElement {
           <use href="#${pathId}" fill="none" stroke=${color} stroke-width="1.5"
             marker-end=${this._arrowMarker(edge.confidence)} />
           <!-- Label along path using textPath for natural placement -->
-          <text
-            font-size="10"
-            font-family="'JetBrains Mono', monospace"
-            fill=${color}
-            paint-order="stroke"
-            stroke="white"
-            stroke-width="3"
-            stroke-linejoin="round">
-            <textPath href="#${pathId}" startOffset="50%" text-anchor="middle">${edge.label}</textPath>
-          </text>
+          ${showEdgeLabels ? svg`
+            <text
+              font-size="10"
+              font-family="'JetBrains Mono', monospace"
+              fill=${color}
+              paint-order="stroke"
+              stroke="white"
+              stroke-width="3"
+              stroke-linejoin="round">
+              <textPath href="#${pathId}" startOffset="50%" text-anchor="middle">${edge.label}</textPath>
+            </text>
+          ` : nothing}
         </g>
       `;
     });
@@ -957,6 +988,24 @@ export class FlowDiagram extends LitElement {
           fill=${textColor}
           style="cursor: pointer; user-select: none"
           @click=${(e: Event) => this._toggleCollapse(compound.id, e)}>&#x25BE;</text>
+        <!-- Low-zoom: event count glyph centered in the compound body -->
+        ${this._zoomLevel === 'low' ? svg`
+          <circle
+            cx=${x + width / 2} cy=${y + COMPOUND_HEADER_H + (height - COMPOUND_HEADER_H) / 2}
+            r="22"
+            fill=${headerFill}
+            stroke=${stroke}
+            stroke-width="1.5"
+          />
+          <text
+            x=${x + width / 2} y=${y + COMPOUND_HEADER_H + (height - COMPOUND_HEADER_H) / 2 + 5}
+            text-anchor="middle"
+            font-size="14"
+            font-weight="700"
+            font-family="'JetBrains Mono', monospace"
+            fill=${textColor}
+          >${compound.childIds.length}</text>
+        ` : nothing}
         <!-- Selected indicator -->
         ${isSelected ? svg`
           <rect
@@ -1096,6 +1145,11 @@ export class FlowDiagram extends LitElement {
     eventDataMap: Map<string, { trigger: string; confidence: string; direction: string; channel?: string; aggregate: string }>,
   ): unknown {
     const isExternal = node.kind === 'external';
+
+    // Semantic zoom: at low zoom, hide individual event nodes (external nodes stay visible)
+    if (this._zoomLevel === 'low' && !isExternal) {
+      return nothing;
+    }
 
     const fill = isExternal ? EXTERNAL_FILL : (AGG_BGS[node.colorIndex] ?? AGG_BGS[0]);
     const stroke = isExternal ? EXTERNAL_STROKE : (AGG_COLORS[node.colorIndex] ?? AGG_COLORS[0]);
