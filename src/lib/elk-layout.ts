@@ -84,6 +84,8 @@ export interface LayoutEdgeGroup {
 export interface ElkLayoutResult {
   /** Compound aggregate containers */
   compounds: LayoutCompound[];
+  /** Collapsed aggregate summary nodes */
+  collapsedAggregates: CollapsedAggregate[];
   /** All leaf nodes: domain event children + external system nodes */
   nodes: LayoutNode[];
   edgeGroups: LayoutEdgeGroup[];
@@ -170,6 +172,17 @@ export function straightEdgePath(
   return `M${x1} ${y1} C${cpx1} ${cpy1} ${cpx2} ${cpy2} ${x2} ${y2}`;
 }
 
+/** A collapsed aggregate rendered as a compact summary node */
+export interface CollapsedAggregate {
+  id: string;
+  label: string;
+  colorIndex: number;
+  x: number;
+  y: number;
+  /** Number of child events hidden inside */
+  eventCount: number;
+}
+
 /**
  * Run ELK layered layout with compound nodes.
  *
@@ -178,10 +191,16 @@ export function straightEdgePath(
  * External systems become standalone leaf nodes.
  * Edges connect event-child nodes to external system nodes.
  * Internal events are self-loops on the aggregate's own event nodes (excluded from ELK edges).
+ *
+ * @param files - Loaded YAML files to lay out
+ * @param collapsedAggregates - Set of aggregate IDs that should be collapsed to a single node
  */
-export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult> {
+export async function runElkLayout(
+  files: LoadedFile[],
+  collapsedAggregates: Set<string> = new Set(),
+): Promise<ElkLayoutResult> {
   if (files.length === 0) {
-    return { compounds: [], nodes: [], edgeGroups: [], width: 800, height: 500 };
+    return { compounds: [], collapsedAggregates: [], nodes: [], edgeGroups: [], width: 800, height: 500 };
   }
 
   const allAggregates = getAllAggregates(files);
@@ -213,26 +232,36 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
   }
 
   // Build ELK compound children (aggregates as parents)
+  // Collapsed aggregates become simple leaf nodes instead of compounds with children
   const elkCompoundChildren: ElkNode[] = [];
 
   for (const [aggId, events] of aggregateEvents) {
-    const childNodes: ElkNode[] = events.map((ev) => ({
-      id: eventNodeId(aggId, ev.name),
-      width: NODE_W,
-      height: NODE_H,
-    }));
+    if (collapsedAggregates.has(aggId)) {
+      // Collapsed aggregate: single leaf node sized like a regular node
+      elkCompoundChildren.push({
+        id: aggId,
+        width: NODE_W,
+        height: NODE_H,
+      });
+    } else {
+      const childNodes: ElkNode[] = events.map((ev) => ({
+        id: eventNodeId(aggId, ev.name),
+        width: NODE_W,
+        height: NODE_H,
+      }));
 
-    elkCompoundChildren.push({
-      id: aggId,
-      layoutOptions: {
-        'elk.algorithm': 'layered',
-        'elk.direction': 'DOWN',
-        'elk.spacing.nodeNode': '20',
-        'elk.padding': `[top=${COMPOUND_PADDING_TOP},left=${COMPOUND_PADDING_SIDE},bottom=${COMPOUND_PADDING_BOTTOM},right=${COMPOUND_PADDING_SIDE}]`,
-      },
-      children: childNodes,
-      // ELK will compute width/height from children
-    });
+      elkCompoundChildren.push({
+        id: aggId,
+        layoutOptions: {
+          'elk.algorithm': 'layered',
+          'elk.direction': 'DOWN',
+          'elk.spacing.nodeNode': '20',
+          'elk.padding': `[top=${COMPOUND_PADDING_TOP},left=${COMPOUND_PADDING_SIDE},bottom=${COMPOUND_PADDING_BOTTOM},right=${COMPOUND_PADDING_SIDE}]`,
+        },
+        children: childNodes,
+        // ELK will compute width/height from children
+      });
+    }
   }
 
   // External system nodes (standalone leaf nodes)
@@ -244,23 +273,30 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
 
   // Build ELK edges (connect event child nodes to external nodes)
   // Track edge ID -> group key so we can attach ELK section data after layout
+  // For collapsed aggregates, redirect child-node edges to the aggregate node itself.
+  // Self-loops within a collapsed aggregate are dropped entirely.
   let edgeCounter = 0;
   const elkEdges: Array<{ id: string; sources: string[]; targets: string[] }> = [];
   const edgeIdToGroupKey = new Map<string, string>();
 
   for (const file of files) {
     for (const event of file.data.domain_events) {
-      const childId = eventNodeId(event.aggregate, event.name);
+      const rawChildId = eventNodeId(event.aggregate, event.name);
+      const isCollapsed = collapsedAggregates.has(event.aggregate);
+      // When the aggregate is collapsed, edges use the aggregate ID as endpoint
+      const effectiveChildId = isCollapsed ? event.aggregate : rawChildId;
+
       if (event.integration.direction === 'outbound' && event.integration.channel) {
         const id = `e${edgeCounter++}`;
-        elkEdges.push({ id, sources: [childId], targets: [event.integration.channel] });
-        edgeIdToGroupKey.set(id, `${childId}::${event.integration.channel}`);
+        elkEdges.push({ id, sources: [effectiveChildId], targets: [event.integration.channel] });
+        edgeIdToGroupKey.set(id, `${effectiveChildId}::${event.integration.channel}`);
       } else if (event.integration.direction === 'inbound' && event.integration.channel) {
         const id = `e${edgeCounter++}`;
-        elkEdges.push({ id, sources: [event.integration.channel], targets: [childId] });
-        edgeIdToGroupKey.set(id, `${event.integration.channel}::${childId}`);
+        elkEdges.push({ id, sources: [event.integration.channel], targets: [effectiveChildId] });
+        edgeIdToGroupKey.set(id, `${event.integration.channel}::${effectiveChildId}`);
       }
-      // internal events: no ELK edge (self-contained within aggregate)
+      // internal events: self-loop, included only for expanded aggregates
+      // (collapsed aggregates hide internals entirely — no ELK edge)
     }
   }
 
@@ -285,6 +321,7 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
 
   // Extract compound (aggregate) layouts
   const compounds: LayoutCompound[] = [];
+  const collapsedAggregatesList: CollapsedAggregate[] = [];
   const nodes: LayoutNode[] = [];
 
   for (const topNode of laid.children ?? []) {
@@ -299,8 +336,31 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
         x: topNode.x ?? 0,
         y: topNode.y ?? 0,
       });
+    } else if (collapsedAggregates.has(topNode.id)) {
+      // Collapsed aggregate — single leaf node, not a compound
+      const colorIndex = getAggregateColorIndex(topNode.id, allAggregates);
+      const eventCount = aggregateEvents.get(topNode.id)?.length ?? 0;
+      const nodeX = topNode.x ?? 0;
+      const nodeY = topNode.y ?? 0;
+      collapsedAggregatesList.push({
+        id: topNode.id,
+        label: topNode.id,
+        colorIndex,
+        x: nodeX,
+        y: nodeY,
+        eventCount,
+      });
+      // Also add to nodes[] so edge rendering can find positions via nodeMap
+      nodes.push({
+        id: topNode.id,
+        label: topNode.id,
+        kind: 'aggregate',
+        colorIndex,
+        x: nodeX,
+        y: nodeY,
+      });
     } else {
-      // Aggregate compound node
+      // Expanded aggregate compound node
       const colorIndex = getAggregateColorIndex(topNode.id, allAggregates);
       const parentX = topNode.x ?? 0;
       const parentY = topNode.y ?? 0;
@@ -338,25 +398,29 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
 
   // Build edge groups for rendering
   // Group by (fromId, toId) for display
+  // For collapsed aggregates, redirect child-node IDs to the aggregate ID.
+  // Internal events within a collapsed aggregate are dropped entirely.
   const groupMap = new Map<string, LayoutEdgeGroup>();
 
   for (const file of files) {
     for (const event of file.data.domain_events) {
-      const childId = eventNodeId(event.aggregate, event.name);
+      const rawChildId = eventNodeId(event.aggregate, event.name);
+      const isCollapsed = collapsedAggregates.has(event.aggregate);
 
       let fromId: string;
       let toId: string;
 
       if (event.integration.direction === 'outbound' && event.integration.channel) {
-        fromId = childId;
+        fromId = isCollapsed ? event.aggregate : rawChildId;
         toId = event.integration.channel;
       } else if (event.integration.direction === 'inbound' && event.integration.channel) {
         fromId = event.integration.channel;
-        toId = childId;
+        toId = isCollapsed ? event.aggregate : rawChildId;
       } else {
-        // internal — self-loop on the child event node
-        fromId = childId;
-        toId = childId;
+        // internal — self-loop; drop entirely if collapsed
+        if (isCollapsed) continue;
+        fromId = rawChildId;
+        toId = rawChildId;
       }
 
       const key = `${fromId}::${toId}`;
@@ -406,6 +470,7 @@ export async function runElkLayout(files: LoadedFile[]): Promise<ElkLayoutResult
 
   return {
     compounds,
+    collapsedAggregates: collapsedAggregatesList,
     nodes,
     edgeGroups: [...groupMap.values()],
     width: layoutWidth,

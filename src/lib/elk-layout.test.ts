@@ -246,6 +246,113 @@ describe('runElkLayout', () => {
       expect(Array.isArray(group?.sections)).toBe(true);
     });
   });
+
+  describe('given a collapsed aggregate', () => {
+    it('when aggregate is collapsed, returns a collapsedAggregates entry instead of a compound', async () => {
+      const files = [
+        makeFile('ops', [
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
+        ]),
+      ];
+      const collapsed = new Set(['Order']);
+
+      const result = await runElkLayout(files, collapsed);
+
+      expect(result.collapsedAggregates).toHaveLength(1);
+      expect(result.collapsedAggregates[0].id).toBe('Order');
+      expect(result.collapsedAggregates[0].eventCount).toBe(1);
+    });
+
+    it('when aggregate is collapsed, no compound is returned for that aggregate', async () => {
+      const files = [
+        makeFile('ops', [
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
+        ]),
+      ];
+      const collapsed = new Set(['Order']);
+
+      const result = await runElkLayout(files, collapsed);
+
+      const orderCompound = result.compounds.find((c) => c.id === 'Order');
+      expect(orderCompound).toBeUndefined();
+    });
+
+    it('when aggregate is collapsed, edges reference aggregate id not child event id', async () => {
+      const files = [
+        makeFile('ops', [
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
+        ]),
+      ];
+      const collapsed = new Set(['Order']);
+
+      const result = await runElkLayout(files, collapsed);
+
+      const group = result.edgeGroups.find(
+        (g) => g.from === 'Order' && g.to === 'PaymentService',
+      );
+      expect(group).toBeDefined();
+      expect(group?.edges[0].label).toBe('OrderPlaced');
+    });
+
+    it('when aggregate is collapsed, internal events are excluded from edge groups', async () => {
+      const files = [
+        makeFile('ops', [
+          { name: 'StateUpdated', aggregate: 'Order', direction: 'internal' },
+        ]),
+      ];
+      const collapsed = new Set(['Order']);
+
+      const result = await runElkLayout(files, collapsed);
+
+      expect(result.edgeGroups).toHaveLength(0);
+    });
+
+    it('when aggregate is collapsed, collapsed aggregate node appears in nodes for edge routing', async () => {
+      const files = [
+        makeFile('ops', [
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
+        ]),
+      ];
+      const collapsed = new Set(['Order']);
+
+      const result = await runElkLayout(files, collapsed);
+
+      const aggNode = result.nodes.find((n) => n.id === 'Order');
+      expect(aggNode).toBeDefined();
+      expect(aggNode?.kind).toBe('aggregate');
+    });
+
+    it('when aggregate is collapsed with multiple events, eventCount reflects all events', async () => {
+      const files = [
+        makeFile('ops', [
+          { name: 'EventA', aggregate: 'Order', direction: 'internal' },
+          { name: 'EventB', aggregate: 'Order', direction: 'internal' },
+          { name: 'EventC', aggregate: 'Order', direction: 'internal' },
+        ]),
+      ];
+      const collapsed = new Set(['Order']);
+
+      const result = await runElkLayout(files, collapsed);
+
+      expect(result.collapsedAggregates[0].eventCount).toBe(3);
+    });
+
+    it('when only one aggregate is collapsed out of two, the other remains expanded', async () => {
+      const files = [
+        makeFile('ops', [
+          { name: 'EventA', aggregate: 'Order', direction: 'internal' },
+          { name: 'EventB', aggregate: 'Customer', direction: 'internal' },
+        ]),
+      ];
+      const collapsed = new Set(['Order']);
+
+      const result = await runElkLayout(files, collapsed);
+
+      expect(result.collapsedAggregates).toHaveLength(1);
+      expect(result.compounds).toHaveLength(1);
+      expect(result.compounds[0].id).toBe('Customer');
+    });
+  });
 });
 
 describe('elkSectionToPath', () => {

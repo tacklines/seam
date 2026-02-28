@@ -5,7 +5,7 @@ import type { Confidence, Direction } from '../schema/types.js';
 import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
 import { runElkLayout, NODE_W, NODE_H, elkSectionToPath, straightEdgePath } from '../lib/elk-layout.js';
-import type { LayoutNode, LayoutCompound, LayoutEdgeGroup } from '../lib/elk-layout.js';
+import type { LayoutNode, LayoutCompound, LayoutEdgeGroup, CollapsedAggregate } from '../lib/elk-layout.js';
 import { isEdgeGroupVisible } from '../lib/edge-filters.js';
 import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
@@ -149,7 +149,9 @@ export class FlowDiagram extends LitElement {
 
   @state() private _layoutNodes: LayoutNode[] = [];
   @state() private _layoutCompounds: LayoutCompound[] = [];
+  @state() private _layoutCollapsedAggregates: CollapsedAggregate[] = [];
   @state() private _edgeGroups: LayoutEdgeGroup[] = [];
+  @state() private _collapsedAggregates = new Set<string>();
   @state() private _svgWidth = DEFAULT_WIDTH;
   @state() private _svgHeight = DEFAULT_HEIGHT;
   @state() private _transform = '';
@@ -184,9 +186,10 @@ export class FlowDiagram extends LitElement {
       return;
     }
 
-    const result = await runElkLayout(this.files);
+    const result = await runElkLayout(this.files, this._collapsedAggregates);
     this._layoutNodes = result.nodes;
     this._layoutCompounds = result.compounds;
+    this._layoutCollapsedAggregates = result.collapsedAggregates;
     this._edgeGroups = result.edgeGroups;
     this._svgWidth = result.width;
     this._svgHeight = result.height;
@@ -460,6 +463,20 @@ export class FlowDiagram extends LitElement {
     );
   }
 
+  private _toggleCollapse(aggregateId: string, e: Event) {
+    e.stopPropagation();
+    const next = new Set(this._collapsedAggregates);
+    if (next.has(aggregateId)) {
+      next.delete(aggregateId);
+    } else {
+      next.add(aggregateId);
+    }
+    this._collapsedAggregates = next;
+    this._runElkLayout().then(() => {
+      this._computeMinimapData(this._layoutNodes, this._layoutCompounds, this._edgeGroups);
+    });
+  }
+
   private _showTooltip(e: MouseEvent, text: string) {
     const wrapper = this.renderRoot.querySelector('.diagram-wrapper') as HTMLElement;
     if (!wrapper) return;
@@ -724,12 +741,17 @@ export class FlowDiagram extends LitElement {
     const { x, y, width, height } = compound;
     const { lines, fontSize } = this._fitLabel(compound.label, Math.floor(width / 7));
 
+    // Chevron positioned at right side of header (▾ = expanded)
+    const chevronX = x + width - 18;
+    const chevronY = y + COMPOUND_HEADER_H / 2;
+
     return svg`
       <g
         class="compound-node"
         opacity=${opacity}
         style="cursor: pointer"
-        @click=${() => this._onCompoundClick(compound.id)}>
+        @click=${() => this._onCompoundClick(compound.id)}
+        @dblclick=${(e: Event) => this._toggleCollapse(compound.id, e)}>
         <!-- Container background -->
         <rect
           x=${x} y=${y}
@@ -759,7 +781,7 @@ export class FlowDiagram extends LitElement {
         ${lines.map(
           (line, i) => svg`
             <text
-              x=${x + width / 2}
+              x=${x + (width - 16) / 2}
               y=${y + 10 + (i + 1) * (fontSize + 2)}
               text-anchor="middle"
               font-weight="700"
@@ -769,12 +791,114 @@ export class FlowDiagram extends LitElement {
             >${line}</text>
           `,
         )}
+        <!-- Chevron indicator (▾ expanded) — clickable collapse toggle -->
+        <text
+          x=${chevronX}
+          y=${chevronY + 4}
+          text-anchor="middle"
+          font-size="12"
+          fill=${textColor}
+          style="cursor: pointer; user-select: none"
+          @click=${(e: Event) => this._toggleCollapse(compound.id, e)}>&#x25BE;</text>
         <!-- Selected indicator -->
         ${isSelected ? svg`
           <rect
             x=${x - 4} y=${y - 4}
             width=${width + 8} height=${height + 8}
             rx="16"
+            fill="none"
+            stroke="#2563eb"
+            stroke-width="2.5"
+            stroke-dasharray="6 3"
+          />
+        ` : nothing}
+      </g>
+    `;
+  }
+
+  /** Render a collapsed aggregate as a compact summary node */
+  private _renderCollapsedAggregate(ca: CollapsedAggregate, matchedNodeIds: Set<string>): unknown {
+    const isSelected = this._selectedAggregate === ca.id;
+    const fill = AGG_BGS[ca.colorIndex] ?? AGG_BGS[0];
+    const stroke = AGG_COLORS[ca.colorIndex] ?? AGG_COLORS[0];
+    const textColor = AGG_TEXT[ca.colorIndex] ?? AGG_TEXT[0];
+    const strokeWidth = isSelected ? 3 : 1.5;
+
+    const opacity = this._searchActive && !matchedNodeIds.has(ca.id) ? 0.25 : 1;
+
+    const { x, y } = ca;
+    const { lines, fontSize } = this._fitLabel(ca.label);
+
+    const lineHeight = fontSize + 3;
+    const textBlockHeight = lines.length * lineHeight;
+    const startY = y + (NODE_H / 2) - textBlockHeight / 2 + fontSize * 0.8 - 5;
+
+    // Chevron positioned at right side of the node header area (▸ = collapsed)
+    const chevronX = x + NODE_W - 10;
+    const chevronY = y + 10;
+
+    return svg`
+      <g
+        class="collapsed-aggregate"
+        opacity=${opacity}
+        style="cursor: pointer"
+        @click=${() => this._onCompoundClick(ca.id)}
+        @dblclick=${(e: Event) => this._toggleCollapse(ca.id, e)}>
+        <!-- Node background -->
+        <rect
+          x=${x} y=${y}
+          width=${NODE_W} height=${NODE_H}
+          rx="10"
+          fill=${fill}
+          stroke=${stroke}
+          stroke-width=${strokeWidth}
+          filter="url(#shadow)"
+        />
+        <!-- Chevron (▸ collapsed) -->
+        <text
+          x=${chevronX}
+          y=${chevronY + 4}
+          text-anchor="middle"
+          font-size="10"
+          fill=${textColor}
+          style="cursor: pointer; user-select: none"
+          @click=${(e: Event) => this._toggleCollapse(ca.id, e)}>&#x25B8;</text>
+        <!-- Aggregate label -->
+        ${lines.map(
+          (line, i) => svg`
+            <text
+              x=${x + NODE_W / 2 - 4}
+              y=${startY + i * lineHeight}
+              text-anchor="middle"
+              font-weight="700"
+              font-size=${fontSize}
+              font-family="'JetBrains Mono', monospace"
+              fill=${textColor}
+            >${line}</text>
+          `,
+        )}
+        <!-- Event count badge -->
+        <rect
+          x=${x + 4} y=${y + NODE_H - 16}
+          width="52" height="13"
+          rx="6"
+          fill=${stroke}
+        />
+        <text
+          x=${x + 30}
+          y=${y + NODE_H - 6}
+          text-anchor="middle"
+          font-size="8"
+          font-weight="600"
+          font-family="'JetBrains Mono', monospace"
+          fill="white"
+        >${ca.eventCount} event${ca.eventCount !== 1 ? 's' : ''}</text>
+        <!-- Selected indicator -->
+        ${isSelected ? svg`
+          <rect
+            x=${x - 4} y=${y - 4}
+            width=${NODE_W + 8} height=${NODE_H + 8}
+            rx="14"
             fill="none"
             stroke="#2563eb"
             stroke-width="2.5"
@@ -906,11 +1030,17 @@ export class FlowDiagram extends LitElement {
             <!-- Compound aggregate containers (behind everything) -->
             ${this._layoutCompounds.map((c) => this._renderCompound(c, matchedNodeIds))}
 
+            <!-- Collapsed aggregate summary nodes (behind edges) -->
+            ${this._layoutCollapsedAggregates.map((ca) => this._renderCollapsedAggregate(ca, matchedNodeIds))}
+
             <!-- Edges between event nodes and external nodes -->
             ${this._edgeGroups.map((g) => this._renderEdgeGroup(g, nodeMap, matchedNodeIds))}
 
-            <!-- Leaf nodes (event children + external systems) -->
-            ${this._layoutNodes.map((n, i) => this._renderNode(n, i))}
+            <!-- Leaf nodes (event children + external systems), excluding collapsed aggregate nodes -->
+            ${this._layoutNodes
+              .map((n, i) => ({ n, i }))
+              .filter(({ n }) => !this._collapsedAggregates.has(n.id))
+              .map(({ n, i }) => this._renderNode(n, i))}
           </g>
         </svg>
 
