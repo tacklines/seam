@@ -12,5 +12,5 @@
     "allowImportingTsExtensions": false,
     "types": ["node"]
   },
-  "include": ["src/server/**/*", "src/state/**/*"]
+  "include": ["src/server/**/*", "src/state/**/*", "src/lib/session-store.ts", "src/schema/**/*"]
 }
