@@ -24,6 +24,7 @@ function sessionToJson(session: Session): SerializedSession {
     jam: session.jam,
     contracts: session.contracts,
     integrationReport: session.integrationReport,
+    messages: session.messages,
   };
 }
 
@@ -39,6 +40,7 @@ function sessionFromJson(json: SerializedSession): Session {
     jam: json.jam,
     contracts: json.contracts,
     integrationReport: json.integrationReport,
+    messages: json.messages ?? [],
   };
 }
 

@@ -22,11 +22,22 @@ export interface Submission {
   submittedAt: string;
 }
 
+export interface SessionMessage {
+  id: string;
+  from: string;        // participant name
+  fromId: string;      // participant ID
+  to?: string;         // participant name (omit for broadcast to all)
+  toId?: string;       // participant ID (omit for broadcast to all)
+  content: string;
+  timestamp: string;   // ISO timestamp
+}
+
 export interface Session {
   code: string;
   createdAt: string;
   participants: Map<string, Participant>;
   submissions: Submission[];
+  messages: SessionMessage[];
   jam: JamArtifacts | null;
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
@@ -37,6 +48,7 @@ export interface SerializedSession {
   createdAt: string;
   participants: Participant[];
   submissions: Submission[];
+  messages: SessionMessage[];
   jam: JamArtifacts | null;
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
@@ -61,6 +73,7 @@ export function serializeSession(session: Session): SerializedSession {
     createdAt: session.createdAt,
     participants: Array.from(session.participants.values()),
     submissions: session.submissions,
+    messages: session.messages,
     jam: session.jam,
     contracts: session.contracts,
     integrationReport: session.integrationReport,
@@ -88,6 +101,7 @@ export class SessionStore {
       createdAt: new Date().toISOString(),
       participants: new Map([[creatorId, creator]]),
       submissions: [],
+      messages: [],
       jam: null,
       contracts: null,
       integrationReport: null,
@@ -225,6 +239,57 @@ export class SessionStore {
   getIntegrationReport(code: string): IntegrationReport | null {
     const session = this.sessions.get(code.toUpperCase());
     return session?.integrationReport ?? null;
+  }
+
+  sendMessage(
+    code: string,
+    fromId: string,
+    content: string,
+    toId?: string
+  ): SessionMessage | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    const sender = session.participants.get(fromId);
+    if (!sender) return null;
+
+    let recipient: Participant | undefined;
+    if (toId) {
+      recipient = session.participants.get(toId);
+      if (!recipient) return null;
+    }
+
+    const msg: SessionMessage = {
+      id: generateId(),
+      from: sender.name,
+      fromId,
+      content,
+      timestamp: new Date().toISOString(),
+    };
+    if (toId && recipient) {
+      msg.to = recipient.name;
+      msg.toId = toId;
+    }
+    session.messages.push(msg);
+    return msg;
+  }
+
+  getMessages(
+    code: string,
+    participantId: string,
+    since?: string
+  ): SessionMessage[] {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return [];
+
+    return session.messages.filter(msg => {
+      // Include if broadcast (no toId) or if sent to this participant or sent by this participant
+      const isRelevant = !msg.toId || msg.toId === participantId || msg.fromId === participantId;
+      if (!isRelevant) return false;
+      if (since) {
+        return msg.timestamp > since;
+      }
+      return true;
+    });
   }
 
   loadSessions(sessions: Map<string, Session>): void {

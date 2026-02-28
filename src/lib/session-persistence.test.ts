@@ -66,6 +66,7 @@ function makeSession(overrides: Partial<Omit<Session, 'participants'>> & { parti
     createdAt: '2026-02-28T08:00:00Z',
     participants,
     submissions: [],
+    messages: [],
     jam: null,
     contracts: null,
     integrationReport: null,

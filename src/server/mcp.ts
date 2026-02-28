@@ -5,10 +5,81 @@ import { sessionStore, persistSessions } from './store.js';
 import { parseAndValidate } from '../lib/yaml-validator-server.js';
 import { computePrepStatus, computeSessionStatus } from '../lib/prep-completeness.js';
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
+import { serializeSession } from '../lib/session-store.js';
+
+// ---------------------------------------------------------------------------
+// CLI arg parsing for scoped mode: --session=CODE --user=NAME
+// ---------------------------------------------------------------------------
+
+function parseArgs(): { session?: string; user?: string } {
+  const args = process.argv.slice(2);
+  const result: { session?: string; user?: string } = {};
+  for (const arg of args) {
+    const [key, ...rest] = arg.split('=');
+    const value = rest.join('=');
+    if (key === '--session' && value) result.session = value.toUpperCase();
+    if (key === '--user' && value) result.user = value;
+  }
+  return result;
+}
+
+// Scoped context — populated on startup when --session/--user are provided
+interface ScopedContext {
+  sessionCode: string;
+  participantId: string;
+  participantName: string;
+}
 
 async function main(): Promise<void> {
+  const cliArgs = parseArgs();
+  let scoped: ScopedContext | null = null;
+
+  // If --session and --user provided, auto-join (or reconnect) on startup
+  if (cliArgs.session && cliArgs.user) {
+    const session = sessionStore.getSession(cliArgs.session);
+    if (!session) {
+      console.error(`[mcp] session ${cliArgs.session} not found`);
+      process.exit(1);
+    }
+
+    // Check if user already exists in session (reconnect)
+    let existingId: string | null = null;
+    for (const [id, p] of session.participants) {
+      if (p.name === cliArgs.user) {
+        existingId = id;
+        break;
+      }
+    }
+
+    if (existingId) {
+      scoped = {
+        sessionCode: cliArgs.session,
+        participantId: existingId,
+        participantName: cliArgs.user,
+      };
+      console.error(`[mcp] reconnected as "${cliArgs.user}" (${existingId}) in session ${cliArgs.session}`);
+    } else {
+      const result = sessionStore.joinSession(cliArgs.session, cliArgs.user);
+      if (!result) {
+        console.error(`[mcp] failed to join session ${cliArgs.session}`);
+        process.exit(1);
+      }
+      persistSessions();
+      scoped = {
+        sessionCode: cliArgs.session,
+        participantId: result.participantId,
+        participantName: cliArgs.user,
+      };
+      console.error(`[mcp] joined session ${cliArgs.session} as "${cliArgs.user}" (${result.participantId})`);
+    }
+  }
+
+  const serverName = scoped
+    ? `multi-human-workflows (${scoped.participantName}@${scoped.sessionCode})`
+    : 'multi-human-workflows';
+
   const server = new McpServer({
-    name: 'multi-human-workflows',
+    name: serverName,
     version: '0.1.0',
   });
 
@@ -596,9 +667,181 @@ async function main(): Promise<void> {
     }
   );
 
+  // -------------------------------------------------------------------------
+  // Scoped tools — only registered when --session/--user are provided
+  // -------------------------------------------------------------------------
+
+  if (scoped) {
+    const ctx = scoped; // capture for closures
+
+    // Tool: my_session — get session state without needing the code
+    server.registerTool(
+      'my_session',
+      {
+        description: 'Get the current state of your session (participants, submissions, phase)',
+        inputSchema: {},
+      },
+      () => {
+        const session = sessionStore.getSession(ctx.sessionCode);
+        if (!session) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+            isError: true,
+          };
+        }
+        const status = computeWorkflowStatus({
+          participantCount: session.participants.size,
+          submissionCount: session.submissions.length,
+          jam: session.jam,
+          contracts: session.contracts,
+          integrationReport: session.integrationReport,
+        });
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              you: { name: ctx.participantName, id: ctx.participantId },
+              session: serializeSession(session),
+              workflow: status,
+            }),
+          }],
+        };
+      }
+    );
+
+    // Tool: my_submit — submit YAML without needing code or participantId
+    server.registerTool(
+      'my_submit',
+      {
+        description: 'Submit a YAML file to your session (parse + validate + submit)',
+        inputSchema: {
+          fileName: z.string().describe('File name for the submission'),
+          yamlContent: z.string().describe('Raw YAML string to parse and validate'),
+        },
+      },
+      ({ fileName, yamlContent }) => {
+        const outcome = parseAndValidate(fileName, yamlContent);
+        if (!outcome.ok) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: JSON.stringify({ error: 'YAML validation failed', errors: outcome.errors }),
+            }],
+            isError: true,
+          };
+        }
+
+        const submission = sessionStore.submitYaml(ctx.sessionCode, ctx.participantId, fileName, outcome.file.data);
+        if (!submission) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: JSON.stringify({ error: 'Session not found or participant not in session' }),
+            }],
+            isError: true,
+          };
+        }
+
+        persistSessions();
+        const prepStatus = computePrepStatus(outcome.file.data);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: true,
+              submittedAt: submission.submittedAt,
+              completeness: prepStatus,
+            }),
+          }],
+        };
+      }
+    );
+
+    // Tool: send_message — post a message to the session
+    server.registerTool(
+      'send_message',
+      {
+        description: 'Send a message to the session. Omit recipientName for a broadcast to all participants.',
+        inputSchema: {
+          content: z.string().describe('Message content'),
+          recipientName: z.string().optional().describe('Name of a specific participant to message (omit for broadcast)'),
+        },
+      },
+      ({ content, recipientName }) => {
+        let toId: string | undefined;
+        if (recipientName) {
+          // Look up recipient by name
+          const session = sessionStore.getSession(ctx.sessionCode);
+          if (!session) {
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+              isError: true,
+            };
+          }
+          for (const [id, p] of session.participants) {
+            if (p.name === recipientName) {
+              toId = id;
+              break;
+            }
+          }
+          if (!toId) {
+            return {
+              content: [{
+                type: 'text' as const,
+                text: JSON.stringify({ error: `Participant "${recipientName}" not found in session` }),
+              }],
+              isError: true,
+            };
+          }
+        }
+
+        const msg = sessionStore.sendMessage(ctx.sessionCode, ctx.participantId, content, toId);
+        if (!msg) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Failed to send message' }) }],
+            isError: true,
+          };
+        }
+        persistSessions();
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ sent: msg }),
+          }],
+        };
+      }
+    );
+
+    // Tool: check_messages — poll for messages
+    server.registerTool(
+      'check_messages',
+      {
+        description: 'Check for new messages in your session. Pass the lastChecked timestamp from a prior call to get only new messages.',
+        inputSchema: {
+          since: z.string().optional().describe('ISO timestamp from a prior check; only messages after this time are returned'),
+        },
+      },
+      ({ since }) => {
+        const messages = sessionStore.getMessages(ctx.sessionCode, ctx.participantId, since);
+        const lastChecked = new Date().toISOString();
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              messages,
+              count: messages.length,
+              lastChecked,
+            }),
+          }],
+        };
+      }
+    );
+  }
+
   const transport = new StdioServerTransport();
 
-  console.error('[mcp] starting multi-human-workflows MCP server');
+  const modeLabel = scoped ? `scoped to ${scoped.participantName}@${scoped.sessionCode}` : 'unscoped';
+  console.error(`[mcp] starting multi-human-workflows MCP server (${modeLabel})`);
 
   await server.connect(transport);
 

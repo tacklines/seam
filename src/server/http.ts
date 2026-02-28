@@ -312,6 +312,46 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // POST /api/sessions/:code/messages — Send a message
+    const messagesPostMatch = url.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+    if (method === 'POST' && messagesPostMatch) {
+      const code = messagesPostMatch[1];
+      const body = await parseBody(req) as {
+        fromId?: string;
+        content?: string;
+        toId?: string;
+      };
+      if (!body.fromId || !body.content) {
+        sendJson(res, 400, { error: 'fromId and content are required' });
+        return;
+      }
+      const msg = store.sendMessage(code, body.fromId, body.content, body.toId);
+      if (!msg) {
+        sendJson(res, 404, { error: 'Session not found or participant not in session' });
+        return;
+      }
+      persistSessions();
+      pushSseEvent(code.toUpperCase(), 'message', msg);
+      sendJson(res, 201, { message: msg });
+      return;
+    }
+
+    // GET /api/sessions/:code/messages — Get messages for a participant
+    const messagesGetMatch = url.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+    if (method === 'GET' && messagesGetMatch) {
+      const code = messagesGetMatch[1];
+      const urlObj = new URL(url, `http://localhost:${PORT}`);
+      const participantId = urlObj.searchParams.get('participantId');
+      const since = urlObj.searchParams.get('since') ?? undefined;
+      if (!participantId) {
+        sendJson(res, 400, { error: 'participantId query param is required' });
+        return;
+      }
+      const messages = store.getMessages(code, participantId, since);
+      sendJson(res, 200, { messages, count: messages.length });
+      return;
+    }
+
     // GET /api/sessions/:code — Get session state
     const sessionMatch = url.match(/^\/api\/sessions\/([^/]+)$/);
     if (method === 'GET' && sessionMatch) {
