@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "server": "npx tsx src/server/http.ts"
+    "server": "npx tsx src/server/http.ts",
+    "mcp": "npx tsx src/server/mcp.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

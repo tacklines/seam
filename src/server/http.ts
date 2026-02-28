@@ -1,13 +1,11 @@
 import http from 'node:http';
-import { SessionStore, serializeSession } from '../lib/session-store.js';
+import { serializeSession } from '../lib/session-store.js';
+import { sessionStore as store } from './store.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
 
 const PORT = 3001;
 const CORS_ORIGIN = 'http://localhost:5173';
-
-// Singleton session store
-const store = new SessionStore();
 
 // SSE clients per session code: code -> Set of response objects
 const sseClients: Map<string, Set<ServerResponse>> = new Map();
