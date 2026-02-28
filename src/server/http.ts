@@ -1,10 +1,9 @@
 import http from 'node:http';
 import { serializeSession } from '../lib/session-store.js';
 import { sessionStore as store, eventStore } from './store.js';
+import { createWebSocketServer } from './websocket.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
-import type { EventStore } from '../contexts/session/event-store.js';
-import type { DomainEvent } from '../contexts/session/domain-events.js';
 
 const PORT = Number(process.env.PORT ?? 3002);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
@@ -43,68 +42,6 @@ function parseBody(req: http.IncomingMessage): Promise<unknown> {
   });
 }
 
-/**
- * Create an SSE handler for domain event streaming.
- *
- * Extracted as a pure factory so it can be tested without starting an HTTP server.
- * The handler:
- *   - Optionally replays historical events (via ?since=<ISO timestamp>)
- *   - Subscribes to live EventStore events, forwarding only those matching sessionCode
- *   - Sends events in SSE format: `event: <type>\ndata: <JSON>\n\n`
- *   - Sends a keep-alive comment every 30 seconds
- *   - Cleans up the subscription when the client disconnects
- */
-export function createSseHandler(es: EventStore) {
-  return function handleSseRequest(
-    req: http.IncomingMessage,
-    res: ServerResponse,
-    sessionCode: string,
-    sinceTimestamp?: string
-  ): void {
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': CORS_ORIGIN,
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    });
-
-    // Send connection confirmation comment
-    res.write(`: connected\n\n`);
-
-    // Replay historical events if ?since= was provided
-    if (sinceTimestamp !== undefined) {
-      const historical = es.getEventsSince(sessionCode, sinceTimestamp);
-      for (const event of historical) {
-        sendSseEvent(res, event);
-      }
-    }
-
-    // Subscribe to live events, forwarding only those for this session
-    const unsubscribe = es.subscribe((event: DomainEvent) => {
-      if (event.sessionCode === sessionCode) {
-        sendSseEvent(res, event);
-      }
-    });
-
-    // Keep-alive every 30 seconds
-    const keepAlive = setInterval(() => {
-      res.write(`: keep-alive\n\n`);
-    }, 30_000);
-
-    req.on('close', () => {
-      clearInterval(keepAlive);
-      unsubscribe();
-    });
-  };
-}
-
-function sendSseEvent(res: ServerResponse, event: DomainEvent): void {
-  res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-}
-
-const sseHandler = createSseHandler(eventStore);
 
 const server = http.createServer(async (req, res) => {
   const url = req.url ?? '/';
@@ -304,23 +241,6 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // GET /api/sessions/:code/events — SSE domain event stream
-    const eventsMatch = url.match(/^\/api\/sessions\/([^/]+)\/events(\?.*)?$/);
-    if (method === 'GET' && eventsMatch) {
-      const code = eventsMatch[1].toUpperCase();
-      const session = store.getSession(code);
-      if (!session) {
-        sendJson(res, 404, { error: 'Session not found' });
-        return;
-      }
-
-      const urlObj = new URL(url, `http://localhost:${PORT}`);
-      const sinceParam = urlObj.searchParams.get('since') ?? undefined;
-
-      sseHandler(req, res, code, sinceParam);
-      return;
-    }
-
     // POST /api/sessions/:code/messages — Send a message
     const messagesPostMatch = url.match(/^\/api\/sessions\/([^/]+)\/messages$/);
     if (method === 'POST' && messagesPostMatch) {
@@ -380,9 +300,13 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Attach WebSocket server to the HTTP server (handles /ws upgrades)
+createWebSocketServer(server, eventStore);
+
 // Guard against starting the server during test runs (vitest sets NODE_ENV=test)
 if (process.env.NODE_ENV !== 'test') {
   server.listen(PORT, () => {
     console.log(`[http] session server listening on http://localhost:${PORT}`);
+    console.log(`[ws]   WebSocket endpoint available at ws://localhost:${PORT}`);
   });
 }
