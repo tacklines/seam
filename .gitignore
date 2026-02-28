@@ -14,3 +14,4 @@ memory/scratch/
 
 # OS
 .DS_Store
+.claude/worktrees/
