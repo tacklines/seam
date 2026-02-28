@@ -2,8 +2,11 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { store, type AppState } from '../state/app-state.js';
 import { compareFiles } from '../lib/comparison.js';
+import { getAllAggregates } from '../lib/grouping.js';
+import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
 import type { FlowDiagram } from './flow-diagram.js';
+import type { DetailNodeData } from './detail-panel.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -23,6 +26,7 @@ import './flow-search.js';
 import './comparison-view.js';
 import './aggregate-nav.js';
 import './filter-panel.js';
+import './detail-panel.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -165,6 +169,7 @@ export class AppShell extends LitElement {
   @state() private _searchQuery = '';
   @state() private _searchMatchCount = 0;
   @state() private _searchCurrentMatch = -1;
+  @state() private _detailNodeData: DetailNodeData | null = null;
   private unsubscribe?: () => void;
 
   connectedCallback() {
@@ -291,6 +296,7 @@ export class AppShell extends LitElement {
                   @view-transform-changed=${this._onViewTransformChanged}
                   @graph-data-changed=${this._onGraphDataChanged}
                   @search-match-count=${this._onSearchMatchCount}
+                  @node-detail=${this._onNodeDetail}
                   id="flow-diagram"
                 ></flow-diagram>
                 <flow-minimap
@@ -300,6 +306,10 @@ export class AppShell extends LitElement {
                   .graphBounds=${this._graphBounds}
                   @minimap-navigate=${this._onMinimapNavigate}
                 ></flow-minimap>
+                <detail-panel
+                  .nodeData=${this._detailNodeData}
+                  @detail-panel-close=${this._onDetailPanelClose}
+                ></detail-panel>
               </div>
             </sl-tab-panel>
             <sl-tab-panel name="comparison">
@@ -368,5 +378,88 @@ export class AppShell extends LitElement {
   private _onSearchMatchCount(e: CustomEvent<{ count: number; current: number }>) {
     this._searchMatchCount = e.detail.count;
     this._searchCurrentMatch = e.detail.current;
+  }
+
+  private _onNodeDetail(e: CustomEvent<{ kind: 'aggregate' | 'external'; id: string }>) {
+    const { kind, id } = e.detail;
+    const { files } = this.appState;
+    const allAggregates = getAllAggregates(files);
+
+    if (kind === 'aggregate') {
+      // id may be a compound aggregate name (e.g., "OrderAggregate")
+      // or a leaf event node id with format "Aggregate::EventName"
+      // In both cases we show the aggregate detail panel.
+      const aggregateName = id.includes('::') ? id.split('::')[0] : id;
+      const colorIndex = getAggregateColorIndex(aggregateName, allAggregates);
+
+      // Collect all domain events belonging to this aggregate across all files
+      const events = files.flatMap((f) =>
+        f.data.domain_events
+          .filter((ev) => ev.aggregate === aggregateName)
+          .map((ev) => ({
+            name: ev.name,
+            trigger: ev.trigger,
+            confidence: ev.confidence,
+            direction: ev.integration.direction,
+            channel: ev.integration.channel,
+          })),
+      );
+
+      // Find connected external systems: events with inbound/outbound integration channel
+      const connectedSystems = Array.from(
+        new Set(
+          files
+            .flatMap((f) => f.data.domain_events)
+            .filter(
+              (ev) =>
+                ev.aggregate === aggregateName &&
+                (ev.integration.direction === 'inbound' || ev.integration.direction === 'outbound') &&
+                ev.integration.channel,
+            )
+            .map((ev) => ev.integration.channel as string),
+        ),
+      );
+
+      this._detailNodeData = {
+        kind: 'aggregate',
+        id: aggregateName,
+        label: aggregateName,
+        colorIndex,
+        events,
+        connectedSystems: connectedSystems.length > 0 ? connectedSystems : undefined,
+      };
+    } else {
+      // External system node: id is the system name
+      const systemName = id;
+
+      // Collect all events that connect to this external system via their integration channel
+      const events = files.flatMap((f) =>
+        f.data.domain_events
+          .filter(
+            (ev) =>
+              ev.integration.channel === systemName &&
+              (ev.integration.direction === 'inbound' || ev.integration.direction === 'outbound'),
+          )
+          .map((ev) => ({
+            name: ev.name,
+            trigger: ev.trigger,
+            confidence: ev.confidence,
+            direction: ev.integration.direction,
+            channel: ev.integration.channel,
+          })),
+      );
+
+      this._detailNodeData = {
+        kind: 'external',
+        id,
+        label: systemName,
+        colorIndex: 0,
+        events,
+      };
+    }
+  }
+
+  private _onDetailPanelClose() {
+    this._detailNodeData = null;
   }
 }
