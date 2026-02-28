@@ -6,6 +6,7 @@ import { parseAndValidate } from '../lib/yaml-validator-server.js';
 import { computePrepStatus, computeSessionStatus } from '../lib/prep-completeness.js';
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
 import { serializeSession } from '../lib/session-store.js';
+import { compareFiles } from '../lib/comparison.js';
 
 // ---------------------------------------------------------------------------
 // CLI arg parsing for scoped mode: --session=CODE --user=NAME
@@ -652,6 +653,181 @@ async function main(): Promise<void> {
       }
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(response) }],
+      };
+    }
+  );
+
+  // Tool: compare_artifacts
+  server.registerTool(
+    'compare_artifacts',
+    {
+      description:
+        'Compare submitted artifacts across participants — returns overlapping events, aggregate conflicts, and assumption conflicts without requiring a full prep status query',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const files = sessionStore.getSessionFiles(code);
+      if (files.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ overlaps: [], message: 'No submissions yet' }) }],
+        };
+      }
+      const overlaps = compareFiles(files);
+      const byKind: Record<string, typeof overlaps> = {};
+      for (const o of overlaps) {
+        (byKind[o.kind] ??= []).push(o);
+      }
+      const uniquePerFile: Record<string, string[]> = {};
+      for (const f of files) {
+        const eventNames = f.data.domain_events.map((e) => e.name);
+        const others = files.filter((g) => g.filename !== f.filename).flatMap((g) => g.data.domain_events.map((e) => e.name));
+        uniquePerFile[f.role] = eventNames.filter((n) => !others.includes(n));
+      }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            overlapCount: overlaps.length,
+            overlaps,
+            byKind,
+            uniquePerFile,
+          }),
+        }],
+      };
+    }
+  );
+
+  // Tool: check_compliance
+  server.registerTool(
+    'check_compliance',
+    {
+      description:
+        'Validate current session state against loaded contracts — checks whether contracts are loaded, whether all prep events are covered, and returns integration report status if available',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const contracts = sessionStore.getContracts(code);
+      if (!contracts) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              compliant: false,
+              reason: 'No contracts loaded — run contract_load first',
+              contractsLoaded: false,
+            }),
+          }],
+        };
+      }
+      const files = sessionStore.getSessionFiles(code);
+      const contractEventNames = new Set(contracts.eventContracts.map((c) => c.eventName));
+      const prepEventNames = new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.name)));
+      const uncovered = [...prepEventNames].filter((n) => !contractEventNames.has(n));
+      const missing = [...contractEventNames].filter((n) => !prepEventNames.has(n));
+      const report = sessionStore.getIntegrationReport(code);
+      const result: Record<string, unknown> = {
+        contractsLoaded: true,
+        eventContractCount: contracts.eventContracts.length,
+        boundaryContractCount: contracts.boundaryContracts.length,
+        prepEventCount: prepEventNames.size,
+        uncoveredPrepEvents: uncovered,
+        contractEventsNotInPrep: missing,
+        compliant: uncovered.length === 0 && missing.length === 0,
+      };
+      if (report) {
+        const failCount = report.checks.filter((c) => c.status === 'fail').length;
+        result['integrationReport'] = {
+          overallStatus: report.overallStatus,
+          goNoGo: failCount === 0 ? 'GO' : 'NO-GO',
+          failCount,
+          warnCount: report.checks.filter((c) => c.status === 'warn').length,
+          passCount: report.checks.filter((c) => c.status === 'pass').length,
+        };
+        result['compliant'] = (result['compliant'] as boolean) && failCount === 0;
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    }
+  );
+
+  // Tool: send_message
+  server.registerTool(
+    'send_message',
+    {
+      description: 'Send a message to a session. Omit toParticipantId for a broadcast to all participants.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        participantId: z.string().describe('Sender participant ID'),
+        content: z.string().describe('Message content'),
+        toParticipantId: z.string().optional().describe('Recipient participant ID (omit for broadcast)'),
+      },
+    },
+    ({ code, participantId, content, toParticipantId }) => {
+      const msg = sessionStore.sendMessage(code, participantId, content, toParticipantId);
+      if (!msg) {
+        const session = sessionStore.getSession(code);
+        if (!session) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Failed to send — participant not in session or session is closed' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ sent: msg }) }],
+      };
+    }
+  );
+
+  // Tool: get_messages
+  server.registerTool(
+    'get_messages',
+    {
+      description: 'Get messages for a participant in a session. Pass since to retrieve only messages after that ISO timestamp.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        participantId: z.string().describe('Participant ID — only messages visible to this participant are returned'),
+        since: z.string().optional().describe('ISO timestamp — only messages after this time are returned'),
+      },
+    },
+    ({ code, participantId, since }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const messages = sessionStore.getMessages(code, participantId, since);
+      const lastChecked = new Date().toISOString();
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ messages, count: messages.length, lastChecked }),
+        }],
       };
     }
   );
