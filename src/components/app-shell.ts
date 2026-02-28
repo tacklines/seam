@@ -176,7 +176,7 @@ export class AppShell extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.unsubscribe = store.subscribe(() => {
+    this.unsubscribe = store.subscribe((_event) => {
       this.appState = store.get();
     });
   }

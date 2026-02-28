@@ -352,7 +352,7 @@ export class FlowDiagram extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    this._unsubscribeStore = store.subscribe(() => {
+    this._unsubscribeStore = store.subscribe((_event) => {
       this._filters = store.get().filters;
     });
   }

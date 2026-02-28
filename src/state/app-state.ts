@@ -16,7 +16,17 @@ export interface AppState {
   fileManagerOpen: boolean;
 }
 
-type Listener = () => void;
+export type AppStateEvent =
+  | { type: 'file-loaded'; role: string }
+  | { type: 'file-removed'; role: string }
+  | { type: 'view-mode-changed'; view: ViewMode }
+  | { type: 'filter-changed'; filterType: 'confidence' | 'direction' }
+  | { type: 'aggregate-selected'; aggregate: string | null }
+  | { type: 'errors-changed' }
+  | { type: 'sidebar-toggled' }
+  | { type: 'file-manager-toggled' };
+
+type Listener = (event: AppStateEvent) => void;
 
 const ALL_CONFIDENCE = new Set<Confidence>(['CONFIRMED', 'LIKELY', 'POSSIBLE']);
 const ALL_DIRECTION = new Set<Direction>(['inbound', 'outbound', 'internal']);
@@ -46,8 +56,8 @@ class Store {
     return () => this.listeners.delete(fn);
   }
 
-  private notify() {
-    for (const fn of this.listeners) fn();
+  private notify(event: AppStateEvent) {
+    for (const fn of this.listeners) fn(event);
   }
 
   addFile(file: LoadedFile) {
@@ -63,7 +73,7 @@ class Store {
     if (this.state.files.length >= 2) {
       this.state.activeView = 'comparison';
     }
-    this.notify();
+    this.notify({ type: 'file-loaded', role: file.role });
   }
 
   removeFile(role: string) {
@@ -74,12 +84,12 @@ class Store {
     if (this.state.files.length < 2 && this.state.activeView === 'comparison') {
       this.state.activeView = 'cards';
     }
-    this.notify();
+    this.notify({ type: 'file-removed', role });
   }
 
   setView(view: ViewMode) {
     this.state = { ...this.state, activeView: view };
-    this.notify();
+    this.notify({ type: 'view-mode-changed', view });
   }
 
   toggleConfidence(c: Confidence) {
@@ -90,7 +100,7 @@ class Store {
       ...this.state,
       filters: { ...this.state.filters, confidence: next },
     };
-    this.notify();
+    this.notify({ type: 'filter-changed', filterType: 'confidence' });
   }
 
   toggleDirection(d: Direction) {
@@ -101,7 +111,7 @@ class Store {
       ...this.state,
       filters: { ...this.state.filters, direction: next },
     };
-    this.notify();
+    this.notify({ type: 'filter-changed', filterType: 'direction' });
   }
 
   addError(filename: string, errors: string[]) {
@@ -109,27 +119,27 @@ class Store {
       ...this.state,
       errors: [...this.state.errors, { filename, errors }],
     };
-    this.notify();
+    this.notify({ type: 'errors-changed' });
   }
 
   clearErrors() {
     this.state = { ...this.state, errors: [] };
-    this.notify();
+    this.notify({ type: 'errors-changed' });
   }
 
   setSelectedAggregate(aggregate: string | null) {
     this.state = { ...this.state, selectedAggregate: aggregate };
-    this.notify();
+    this.notify({ type: 'aggregate-selected', aggregate });
   }
 
   toggleSidebar() {
     this.state = { ...this.state, sidebarCollapsed: !this.state.sidebarCollapsed };
-    this.notify();
+    this.notify({ type: 'sidebar-toggled' });
   }
 
   setFileManagerOpen(open: boolean) {
     this.state = { ...this.state, fileManagerOpen: open };
-    this.notify();
+    this.notify({ type: 'file-manager-toggled' });
   }
 }
 
