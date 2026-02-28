@@ -3,17 +3,8 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { LoadedFile } from '../schema/types.js';
 import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
-import {
-  forceSimulation,
-  forceLink,
-  forceManyBody,
-  forceCenter,
-  forceCollide,
-  forceX,
-  forceY,
-  type SimulationNodeDatum,
-  type SimulationLinkDatum,
-} from 'd3-force';
+import { runElkLayout, NODE_W, NODE_H } from '../lib/elk-layout.js';
+import type { LayoutNode, LayoutEdgeGroup } from '../lib/elk-layout.js';
 import { zoom as d3Zoom, zoomIdentity, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
 
@@ -27,36 +18,15 @@ const EXTERNAL_FILL = '#fef3c7';
 const EXTERNAL_STROKE = '#d97706';
 const EXTERNAL_TEXT = '#92400e';
 
-const NODE_W = 160;
-const NODE_H = 56;
-const SIM_WIDTH = 800;
-const SIM_HEIGHT = 500;
+// Default SVG dimensions used before ELK returns layout dimensions
+const DEFAULT_WIDTH = 800;
+const DEFAULT_HEIGHT = 500;
 
 const CONFIDENCE_COLOR: Record<string, string> = {
   CONFIRMED: '#16a34a',
   LIKELY: '#2563eb',
   POSSIBLE: '#d97706',
 };
-
-interface SimNode extends SimulationNodeDatum {
-  id: string;
-  label: string;
-  kind: 'aggregate' | 'external';
-  colorIndex: number;
-}
-
-interface SimLink extends SimulationLinkDatum<SimNode> {
-  label: string;
-  trigger: string;
-  confidence: string;
-  direction: string;
-}
-
-interface EdgeGroup {
-  from: string;
-  to: string;
-  edges: SimLink[];
-}
 
 @customElement('flow-diagram')
 export class FlowDiagram extends LitElement {
@@ -165,8 +135,10 @@ export class FlowDiagram extends LitElement {
 
   @property({ attribute: false }) files: LoadedFile[] = [];
 
-  @state() private _simNodes: SimNode[] = [];
-  @state() private _edgeGroups: EdgeGroup[] = [];
+  @state() private _layoutNodes: LayoutNode[] = [];
+  @state() private _edgeGroups: LayoutEdgeGroup[] = [];
+  @state() private _svgWidth = DEFAULT_WIDTH;
+  @state() private _svgHeight = DEFAULT_HEIGHT;
   @state() private _transform = '';
   @state() private _selectedAggregate: string | null = null;
   @state() private _tooltip: { x: number; y: number; text: string } | null = null;
@@ -174,128 +146,20 @@ export class FlowDiagram extends LitElement {
   private _zoom: ZoomBehavior<SVGSVGElement, unknown> | null = null;
   private _prevFiles: LoadedFile[] = [];
 
-  private _buildGraph(): { nodes: SimNode[]; edgeGroups: EdgeGroup[] } {
-    const allAggregates = getAllAggregates(this.files);
-    const aggregates = new Set<string>();
-    const externals = new Set<string>();
-    const rawEdges: SimLink[] = [];
-
-    for (const file of this.files) {
-      for (const event of file.data.domain_events) {
-        aggregates.add(event.aggregate);
-
-        if (event.integration.direction === 'outbound') {
-          const target = event.integration.channel ?? 'External';
-          externals.add(target);
-          rawEdges.push({
-            source: event.aggregate,
-            target,
-            label: event.name,
-            trigger: event.trigger,
-            direction: 'outbound',
-            confidence: event.confidence,
-          });
-        } else if (event.integration.direction === 'inbound') {
-          const source = event.integration.channel ?? 'External';
-          externals.add(source);
-          rawEdges.push({
-            source,
-            target: event.aggregate,
-            label: event.name,
-            trigger: event.trigger,
-            direction: 'inbound',
-            confidence: event.confidence,
-          });
-        } else {
-          rawEdges.push({
-            source: event.aggregate,
-            target: event.aggregate,
-            label: event.name,
-            trigger: event.trigger,
-            direction: 'internal',
-            confidence: event.confidence,
-          });
-        }
-      }
+  private async _runElkLayout(): Promise<void> {
+    if (this.files.length === 0) {
+      this._layoutNodes = [];
+      this._edgeGroups = [];
+      this._svgWidth = DEFAULT_WIDTH;
+      this._svgHeight = DEFAULT_HEIGHT;
+      return;
     }
 
-    const nodes: SimNode[] = [];
-
-    for (const id of [...externals].sort()) {
-      nodes.push({
-        id,
-        label: id,
-        kind: 'external',
-        colorIndex: -1,
-      });
-    }
-
-    for (const id of [...aggregates].sort()) {
-      nodes.push({
-        id,
-        label: id,
-        kind: 'aggregate',
-        colorIndex: getAggregateColorIndex(id, allAggregates),
-      });
-    }
-
-    // Group edges by (source, target) pair
-    const groupMap = new Map<string, EdgeGroup>();
-    for (const edge of rawEdges) {
-      const fromId = typeof edge.source === 'string' ? edge.source : (edge.source as SimNode).id;
-      const toId = typeof edge.target === 'string' ? edge.target : (edge.target as SimNode).id;
-      const key = `${fromId}::${toId}`;
-      let group = groupMap.get(key);
-      if (!group) {
-        group = { from: fromId, to: toId, edges: [] };
-        groupMap.set(key, group);
-      }
-      group.edges.push(edge);
-    }
-
-    return { nodes, edgeGroups: [...groupMap.values()] };
-  }
-
-  private _runSimulation(nodes: SimNode[], edgeGroups: EdgeGroup[]): void {
-    // Build link array for d3 (exclude self-loops)
-    const links: SimLink[] = [];
-    for (const group of edgeGroups) {
-      if (group.from === group.to) continue;
-      // Use one representative link per group for the simulation
-      for (const edge of group.edges) {
-        links.push({ ...edge, source: group.from, target: group.to });
-      }
-    }
-
-    const simulation = forceSimulation<SimNode>(nodes)
-      .force(
-        'link',
-        forceLink<SimNode, SimLink>(links)
-          .id((d) => d.id)
-          .distance(200),
-      )
-      .force('charge', forceManyBody().strength(-400))
-      .force('center', forceCenter(SIM_WIDTH / 2, SIM_HEIGHT / 2))
-      .force(
-        'collide',
-        forceCollide<SimNode>().radius(NODE_W / 2 + 20),
-      )
-      .force(
-        'y',
-        forceY<SimNode>()
-          .y((d) => (d.kind === 'external' ? 80 : SIM_HEIGHT / 2))
-          .strength(0.15),
-      )
-      .force(
-        'x',
-        forceX<SimNode>()
-          .x(SIM_WIDTH / 2)
-          .strength(0.05),
-      )
-      .stop();
-
-    // Run synchronously to convergence
-    simulation.tick(300);
+    const result = await runElkLayout(this.files);
+    this._layoutNodes = result.nodes;
+    this._edgeGroups = result.edgeGroups;
+    this._svgWidth = result.width;
+    this._svgHeight = result.height;
   }
 
   private _setupZoom(): void {
@@ -317,25 +181,17 @@ export class FlowDiagram extends LitElement {
   }
 
   updated(changed: Map<string, unknown>): void {
-    // Re-run simulation when files change
+    // Re-run layout when files change
     if (this.files !== this._prevFiles) {
       this._prevFiles = this.files;
-
-      if (this.files.length > 0) {
-        const { nodes, edgeGroups } = this._buildGraph();
-        this._runSimulation(nodes, edgeGroups);
-        this._simNodes = [...nodes];
-        this._edgeGroups = edgeGroups;
-      } else {
-        this._simNodes = [];
-        this._edgeGroups = [];
-      }
 
       // Reset zoom on file change
       this._transform = '';
 
-      // Re-attach zoom (SVG may have been recreated if going from empty to loaded)
-      this.updateComplete.then(() => this._setupZoom());
+      this._runElkLayout().then(() => {
+        // Re-attach zoom (SVG may have been recreated if going from empty to loaded)
+        this.updateComplete.then(() => this._setupZoom());
+      });
     }
   }
 
@@ -388,23 +244,29 @@ export class FlowDiagram extends LitElement {
     this._tooltip = null;
   }
 
-  private _nodeX(node: SimNode): number {
-    return (node.x ?? 0) - NODE_W / 2;
+  /**
+   * Center x of a node (ELK gives top-left, rendering uses center for edges).
+   */
+  private _nodeCx(node: LayoutNode): number {
+    return node.x + NODE_W / 2;
   }
 
-  private _nodeY(node: SimNode): number {
-    return (node.y ?? 0) - NODE_H / 2;
+  /**
+   * Center y of a node.
+   */
+  private _nodeCy(node: LayoutNode): number {
+    return node.y + NODE_H / 2;
   }
 
-  private _renderEdgeGroup(group: EdgeGroup, nodeMap: Map<string, SimNode>): unknown {
+  private _renderEdgeGroup(group: LayoutEdgeGroup, nodeMap: Map<string, LayoutNode>): unknown {
     const from = nodeMap.get(group.from);
     const to = nodeMap.get(group.to);
     if (!from || !to) return nothing;
 
-    const fromCx = from.x ?? 0;
-    const fromCy = from.y ?? 0;
-    const toCx = to.x ?? 0;
-    const toCy = to.y ?? 0;
+    const fromCx = this._nodeCx(from);
+    const fromCy = this._nodeCy(from);
+    const toCx = this._nodeCx(to);
+    const toCy = this._nodeCy(to);
 
     // Self-loop
     if (from.id === to.id) {
@@ -590,7 +452,7 @@ export class FlowDiagram extends LitElement {
     return { lines, fontSize: lines.length > 1 ? 12 : fontSize };
   }
 
-  private _renderNode(node: SimNode): unknown {
+  private _renderNode(node: LayoutNode): unknown {
     const isSelected = this._selectedAggregate === node.id;
     const isAggregate = node.kind === 'aggregate';
 
@@ -599,8 +461,9 @@ export class FlowDiagram extends LitElement {
     const textColor = isAggregate ? AGG_TEXT[node.colorIndex] ?? AGG_TEXT[0] : EXTERNAL_TEXT;
     const strokeWidth = isSelected ? 3.5 : 2;
 
-    const x = this._nodeX(node);
-    const y = this._nodeY(node);
+    // ELK gives top-left (x, y) directly
+    const x = node.x;
+    const y = node.y;
     const { lines, fontSize } = this._fitLabel(node.label);
 
     // Vertical centering: offset based on number of lines
@@ -645,12 +508,12 @@ export class FlowDiagram extends LitElement {
     }
 
     const allAggregates = getAllAggregates(this.files);
-    const nodeMap = new Map(this._simNodes.map((n) => [n.id, n]));
+    const nodeMap = new Map(this._layoutNodes.map((n) => [n.id, n]));
 
     return html`
       <div class="diagram-wrapper">
         <svg
-          viewBox="0 0 ${SIM_WIDTH} ${SIM_HEIGHT}"
+          viewBox="0 0 ${this._svgWidth} ${this._svgHeight}"
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
@@ -667,7 +530,7 @@ export class FlowDiagram extends LitElement {
             ${this._edgeGroups.map((g) => this._renderEdgeGroup(g, nodeMap))}
 
             <!-- Nodes on top -->
-            ${this._simNodes.map((n) => this._renderNode(n))}
+            ${this._layoutNodes.map((n) => this._renderNode(n))}
           </g>
         </svg>
 
