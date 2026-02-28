@@ -213,6 +213,102 @@ describe('SessionStore', () => {
     });
   });
 
+  describe('jam session', () => {
+    it('startJam creates jam artifacts on the session', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      const jam = store.startJam(session.code);
+      expect(jam).not.toBeNull();
+      expect(jam!.ownershipMap).toEqual([]);
+      expect(jam!.resolutions).toEqual([]);
+      expect(jam!.unresolved).toEqual([]);
+      expect(typeof jam!.startedAt).toBe('string');
+    });
+
+    it('startJam returns existing jam if already started', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      const jam1 = store.startJam(session.code);
+      const jam2 = store.startJam(session.code);
+      expect(jam1).toBe(jam2);
+    });
+
+    it('startJam returns null for unknown session', () => {
+      const store = new SessionStore();
+      expect(store.startJam('XXXXXX')).toBeNull();
+    });
+
+    it('resolveConflict adds a resolution', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      store.startJam(session.code);
+      const result = store.resolveConflict(session.code, {
+        overlapLabel: 'OrderPlaced vs OrderCreated',
+        resolution: 'Merged into OrderPlaced',
+        chosenApproach: 'merge',
+        resolvedBy: ['Alice', 'Bob'],
+      });
+      expect(result).not.toBeNull();
+      expect(result!.overlapLabel).toBe('OrderPlaced vs OrderCreated');
+      expect(typeof result!.resolvedAt).toBe('string');
+    });
+
+    it('resolveConflict returns null when jam not started', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      const result = store.resolveConflict(session.code, {
+        overlapLabel: 'test',
+        resolution: 'test',
+        chosenApproach: 'test',
+        resolvedBy: [],
+      });
+      expect(result).toBeNull();
+    });
+
+    it('assignOwnership replaces existing assignment for same aggregate', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      store.startJam(session.code);
+      store.assignOwnership(session.code, { aggregate: 'Order', ownerRole: 'Sales', assignedBy: 'Alice' });
+      store.assignOwnership(session.code, { aggregate: 'Order', ownerRole: 'Fulfillment', assignedBy: 'Bob' });
+      const jam = store.exportJam(session.code)!;
+      expect(jam.ownershipMap).toHaveLength(1);
+      expect(jam.ownershipMap[0].ownerRole).toBe('Fulfillment');
+    });
+
+    it('flagUnresolved adds an item with generated id', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      store.startJam(session.code);
+      const item = store.flagUnresolved(session.code, {
+        description: 'Need to discuss Payment aggregate ownership',
+        flaggedBy: 'Alice',
+      });
+      expect(item).not.toBeNull();
+      expect(item!.id).toBeTruthy();
+      expect(item!.description).toBe('Need to discuss Payment aggregate ownership');
+    });
+
+    it('exportJam returns all artifacts', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      store.startJam(session.code);
+      store.resolveConflict(session.code, {
+        overlapLabel: 'test',
+        resolution: 'resolved',
+        chosenApproach: 'merge',
+        resolvedBy: ['Alice'],
+      });
+      store.assignOwnership(session.code, { aggregate: 'Order', ownerRole: 'Sales', assignedBy: 'Alice' });
+      store.flagUnresolved(session.code, { description: 'TBD', flaggedBy: 'Alice' });
+
+      const jam = store.exportJam(session.code)!;
+      expect(jam.resolutions).toHaveLength(1);
+      expect(jam.ownershipMap).toHaveLength(1);
+      expect(jam.unresolved).toHaveLength(1);
+    });
+  });
+
   describe('serializeSession', () => {
     it('converts participants Map to array', () => {
       const store = new SessionStore();
