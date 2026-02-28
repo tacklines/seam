@@ -4,7 +4,7 @@ import type { LoadedFile } from '../schema/types.js';
 import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
 import { runElkLayout, NODE_W, NODE_H } from '../lib/elk-layout.js';
-import type { LayoutNode, LayoutEdgeGroup } from '../lib/elk-layout.js';
+import type { LayoutNode, LayoutCompound, LayoutEdgeGroup } from '../lib/elk-layout.js';
 import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
@@ -14,10 +14,14 @@ import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flo
 const AGG_COLORS = ['#4338ca', '#0d9488', '#c026d3', '#ea580c', '#2563eb', '#dc2626', '#65a30d', '#0891b2'];
 const AGG_BGS = ['#e0e7ff', '#ccfbf1', '#fae8ff', '#fff7ed', '#dbeafe', '#ffe4e6', '#ecfccb', '#cffafe'];
 const AGG_TEXT = ['#312e81', '#134e4a', '#86198f', '#9a3412', '#1e40af', '#991b1b', '#3f6212', '#155e75'];
+const AGG_CONTAINER_BG = ['#f0f0ff', '#f0fdfb', '#fdf4ff', '#fff9f0', '#eff6ff', '#fff1f2', '#f7fee7', '#ecfeff'];
 
 const EXTERNAL_FILL = '#fef3c7';
 const EXTERNAL_STROKE = '#d97706';
 const EXTERNAL_TEXT = '#92400e';
+
+/** Header height inside a compound node */
+const COMPOUND_HEADER_H = 28;
 
 // Default SVG dimensions used before ELK returns layout dimensions
 const DEFAULT_WIDTH = 800;
@@ -138,6 +142,7 @@ export class FlowDiagram extends LitElement {
   @property() searchQuery = '';
 
   @state() private _layoutNodes: LayoutNode[] = [];
+  @state() private _layoutCompounds: LayoutCompound[] = [];
   @state() private _edgeGroups: LayoutEdgeGroup[] = [];
   @state() private _svgWidth = DEFAULT_WIDTH;
   @state() private _svgHeight = DEFAULT_HEIGHT;
@@ -164,6 +169,7 @@ export class FlowDiagram extends LitElement {
   private async _runElkLayout(): Promise<void> {
     if (this.files.length === 0) {
       this._layoutNodes = [];
+      this._layoutCompounds = [];
       this._edgeGroups = [];
       this._svgWidth = DEFAULT_WIDTH;
       this._svgHeight = DEFAULT_HEIGHT;
@@ -172,6 +178,7 @@ export class FlowDiagram extends LitElement {
 
     const result = await runElkLayout(this.files);
     this._layoutNodes = result.nodes;
+    this._layoutCompounds = result.compounds;
     this._edgeGroups = result.edgeGroups;
     this._svgWidth = result.width;
     this._svgHeight = result.height;
@@ -228,7 +235,7 @@ export class FlowDiagram extends LitElement {
       this.viewTransform = { x: 0, y: 0, k: 1 };
 
       this._runElkLayout().then(() => {
-        this._computeMinimapData(this._layoutNodes, this._edgeGroups);
+        this._computeMinimapData(this._layoutNodes, this._layoutCompounds, this._edgeGroups);
         // Re-attach zoom (SVG may have been recreated if going from empty to loaded)
         this.updateComplete.then(() => {
           this._setupZoom();
@@ -246,35 +253,50 @@ export class FlowDiagram extends LitElement {
     }
   }
 
-  private _computeMinimapData(nodes: LayoutNode[], edgeGroups: LayoutEdgeGroup[]): void {
+  private _computeMinimapData(nodes: LayoutNode[], compounds: LayoutCompound[], edgeGroups: LayoutEdgeGroup[]): void {
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-    this.minimapNodes = nodes.map((n) => {
-      const isAggregate = n.kind === 'aggregate';
-      const color = isAggregate
-        ? AGG_COLORS[n.colorIndex] ?? AGG_COLORS[0]
-        : EXTERNAL_STROKE;
-      return {
-        id: n.id,
-        x: n.x,
-        y: n.y,
-        width: NODE_W,
-        height: NODE_H,
-        color,
-      };
-    });
+    // For minimap: show compound containers as colored rects, external nodes too
+    const minimapNodes: MinimapNode[] = [];
 
+    for (const compound of compounds) {
+      minimapNodes.push({
+        id: compound.id,
+        x: compound.x,
+        y: compound.y,
+        width: compound.width,
+        height: compound.height,
+        color: AGG_COLORS[compound.colorIndex] ?? AGG_COLORS[0],
+      });
+    }
+
+    for (const node of nodes) {
+      if (node.kind === 'external') {
+        minimapNodes.push({
+          id: node.id,
+          x: node.x,
+          y: node.y,
+          width: NODE_W,
+          height: NODE_H,
+          color: EXTERNAL_STROKE,
+        });
+      }
+    }
+
+    this.minimapNodes = minimapNodes;
+
+    // Edges for minimap: connect compound containers to external nodes
     this.minimapEdges = edgeGroups
       .filter((g) => g.from !== g.to)
       .map((g) => {
-        const from = nodeMap.get(g.from);
-        const to = nodeMap.get(g.to);
-        if (!from || !to) return null;
+        const fromNode = nodeMap.get(g.from);
+        const toNode = nodeMap.get(g.to);
+        if (!fromNode || !toNode) return null;
         return {
-          x1: from.x + NODE_W / 2,
-          y1: from.y + NODE_H / 2,
-          x2: to.x + NODE_W / 2,
-          y2: to.y + NODE_H / 2,
+          x1: fromNode.x + NODE_W / 2,
+          y1: fromNode.y + NODE_H / 2,
+          x2: toNode.x + NODE_W / 2,
+          y2: toNode.y + NODE_H / 2,
         };
       })
       .filter((e): e is MinimapEdge => e !== null);
@@ -325,12 +347,25 @@ export class FlowDiagram extends LitElement {
       return;
     }
 
+    // Search matches on leaf event nodes and external nodes
     const indices: number[] = [];
     for (let i = 0; i < this._layoutNodes.length; i++) {
       if (this._layoutNodes[i].label.toLowerCase().includes(query)) {
         indices.push(i);
       }
     }
+    // Also search compound (aggregate) names and add all their children
+    for (const compound of this._layoutCompounds) {
+      if (compound.label.toLowerCase().includes(query)) {
+        for (const childId of compound.childIds) {
+          const idx = this._layoutNodes.findIndex((n) => n.id === childId);
+          if (idx >= 0 && !indices.includes(idx)) {
+            indices.push(idx);
+          }
+        }
+      }
+    }
+
     this._matchedNodeIndices = indices;
     if (indices.length > 0) {
       this._currentMatchIndex = 0;
@@ -393,9 +428,8 @@ export class FlowDiagram extends LitElement {
     return this._matchedNodeIndices.includes(nodeIndex);
   }
 
-  private _onNodeClick(nodeId: string, kind: string) {
-    if (kind !== 'aggregate') return;
-    this._selectedAggregate = this._selectedAggregate === nodeId ? null : nodeId;
+  private _onCompoundClick(compoundId: string) {
+    this._selectedAggregate = this._selectedAggregate === compoundId ? null : compoundId;
     this.dispatchEvent(
       new CustomEvent('aggregate-select', {
         detail: this._selectedAggregate,
@@ -446,13 +480,13 @@ export class FlowDiagram extends LitElement {
     const toCx = this._nodeCx(to);
     const toCy = this._nodeCy(to);
 
-    // Self-loop
+    // Self-loop (internal events)
     if (from.id === to.id) {
       return group.edges.map((edge, i) => {
         const loopOffset = i * 16;
         const rx = fromCx + NODE_W / 2;
         const ry = fromCy;
-        const bulge = 30 + loopOffset;
+        const bulge = 28 + loopOffset;
         const tipY = ry + 1;
         const color = CONFIDENCE_COLOR[edge.confidence] ?? '#64748b';
         const tooltipText = `${edge.label}\nTrigger: ${edge.trigger}\nConfidence: ${edge.confidence}`;
@@ -463,7 +497,7 @@ export class FlowDiagram extends LitElement {
             @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
             @mouseleave=${() => this._hideTooltip()}>
             <path
-              d="M${rx} ${ry - 8} C${rx + bulge} ${ry - bulge} ${rx + bulge} ${ry + bulge} ${rx} ${tipY + 8}"
+              d="M${rx} ${ry - 6} C${rx + bulge} ${ry - bulge} ${rx + bulge} ${ry + bulge} ${rx} ${tipY + 6}"
               fill="none"
               stroke=${color}
               stroke-width="1.5"
@@ -536,7 +570,7 @@ export class FlowDiagram extends LitElement {
     }
 
     // Regular edges (1-3 per group), offset perpendicular to avoid overlap
-    const perpX = -ny; // perpendicular direction
+    const perpX = -ny;
     const perpY = nx;
     const spreadTotal = (count - 1) * 14;
 
@@ -592,11 +626,10 @@ export class FlowDiagram extends LitElement {
     });
   }
 
-  private _fitLabel(label: string): { lines: string[]; fontSize: number } {
-    const maxCharsPerLine = 18; // approx chars that fit at font-size 13 in NODE_W with padding
-    const fontSize = 13;
+  private _fitLabel(label: string, maxChars: number = 18): { lines: string[]; fontSize: number } {
+    const fontSize = 11;
 
-    if (label.length <= maxCharsPerLine) {
+    if (label.length <= maxChars) {
       return { lines: [label], fontSize };
     }
 
@@ -607,11 +640,11 @@ export class FlowDiagram extends LitElement {
 
     for (const part of parts) {
       const candidate = current ? `${current} ${part}` : part;
-      if (candidate.length <= maxCharsPerLine) {
+      if (candidate.length <= maxChars) {
         current = candidate;
       } else {
         if (current) lines.push(current);
-        current = part.length > maxCharsPerLine ? part.slice(0, maxCharsPerLine - 1) + '\u2026' : part;
+        current = part.length > maxChars ? part.slice(0, maxChars - 1) + '\u2026' : part;
       }
     }
     if (current) lines.push(current);
@@ -620,24 +653,101 @@ export class FlowDiagram extends LitElement {
     if (lines.length > 2) {
       lines.length = 2;
       const last = lines[1];
-      if (last.length > maxCharsPerLine - 1) {
-        lines[1] = last.slice(0, maxCharsPerLine - 1) + '\u2026';
+      if (last.length > maxChars - 1) {
+        lines[1] = last.slice(0, maxChars - 1) + '\u2026';
       } else {
         lines[1] = last + '\u2026';
       }
     }
 
-    return { lines, fontSize: lines.length > 1 ? 12 : fontSize };
+    return { lines, fontSize: lines.length > 1 ? 10 : fontSize };
   }
 
-  private _renderNode(node: LayoutNode, nodeIndex: number): unknown {
-    const isSelected = this._selectedAggregate === node.id;
-    const isAggregate = node.kind === 'aggregate';
+  /** Render a compound aggregate container with its header */
+  private _renderCompound(compound: LayoutCompound, matchedNodeIds: Set<string>): unknown {
+    const isSelected = this._selectedAggregate === compound.id;
+    const fill = AGG_CONTAINER_BG[compound.colorIndex] ?? AGG_CONTAINER_BG[0];
+    const stroke = AGG_COLORS[compound.colorIndex] ?? AGG_COLORS[0];
+    const headerFill = AGG_BGS[compound.colorIndex] ?? AGG_BGS[0];
+    const textColor = AGG_TEXT[compound.colorIndex] ?? AGG_TEXT[0];
+    const strokeWidth = isSelected ? 3 : 1.5;
 
-    const fill = isAggregate ? AGG_BGS[node.colorIndex] ?? AGG_BGS[0] : EXTERNAL_FILL;
-    const stroke = isAggregate ? AGG_COLORS[node.colorIndex] ?? AGG_COLORS[0] : EXTERNAL_STROKE;
-    const textColor = isAggregate ? AGG_TEXT[node.colorIndex] ?? AGG_TEXT[0] : EXTERNAL_TEXT;
-    const strokeWidth = isSelected ? 3.5 : 2;
+    // Dim compound container if search is active and none of its children match
+    const anyChildMatched = compound.childIds.some((id) => matchedNodeIds.has(id));
+    const opacity = this._searchActive && !anyChildMatched ? 0.25 : 1;
+
+    const { x, y, width, height } = compound;
+    const { lines, fontSize } = this._fitLabel(compound.label, Math.floor(width / 7));
+
+    return svg`
+      <g
+        class="compound-node"
+        opacity=${opacity}
+        style="cursor: pointer"
+        @click=${() => this._onCompoundClick(compound.id)}>
+        <!-- Container background -->
+        <rect
+          x=${x} y=${y}
+          width=${width} height=${height}
+          rx="12"
+          fill=${fill}
+          stroke=${stroke}
+          stroke-width=${strokeWidth}
+          filter="url(#shadow-light)"
+        />
+        <!-- Header bar -->
+        <rect
+          x=${x} y=${y}
+          width=${width} height=${COMPOUND_HEADER_H}
+          rx="12"
+          fill=${headerFill}
+          stroke="none"
+        />
+        <!-- Header bottom flush (cover rounded corners at bottom of header) -->
+        <rect
+          x=${x} y=${y + COMPOUND_HEADER_H - 6}
+          width=${width} height="6"
+          fill=${headerFill}
+          stroke="none"
+        />
+        <!-- Header label -->
+        ${lines.map(
+          (line, i) => svg`
+            <text
+              x=${x + width / 2}
+              y=${y + 10 + (i + 1) * (fontSize + 2)}
+              text-anchor="middle"
+              font-weight="700"
+              font-size=${fontSize}
+              font-family="'JetBrains Mono', monospace"
+              fill=${textColor}
+            >${line}</text>
+          `,
+        )}
+        <!-- Selected indicator -->
+        ${isSelected ? svg`
+          <rect
+            x=${x - 4} y=${y - 4}
+            width=${width + 8} height=${height + 8}
+            rx="16"
+            fill="none"
+            stroke="#2563eb"
+            stroke-width="2.5"
+            stroke-dasharray="6 3"
+          />
+        ` : nothing}
+      </g>
+    `;
+  }
+
+  /** Render a leaf event node (child inside a compound, or external system) */
+  private _renderNode(node: LayoutNode, nodeIndex: number): unknown {
+    const isExternal = node.kind === 'external';
+
+    const fill = isExternal ? EXTERNAL_FILL : (AGG_BGS[node.colorIndex] ?? AGG_BGS[0]);
+    const stroke = isExternal ? EXTERNAL_STROKE : (AGG_COLORS[node.colorIndex] ?? AGG_COLORS[0]);
+    const textColor = isExternal ? EXTERNAL_TEXT : (AGG_TEXT[node.colorIndex] ?? AGG_TEXT[0]);
+    const strokeWidth = 1.5;
 
     // Search state
     const isMatched = this._isMatchedNode(nodeIndex);
@@ -645,37 +755,43 @@ export class FlowDiagram extends LitElement {
       this._matchedNodeIndices[this._currentMatchIndex] === nodeIndex;
     const opacity = this._searchActive && !isMatched ? 0.2 : 1;
 
-    // ELK gives top-left (x, y) directly
+    // ELK gives absolute top-left coordinates
     const x = node.x;
     const y = node.y;
     const { lines, fontSize } = this._fitLabel(node.label);
 
-    // Vertical centering: offset based on number of lines
+    // Vertical centering
     const lineHeight = fontSize + 3;
     const textBlockHeight = lines.length * lineHeight;
     const startY = y + NODE_H / 2 - textBlockHeight / 2 + fontSize * 0.8;
 
+    const tooltipText = isExternal
+      ? `External: ${node.label}`
+      : `Event: ${node.label}`;
+
     return svg`
       <g
         class="node"
-        style="cursor: ${isAggregate ? 'pointer' : 'default'}"
+        style="cursor: default"
         opacity=${opacity}
-        @click=${() => this._onNodeClick(node.id, node.kind)}>
+        @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
+        @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
+        @mouseleave=${() => this._hideTooltip()}>
         ${isFocused
           ? svg`<rect
-              x=${x - 4} y=${y - 4}
-              width=${NODE_W + 8} height=${NODE_H + 8}
-              rx="14"
+              x=${x - 3} y=${y - 3}
+              width=${NODE_W + 6} height=${NODE_H + 6}
+              rx="11"
               fill="none"
               stroke="#2563eb"
-              stroke-width="3"
-              stroke-dasharray="6 3"
+              stroke-width="2.5"
+              stroke-dasharray="5 3"
             />`
           : nothing}
         <rect
           x=${x} y=${y}
           width=${NODE_W} height=${NODE_H}
-          rx="10"
+          rx=${isExternal ? 8 : 6}
           fill=${fill}
           stroke=${stroke}
           stroke-width=${strokeWidth}
@@ -687,7 +803,7 @@ export class FlowDiagram extends LitElement {
               x=${x + NODE_W / 2}
               y=${startY + i * lineHeight}
               text-anchor="middle"
-              font-weight="600"
+              font-weight="500"
               font-size=${fontSize}
               font-family="'JetBrains Mono', monospace"
               fill=${textColor}
@@ -721,15 +837,21 @@ export class FlowDiagram extends LitElement {
               <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
             </marker>
             <filter id="shadow" x="-4%" y="-4%" width="108%" height="116%">
-              <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.08" />
+              <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.10" />
+            </filter>
+            <filter id="shadow-light" x="-4%" y="-4%" width="108%" height="116%">
+              <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.06" />
             </filter>
           </defs>
 
           <g transform=${this._transform || nothing}>
-            <!-- Edges behind nodes -->
+            <!-- Compound aggregate containers (behind everything) -->
+            ${this._layoutCompounds.map((c) => this._renderCompound(c, matchedNodeIds))}
+
+            <!-- Edges between event nodes and external nodes -->
             ${this._edgeGroups.map((g) => this._renderEdgeGroup(g, nodeMap, matchedNodeIds))}
 
-            <!-- Nodes on top -->
+            <!-- Leaf nodes (event children + external systems) -->
             ${this._layoutNodes.map((n, i) => this._renderNode(n, i))}
           </g>
         </svg>

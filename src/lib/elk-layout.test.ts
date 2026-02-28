@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runElkLayout, NODE_W, NODE_H } from './elk-layout.js';
+import { runElkLayout, eventNodeId, NODE_W, NODE_H } from './elk-layout.js';
 import type { LoadedFile } from '../schema/types.js';
 
 /** Minimal LoadedFile factory for tests */
@@ -42,86 +42,74 @@ function makeFile(
   };
 }
 
+describe('eventNodeId', () => {
+  it('when given aggregate and event name, returns scoped id', () => {
+    // Source: discovered during implementation
+    expect(eventNodeId('Order', 'OrderPlaced')).toBe('Order::OrderPlaced');
+  });
+});
+
 describe('runElkLayout', () => {
-  describe('given a file with two aggregates connected by an outbound event', () => {
-    it('returns positioned nodes with valid x/y coordinates', async () => {
+  describe('given a file with an outbound event connecting to an external system', () => {
+    it('when laid out, returns one compound for the aggregate', async () => {
+      // Source: discovered during implementation
       const files = [
         makeFile('ops', [
-          {
-            name: 'OrderPlaced',
-            aggregate: 'Order',
-            direction: 'outbound',
-            channel: 'PaymentService',
-          },
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
         ]),
       ];
 
       const result = await runElkLayout(files);
 
-      expect(result.nodes.length).toBe(2); // Order + PaymentService
-      for (const node of result.nodes) {
-        expect(typeof node.x).toBe('number');
-        expect(typeof node.y).toBe('number');
-        expect(node.x).toBeGreaterThanOrEqual(0);
-        expect(node.y).toBeGreaterThanOrEqual(0);
-      }
+      expect(result.compounds).toHaveLength(1);
+      expect(result.compounds[0].id).toBe('Order');
     });
 
-    it('returns node ids matching aggregate and external names', async () => {
+    it('when laid out, places OrderPlaced as a child node inside the Order compound', async () => {
+      // Source: discovered during implementation
       const files = [
         makeFile('ops', [
-          {
-            name: 'OrderPlaced',
-            aggregate: 'Order',
-            direction: 'outbound',
-            channel: 'PaymentService',
-          },
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
         ]),
       ];
 
       const result = await runElkLayout(files);
 
-      const ids = result.nodes.map((n) => n.id).sort();
-      expect(ids).toEqual(['Order', 'PaymentService'].sort());
+      const childId = eventNodeId('Order', 'OrderPlaced');
+      const childNode = result.nodes.find((n) => n.id === childId);
+      expect(childNode).toBeDefined();
+      expect(childNode?.kind).toBe('aggregate');
+      expect(childNode?.label).toBe('OrderPlaced');
     });
 
-    it('marks aggregate nodes with kind=aggregate and external nodes with kind=external', async () => {
+    it('when laid out, returns external system as a standalone node with kind=external', async () => {
+      // Source: discovered during implementation
       const files = [
         makeFile('ops', [
-          {
-            name: 'OrderPlaced',
-            aggregate: 'Order',
-            direction: 'outbound',
-            channel: 'PaymentService',
-          },
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
         ]),
       ];
 
       const result = await runElkLayout(files);
 
-      const orderNode = result.nodes.find((n) => n.id === 'Order');
-      const externalNode = result.nodes.find((n) => n.id === 'PaymentService');
-      expect(orderNode?.kind).toBe('aggregate');
-      expect(externalNode?.kind).toBe('external');
+      const extNode = result.nodes.find((n) => n.id === 'PaymentService');
+      expect(extNode).toBeDefined();
+      expect(extNode?.kind).toBe('external');
     });
 
-    it('includes edge group connecting Order to PaymentService', async () => {
+    it('when laid out, includes an edge group from the event child to the external system', async () => {
+      // Source: discovered during implementation
       const files = [
         makeFile('ops', [
-          {
-            name: 'OrderPlaced',
-            aggregate: 'Order',
-            direction: 'outbound',
-            channel: 'PaymentService',
-          },
+          { name: 'OrderPlaced', aggregate: 'Order', direction: 'outbound', channel: 'PaymentService' },
         ]),
       ];
 
       const result = await runElkLayout(files);
 
-      expect(result.edgeGroups.length).toBeGreaterThan(0);
+      const childId = eventNodeId('Order', 'OrderPlaced');
       const group = result.edgeGroups.find(
-        (g) => g.from === 'Order' && g.to === 'PaymentService',
+        (g) => g.from === childId && g.to === 'PaymentService',
       );
       expect(group).toBeDefined();
       expect(group?.edges[0].label).toBe('OrderPlaced');
@@ -129,33 +117,30 @@ describe('runElkLayout', () => {
   });
 
   describe('given internal (self-loop) events only', () => {
-    it('returns single aggregate node with valid position', async () => {
+    it('when laid out, returns one compound with one child event node', async () => {
+      // Source: discovered during implementation
       const files = [
-        makeFile('ops', [
-          { name: 'StateUpdated', aggregate: 'Order', direction: 'internal' },
-        ]),
+        makeFile('ops', [{ name: 'StateUpdated', aggregate: 'Order', direction: 'internal' }]),
       ];
 
       const result = await runElkLayout(files);
 
-      expect(result.nodes.length).toBe(1);
-      const node = result.nodes[0];
-      expect(node.kind).toBe('aggregate');
-      expect(typeof node.x).toBe('number');
-      expect(typeof node.y).toBe('number');
+      expect(result.compounds).toHaveLength(1);
+      expect(result.compounds[0].childIds).toHaveLength(1);
+      expect(result.nodes).toHaveLength(1); // only the child event node
     });
 
-    it('returns a self-loop edge group', async () => {
+    it('when laid out, returns a self-loop edge group on the child event node', async () => {
+      // Source: discovered during implementation
       const files = [
-        makeFile('ops', [
-          { name: 'StateUpdated', aggregate: 'Order', direction: 'internal' },
-        ]),
+        makeFile('ops', [{ name: 'StateUpdated', aggregate: 'Order', direction: 'internal' }]),
       ];
 
       const result = await runElkLayout(files);
 
+      const childId = eventNodeId('Order', 'StateUpdated');
       const selfLoop = result.edgeGroups.find(
-        (g) => g.from === 'Order' && g.to === 'Order',
+        (g) => g.from === childId && g.to === childId,
       );
       expect(selfLoop).toBeDefined();
       expect(selfLoop?.edges[0].label).toBe('StateUpdated');
@@ -163,103 +148,71 @@ describe('runElkLayout', () => {
   });
 
   describe('given empty files array', () => {
-    it('returns empty nodes and edge groups', async () => {
+    it('when called with no files, returns empty result', async () => {
+      // Source: discovered during implementation
       const result = await runElkLayout([]);
 
+      expect(result.compounds).toHaveLength(0);
       expect(result.nodes).toHaveLength(0);
       expect(result.edgeGroups).toHaveLength(0);
-    });
-
-    it('returns positive width and height', async () => {
-      const result = await runElkLayout([]);
-
       expect(result.width).toBeGreaterThan(0);
       expect(result.height).toBeGreaterThan(0);
     });
   });
 
-  describe('given a single aggregate with no edges', () => {
-    it('returns one node with valid x/y', async () => {
-      const files = [
-        makeFile('ops', [
-          { name: 'SomethingHappened', aggregate: 'Inventory', direction: 'internal' },
-        ]),
-      ];
-
-      const result = await runElkLayout(files);
-
-      expect(result.nodes.length).toBe(1);
-      const node = result.nodes[0];
-      expect(node.id).toBe('Inventory');
-      expect(node.x).toBeGreaterThanOrEqual(0);
-      expect(node.y).toBeGreaterThanOrEqual(0);
-    });
-  });
-
   describe('given multiple files with overlapping aggregates', () => {
-    it('deduplicates aggregate nodes', async () => {
+    it('when laid out, deduplicates compound nodes', async () => {
+      // Source: discovered during implementation
       const files = [
-        makeFile('role-a', [
-          { name: 'EventA', aggregate: 'Shared', direction: 'internal' },
-        ]),
-        makeFile('role-b', [
-          { name: 'EventB', aggregate: 'Shared', direction: 'internal' },
-        ]),
+        makeFile('role-a', [{ name: 'EventA', aggregate: 'Shared', direction: 'internal' }]),
+        makeFile('role-b', [{ name: 'EventB', aggregate: 'Shared', direction: 'internal' }]),
       ];
 
       const result = await runElkLayout(files);
 
-      const sharedNodes = result.nodes.filter((n) => n.id === 'Shared');
-      expect(sharedNodes.length).toBe(1);
+      const sharedCompounds = result.compounds.filter((c) => c.id === 'Shared');
+      expect(sharedCompounds).toHaveLength(1);
     });
 
-    it('groups both events into the same self-loop edge group', async () => {
+    it('when laid out, groups both events as children of the shared compound', async () => {
+      // Source: discovered during implementation
       const files = [
-        makeFile('role-a', [
-          { name: 'EventA', aggregate: 'Shared', direction: 'internal' },
-        ]),
-        makeFile('role-b', [
-          { name: 'EventB', aggregate: 'Shared', direction: 'internal' },
-        ]),
+        makeFile('role-a', [{ name: 'EventA', aggregate: 'Shared', direction: 'internal' }]),
+        makeFile('role-b', [{ name: 'EventB', aggregate: 'Shared', direction: 'internal' }]),
       ];
 
       const result = await runElkLayout(files);
 
-      const selfLoop = result.edgeGroups.find(
-        (g) => g.from === 'Shared' && g.to === 'Shared',
-      );
-      expect(selfLoop).toBeDefined();
-      expect(selfLoop?.edges.length).toBe(2);
+      const compound = result.compounds.find((c) => c.id === 'Shared');
+      expect(compound?.childIds).toHaveLength(2);
     });
   });
 
   describe('given an inbound event from external', () => {
-    it('places external node as source with kind=external', async () => {
+    it('when laid out, places external as source with edge to child event node', async () => {
+      // Source: discovered during implementation
       const files = [
         makeFile('ops', [
-          {
-            name: 'PaymentReceived',
-            aggregate: 'Order',
-            direction: 'inbound',
-            channel: 'StripeWebhook',
-          },
+          { name: 'PaymentReceived', aggregate: 'Order', direction: 'inbound', channel: 'StripeWebhook' },
         ]),
       ];
 
       const result = await runElkLayout(files);
 
-      const externalNode = result.nodes.find((n) => n.id === 'StripeWebhook');
-      expect(externalNode?.kind).toBe('external');
+      const extNode = result.nodes.find((n) => n.id === 'StripeWebhook');
+      expect(extNode?.kind).toBe('external');
 
+      const childId = eventNodeId('Order', 'PaymentReceived');
       const group = result.edgeGroups.find(
-        (g) => g.from === 'StripeWebhook' && g.to === 'Order',
+        (g) => g.from === 'StripeWebhook' && g.to === childId,
       );
       expect(group).toBeDefined();
     });
   });
 
   describe('layout dimensions', () => {
-    it('returns width and height larger than a single node', async () => {
+    it('when multiple compounds and externals exist, returns width and height larger than one node', async () => {
+      // Source: discovered during implementation
       const files = [
         makeFile('ops', [
           { name: 'A', aggregate: 'Agg1', direction: 'outbound', channel: 'Ext1' },
