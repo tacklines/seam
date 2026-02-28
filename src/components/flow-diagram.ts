@@ -7,6 +7,7 @@ import { runElkLayout, NODE_W, NODE_H } from '../lib/elk-layout.js';
 import type { LayoutNode, LayoutEdgeGroup } from '../lib/elk-layout.js';
 import { zoom as d3Zoom, zoomIdentity, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
+import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
 
 // Hardcoded palette matching --agg-color-N and --agg-bg-N CSS vars
 // (SVG attributes can't resolve CSS custom properties)
@@ -143,8 +144,18 @@ export class FlowDiagram extends LitElement {
   @state() private _selectedAggregate: string | null = null;
   @state() private _tooltip: { x: number; y: number; text: string } | null = null;
 
+  /** Minimap-ready node data, exposed for parent wiring */
+  @state() minimapNodes: MinimapNode[] = [];
+  /** Minimap-ready edge data, exposed for parent wiring */
+  @state() minimapEdges: MinimapEdge[] = [];
+  /** Current view transform, exposed for parent wiring */
+  @state() viewTransform: ViewTransform = { x: 0, y: 0, k: 1 };
+  /** Graph bounds for minimap scaling */
+  @state() graphBounds: GraphBounds = { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+
   private _zoom: ZoomBehavior<SVGSVGElement, unknown> | null = null;
   private _prevFiles: LoadedFile[] = [];
+  private _updatingFromMinimap = false;
 
   private async _runElkLayout(): Promise<void> {
     if (this.files.length === 0) {
@@ -171,9 +182,32 @@ export class FlowDiagram extends LitElement {
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         const { x, y, k } = event.transform;
         this._transform = `translate(${x},${y}) scale(${k})`;
+        this.viewTransform = { x, y, k };
+
+        if (!this._updatingFromMinimap) {
+          this.dispatchEvent(
+            new CustomEvent('view-transform-changed', {
+              detail: { x, y, k },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }
       });
 
     select(svgEl).call(this._zoom);
+  }
+
+  /** Apply a transform from the minimap without triggering a re-entrant loop */
+  applyMinimapTransform(transform: ViewTransform): void {
+    const svgEl = this._getSvgEl();
+    if (!svgEl || !this._zoom) return;
+    this._updatingFromMinimap = true;
+    select(svgEl).call(
+      this._zoom.transform,
+      zoomIdentity.translate(transform.x, transform.y).scale(transform.k),
+    );
+    this._updatingFromMinimap = false;
   }
 
   firstUpdated(): void {
@@ -187,12 +221,62 @@ export class FlowDiagram extends LitElement {
 
       // Reset zoom on file change
       this._transform = '';
+      this.viewTransform = { x: 0, y: 0, k: 1 };
 
       this._runElkLayout().then(() => {
+        this._computeMinimapData(this._layoutNodes, this._edgeGroups);
         // Re-attach zoom (SVG may have been recreated if going from empty to loaded)
         this.updateComplete.then(() => this._setupZoom());
       });
     }
+  }
+
+  private _computeMinimapData(nodes: LayoutNode[], edgeGroups: LayoutEdgeGroup[]): void {
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+    this.minimapNodes = nodes.map((n) => {
+      const isAggregate = n.kind === 'aggregate';
+      const color = isAggregate
+        ? AGG_COLORS[n.colorIndex] ?? AGG_COLORS[0]
+        : EXTERNAL_STROKE;
+      return {
+        id: n.id,
+        x: n.x,
+        y: n.y,
+        width: NODE_W,
+        height: NODE_H,
+        color,
+      };
+    });
+
+    this.minimapEdges = edgeGroups
+      .filter((g) => g.from !== g.to)
+      .map((g) => {
+        const from = nodeMap.get(g.from);
+        const to = nodeMap.get(g.to);
+        if (!from || !to) return null;
+        return {
+          x1: from.x + NODE_W / 2,
+          y1: from.y + NODE_H / 2,
+          x2: to.x + NODE_W / 2,
+          y2: to.y + NODE_H / 2,
+        };
+      })
+      .filter((e): e is MinimapEdge => e !== null);
+
+    this.graphBounds = { width: this._svgWidth, height: this._svgHeight };
+
+    this.dispatchEvent(
+      new CustomEvent('graph-data-changed', {
+        detail: {
+          minimapNodes: this.minimapNodes,
+          minimapEdges: this.minimapEdges,
+          graphBounds: this.graphBounds,
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private _getSvgEl(): SVGSVGElement | null {

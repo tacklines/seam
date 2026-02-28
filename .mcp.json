@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "multi-human-workflows": {
+      "command": "npx",
+      "args": ["tsx", "src/server/mcp.ts"]
+    }
+  }
+}

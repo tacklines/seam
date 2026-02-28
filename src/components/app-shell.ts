@@ -2,6 +2,8 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { store, type AppState } from '../state/app-state.js';
 import { compareFiles } from '../lib/comparison.js';
+import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
+import type { FlowDiagram } from './flow-diagram.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -16,6 +18,7 @@ import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import './file-drop-zone.js';
 import './card-view.js';
 import './flow-diagram.js';
+import './flow-minimap.js';
 import './comparison-view.js';
 import './aggregate-nav.js';
 import './filter-panel.js';
@@ -154,6 +157,10 @@ export class AppShell extends LitElement {
   `;
 
   @state() private appState: AppState = store.get();
+  @state() private _minimapNodes: MinimapNode[] = [];
+  @state() private _minimapEdges: MinimapEdge[] = [];
+  @state() private _viewTransform: ViewTransform = { x: 0, y: 0, k: 1 };
+  @state() private _graphBounds: GraphBounds = { width: 800, height: 500 };
   private unsubscribe?: () => void;
 
   connectedCallback() {
@@ -267,7 +274,21 @@ export class AppShell extends LitElement {
               ></card-view>
             </sl-tab-panel>
             <sl-tab-panel name="flow">
-              <flow-diagram .files=${files}></flow-diagram>
+              <div style="position: relative;">
+                <flow-diagram
+                  .files=${files}
+                  @view-transform-changed=${this._onViewTransformChanged}
+                  @graph-data-changed=${this._onGraphDataChanged}
+                  id="flow-diagram"
+                ></flow-diagram>
+                <flow-minimap
+                  .nodes=${this._minimapNodes}
+                  .edges=${this._minimapEdges}
+                  .viewTransform=${this._viewTransform}
+                  .graphBounds=${this._graphBounds}
+                  @minimap-navigate=${this._onMinimapNavigate}
+                ></flow-minimap>
+              </div>
             </sl-tab-panel>
             <sl-tab-panel name="comparison">
               <comparison-view .files=${files}></comparison-view>
@@ -297,6 +318,29 @@ export class AppShell extends LitElement {
     if (dropZone) {
       const input = dropZone.shadowRoot?.querySelector<HTMLInputElement>('input[type="file"]');
       input?.click();
+    }
+  }
+
+  private _onViewTransformChanged(e: CustomEvent) {
+    this._viewTransform = e.detail as ViewTransform;
+  }
+
+  private _onGraphDataChanged(e: CustomEvent) {
+    const { minimapNodes, minimapEdges, graphBounds } = e.detail as {
+      minimapNodes: MinimapNode[];
+      minimapEdges: MinimapEdge[];
+      graphBounds: GraphBounds;
+    };
+    this._minimapNodes = minimapNodes;
+    this._minimapEdges = minimapEdges;
+    this._graphBounds = graphBounds;
+  }
+
+  private _onMinimapNavigate(e: CustomEvent) {
+    e.stopPropagation();
+    const flowDiagram = this.renderRoot.querySelector<FlowDiagram>('#flow-diagram');
+    if (flowDiagram) {
+      flowDiagram.applyMinimapTransform(e.detail as ViewTransform);
     }
   }
 }
