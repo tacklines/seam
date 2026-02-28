@@ -12,5 +12,12 @@
     "allowImportingTsExtensions": false,
     "types": ["node"]
   },
-  "include": ["src/server/**/*", "src/state/**/*"]
+  "include": [
+    "src/server/mcp.ts",
+    "src/server/http.ts",
+    "src/server/store.ts",
+    "src/lib/session-store.ts",
+    "src/lib/yaml-validator-server.ts",
+    "src/schema/types.ts"
+  ]
 }
