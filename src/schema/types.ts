@@ -2,6 +2,9 @@
 
 export type Confidence = 'CONFIRMED' | 'LIKELY' | 'POSSIBLE';
 
+/** Protocol through which an artifact was submitted */
+export type SubmissionProtocol = 'web' | 'mcp' | 'a2a';
+
 /** Session lifecycle state machine */
 export type SessionStatus = 'active' | 'paused' | 'closed';
 export type SessionTransitionAction = 'pause' | 'resume' | 'close';
