@@ -29,7 +29,7 @@ export interface ArtifactInventory {
   integrationStatus: string | null;
 }
 
-interface SessionData {
+export interface SessionData {
   participantCount: number;
   submissionCount: number;
   jam: JamArtifacts | null;
@@ -187,5 +187,47 @@ export function computeWorkflowStatus(session: SessionData): WorkflowStatus {
     phases,
     artifactInventory,
     nextAction: NEXT_ACTIONS[currentPhase],
+  };
+}
+
+export interface PhaseTransition {
+  from: WorkflowPhase;
+  to: WorkflowPhase;
+  fromLabel: string;
+  toLabel: string;
+}
+
+export function detectPhaseTransition(
+  before: SessionData,
+  after: SessionData
+): PhaseTransition | null {
+  const beforeInventory = buildArtifactInventory(before);
+  const afterInventory = buildArtifactInventory(after);
+  const beforePhase = inferPhase(beforeInventory);
+  const afterPhase = inferPhase(afterInventory);
+
+  if (beforePhase === afterPhase) return null;
+
+  return {
+    from: beforePhase,
+    to: afterPhase,
+    fromLabel: PHASE_METADATA[beforePhase].label,
+    toLabel: PHASE_METADATA[afterPhase].label,
+  };
+}
+
+export function sessionToSessionData(session: {
+  participants: Map<string, unknown>;
+  submissions: unknown[];
+  jam: JamArtifacts | null;
+  contracts: ContractBundle | null;
+  integrationReport: IntegrationReport | null;
+}): SessionData {
+  return {
+    participantCount: session.participants.size,
+    submissionCount: session.submissions.length,
+    jam: session.jam,
+    contracts: session.contracts,
+    integrationReport: session.integrationReport,
   };
 }
