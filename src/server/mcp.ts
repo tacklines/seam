@@ -136,9 +136,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: submit_yaml
+  // Tool: submit_artifact
   server.registerTool(
-    'submit_yaml',
+    'submit_artifact',
     {
       description: 'Parse, validate, and submit a YAML file to the session',
       inputSchema: {
@@ -219,9 +219,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: prep_status
+  // Tool: query_prep_status
   server.registerTool(
-    'prep_status',
+    'query_prep_status',
     {
       description:
         'Get completeness analysis for a session — event counts, confidence breakdown, gaps, and a 0-100 score per file and overall',
@@ -255,11 +255,11 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: jam_start
+  // Tool: start_jam
   server.registerTool(
-    'jam_start',
+    'start_jam',
     {
-      description: 'Start a jam session for collaborative conflict resolution. Must be called before resolve/assign/flag tools.',
+      description: 'Start a jam session for collaborative conflict resolution. Must be called before record_resolution/assign_ownership/flag_unresolved tools.',
       inputSchema: {
         code: z.string().describe('Session join code'),
       },
@@ -278,9 +278,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: jam_resolve
+  // Tool: record_resolution
   server.registerTool(
-    'jam_resolve',
+    'record_resolution',
     {
       description: 'Record a conflict resolution decision in the jam session',
       inputSchema: {
@@ -305,9 +305,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: jam_assign
+  // Tool: assign_ownership
   server.registerTool(
-    'jam_assign',
+    'assign_ownership',
     {
       description: 'Assign aggregate ownership to a role in the jam session',
       inputSchema: {
@@ -331,9 +331,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: jam_flag
+  // Tool: flag_unresolved
   server.registerTool(
-    'jam_flag',
+    'flag_unresolved',
     {
       description: 'Flag an unresolved item in the jam session for later follow-up',
       inputSchema: {
@@ -360,9 +360,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: jam_export
+  // Tool: export_jam_artifacts
   server.registerTool(
-    'jam_export',
+    'export_jam_artifacts',
     {
       description: 'Export all jam session artifacts (resolutions, ownership map, unresolved items)',
       inputSchema: {
@@ -383,9 +383,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: prep_load
+  // Tool: load_prep_artifact
   server.registerTool(
-    'prep_load',
+    'load_prep_artifact',
     {
       description:
         'Submit a YAML file directly to a session (parse + validate + submit in one step). Returns completeness analysis of the submitted file.',
@@ -439,9 +439,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: contract_load
+  // Tool: load_contracts
   server.registerTool(
-    'contract_load',
+    'load_contracts',
     {
       description: 'Load a contract bundle (from /formalize output) into the session',
       inputSchema: {
@@ -472,9 +472,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: contract_diff
+  // Tool: diff_contracts
   server.registerTool(
-    'contract_diff',
+    'diff_contracts',
     {
       description: 'Compare loaded contracts against the original prep submissions to show what changed',
       inputSchema: {
@@ -505,9 +505,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: integration_load
+  // Tool: load_integration_report
   server.registerTool(
-    'integration_load',
+    'load_integration_report',
     {
       description: 'Load an integration report (from /integrate output) into the session',
       inputSchema: {
@@ -538,9 +538,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: integration_status
+  // Tool: query_integration_status
   server.registerTool(
-    'integration_status',
+    'query_integration_status',
     {
       description: 'Get the integration report status for a session — checks, overall status, and go/no-go assessment',
       inputSchema: {
@@ -574,9 +574,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: workflow_phase
+  // Tool: query_workflow_phase
   server.registerTool(
-    'workflow_phase',
+    'query_workflow_phase',
     {
       description:
         'Get the current workflow phase, all phase statuses, artifact inventory, and suggested next action for a session',
@@ -605,9 +605,9 @@ async function main(): Promise<void> {
     }
   );
 
-  // Tool: workflow_phase_subscribe
+  // Tool: poll_workflow_phase
   server.registerTool(
-    'workflow_phase_subscribe',
+    'poll_workflow_phase',
     {
       description:
         'Poll for workflow phase changes. Call without `since` to get the current phase and a lastChecked timestamp. ' +
