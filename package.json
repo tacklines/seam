@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@shoelace-style/shoelace": "^2.20.1",
     "ajv": "^8.17.0",
     "ajv-formats": "^3.0.1",
@@ -18,7 +19,8 @@
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
     "js-yaml": "^4.1.0",
-    "lit": "^3.2.0"
+    "lit": "^3.2.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
