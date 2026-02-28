@@ -20,9 +20,9 @@ export const NODE_W = 160;
 export const NODE_H = 44;
 
 /** Padding inside an aggregate container (top for header, sides, bottom) */
-export const COMPOUND_PADDING_TOP = 36; // space for header label
-export const COMPOUND_PADDING_SIDE = 16;
-export const COMPOUND_PADDING_BOTTOM = 16;
+export const COMPOUND_PADDING_TOP = 32; // space for header label
+export const COMPOUND_PADDING_SIDE = 12;
+export const COMPOUND_PADDING_BOTTOM = 12;
 
 export interface LayoutNode {
   id: string;
@@ -183,6 +183,155 @@ export interface CollapsedAggregate {
   eventCount: number;
 }
 
+/** Gap between connected-component bounding boxes during reflow */
+const COMPONENT_GAP = 60;
+/** Target aspect ratio for component reflow (wider is more landscape) */
+const TARGET_ASPECT_RATIO = 1.6;
+
+/**
+ * Reflow top-level ELK nodes into rows so that disconnected components
+ * are arranged side-by-side rather than stacked in a single column.
+ *
+ * ELK's layered algorithm stacks disconnected components vertically when
+ * `elk.direction: RIGHT`. This function identifies connected components
+ * using union-find, computes each component's bounding box, and arranges
+ * those boxes in rows targeting TARGET_ASPECT_RATIO.
+ *
+ * Returns a map from node ID to {dx, dy} offset to apply to ELK positions.
+ */
+export function computeComponentReflowOffsets(
+  topNodes: ReadonlyArray<{ id: string; x: number; y: number; width: number; height: number }>,
+  edges: ReadonlyArray<{ sourceId: string; targetId: string }>,
+): Map<string, { dx: number; dy: number }> {
+  if (topNodes.length === 0) {
+    return new Map();
+  }
+
+  // Build a map from child node ID -> top-level parent ID.
+  // For compound nodes, child IDs are like "Aggregate::EventName".
+  // We need to map each edge endpoint (which may be a child ID) to a top-level node ID.
+  const topNodeIds = new Set(topNodes.map((n) => n.id));
+  const childToTop = new Map<string, string>();
+  for (const node of topNodes) {
+    childToTop.set(node.id, node.id);
+    // Child nodes in compound have IDs like "AggId::ChildId" — map them to the parent
+    // We don't have child IDs here, but edges reference child node IDs.
+    // Child IDs are not top-level, so we check the prefix pattern "parentId::"
+    // and add a general lookup: any edge endpoint that starts with parentId + "::" maps to parentId
+  }
+
+  // Union-Find for top-level node IDs
+  const parent = new Map<string, string>(topNodes.map((n) => [n.id, n.id]));
+
+  function find(id: string): string {
+    const p = parent.get(id);
+    if (p === undefined || p === id) return id;
+    const root = find(p);
+    parent.set(id, root);
+    return root;
+  }
+
+  function union(a: string, b: string): void {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  }
+
+  // For each edge, resolve both endpoints to top-level node IDs and union them
+  for (const edge of edges) {
+    // Resolve source to top-level node
+    let srcTop = edge.sourceId;
+    if (!topNodeIds.has(srcTop)) {
+      // Try to find a top-level node whose ID is a prefix
+      for (const topId of topNodeIds) {
+        if (srcTop.startsWith(topId + '::')) {
+          srcTop = topId;
+          break;
+        }
+      }
+    }
+    // Resolve target to top-level node
+    let tgtTop = edge.targetId;
+    if (!topNodeIds.has(tgtTop)) {
+      for (const topId of topNodeIds) {
+        if (tgtTop.startsWith(topId + '::')) {
+          tgtTop = topId;
+          break;
+        }
+      }
+    }
+
+    if (topNodeIds.has(srcTop) && topNodeIds.has(tgtTop)) {
+      union(srcTop, tgtTop);
+    }
+  }
+
+  // Group top-level nodes by connected component root
+  const componentMap = new Map<string, typeof topNodes[0][]>();
+  for (const node of topNodes) {
+    const root = find(node.id);
+    if (!componentMap.has(root)) componentMap.set(root, []);
+    componentMap.get(root)!.push(node);
+  }
+
+  const components = [...componentMap.values()];
+
+  // If only one component (or all disconnected nodes have no reflow benefit), skip
+  if (components.length <= 1) {
+    return new Map();
+  }
+
+  // Compute bounding box for each component (using current ELK x/y positions)
+  const componentBBoxes = components.map((nodes) => {
+    const minX = Math.min(...nodes.map((n) => n.x));
+    const minY = Math.min(...nodes.map((n) => n.y));
+    const maxX = Math.max(...nodes.map((n) => n.x + n.width));
+    const maxY = Math.max(...nodes.map((n) => n.y + n.height));
+    return { nodes, minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+  });
+
+  // Sort components: larger (wider) first, then by area
+  componentBBoxes.sort((a, b) => b.width * b.height - a.width * a.height);
+
+  // Arrange components in rows targeting TARGET_ASPECT_RATIO.
+  // Strategy: compute target columns = ceil(sqrt(n * TARGET_ASPECT_RATIO)), then
+  // fill rows up to that column count. This ensures components are spread horizontally
+  // regardless of absolute sizes.
+  const n = componentBBoxes.length;
+  const targetCols = Math.max(2, Math.ceil(Math.sqrt(n * TARGET_ASPECT_RATIO)));
+
+  const rows: typeof componentBBoxes[] = [];
+  for (let i = 0; i < n; i += targetCols) {
+    rows.push(componentBBoxes.slice(i, i + targetCols));
+  }
+
+  // Compute new positions for each component bounding box
+  const offsets = new Map<string, { dx: number; dy: number }>();
+  const margin = 12;
+  let cursorY = margin;
+
+  for (const row of rows) {
+    const rowHeight = Math.max(...row.map((c) => c.height));
+    let cursorX = margin;
+
+    for (const comp of row) {
+      // The offset needed to move this component to (cursorX, cursorY)
+      const dx = cursorX - comp.minX;
+      const dy = cursorY - comp.minY;
+
+      for (const node of comp.nodes) {
+        offsets.set(node.id, { dx, dy });
+      }
+
+      cursorX += comp.width + COMPONENT_GAP;
+    }
+
+    cursorY += rowHeight + COMPONENT_GAP;
+  }
+
+  return offsets;
+}
+
 /**
  * Run ELK layered layout with compound nodes.
  *
@@ -255,7 +404,7 @@ export async function runElkLayout(
         layoutOptions: {
           'elk.algorithm': 'layered',
           'elk.direction': 'DOWN',
-          'elk.spacing.nodeNode': '20',
+          'elk.spacing.nodeNode': '12',
           'elk.padding': `[top=${COMPOUND_PADDING_TOP},left=${COMPOUND_PADDING_SIDE},bottom=${COMPOUND_PADDING_BOTTOM},right=${COMPOUND_PADDING_SIDE}]`,
         },
         children: childNodes,
@@ -311,6 +460,9 @@ export async function runElkLayout(
       'elk.edgeRouting': 'SPLINES',
       'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
       'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+      // Pack disconnected bounded contexts side-by-side (landscape) instead of stacking vertically
+      'elk.separateConnectedComponents': 'true',
+      'elk.aspectRatio': '1.6',
     },
     children: [...elkCompoundChildren, ...elkExternalChildren],
     edges: elkEdges,
@@ -318,6 +470,28 @@ export async function runElkLayout(
 
   const elk = new ELK();
   const laid = await elk.layout(elkGraph);
+
+  // Post-process: compute reflow offsets to arrange disconnected components side-by-side.
+  // ELK's layered algorithm stacks disconnected components vertically; we fix this here.
+  const topNodesForReflow = (laid.children ?? []).map((n) => ({
+    id: n.id,
+    x: n.x ?? 0,
+    y: n.y ?? 0,
+    width: n.width ?? NODE_W,
+    height: n.height ?? NODE_H,
+  }));
+  const edgesForReflow = elkEdges.map((e) => ({
+    sourceId: e.sources[0] ?? '',
+    targetId: e.targets[0] ?? '',
+  }));
+  const reflowOffsets = computeComponentReflowOffsets(topNodesForReflow, edgesForReflow);
+
+  /** Apply reflow offset to a top-level node's position */
+  function applyOffset(topNodeId: string, x: number, y: number): { x: number; y: number } {
+    const off = reflowOffsets.get(topNodeId);
+    if (!off) return { x, y };
+    return { x: x + off.dx, y: y + off.dy };
+  }
 
   // Extract compound (aggregate) layouts
   const compounds: LayoutCompound[] = [];
@@ -328,26 +502,26 @@ export async function runElkLayout(
     if (externals.has(topNode.id)) {
       // External system — leaf node
       const colorIndex = -1;
+      const pos = applyOffset(topNode.id, topNode.x ?? 0, topNode.y ?? 0);
       nodes.push({
         id: topNode.id,
         label: topNode.id,
         kind: 'external',
         colorIndex,
-        x: topNode.x ?? 0,
-        y: topNode.y ?? 0,
+        x: pos.x,
+        y: pos.y,
       });
     } else if (collapsedAggregates.has(topNode.id)) {
       // Collapsed aggregate — single leaf node, not a compound
       const colorIndex = getAggregateColorIndex(topNode.id, allAggregates);
       const eventCount = aggregateEvents.get(topNode.id)?.length ?? 0;
-      const nodeX = topNode.x ?? 0;
-      const nodeY = topNode.y ?? 0;
+      const pos = applyOffset(topNode.id, topNode.x ?? 0, topNode.y ?? 0);
       collapsedAggregatesList.push({
         id: topNode.id,
         label: topNode.id,
         colorIndex,
-        x: nodeX,
-        y: nodeY,
+        x: pos.x,
+        y: pos.y,
         eventCount,
       });
       // Also add to nodes[] so edge rendering can find positions via nodeMap
@@ -356,14 +530,17 @@ export async function runElkLayout(
         label: topNode.id,
         kind: 'aggregate',
         colorIndex,
-        x: nodeX,
-        y: nodeY,
+        x: pos.x,
+        y: pos.y,
       });
     } else {
       // Expanded aggregate compound node
       const colorIndex = getAggregateColorIndex(topNode.id, allAggregates);
-      const parentX = topNode.x ?? 0;
-      const parentY = topNode.y ?? 0;
+      const rawParentX = topNode.x ?? 0;
+      const rawParentY = topNode.y ?? 0;
+      const pos = applyOffset(topNode.id, rawParentX, rawParentY);
+      const parentX = pos.x;
+      const parentY = pos.y;
       const compoundWidth = topNode.width ?? NODE_W + COMPOUND_PADDING_SIDE * 2;
       const compoundHeight = topNode.height ?? NODE_H + COMPOUND_PADDING_TOP + COMPOUND_PADDING_BOTTOM;
 
@@ -436,8 +613,25 @@ export async function runElkLayout(
     }
   }
 
-  // Extract ELK-computed edge sections (bend points) and attach to groups
-  // ELK returns edges at the root level with sections containing routed paths
+  // Build a lookup: child-node ID -> top-level node ID (for edge reflow offset lookup)
+  const childToTopNode = new Map<string, string>();
+  for (const topNode of laid.children ?? []) {
+    childToTopNode.set(topNode.id, topNode.id);
+    for (const child of topNode.children ?? []) {
+      childToTopNode.set(child.id, topNode.id);
+    }
+  }
+
+  /** Look up the reflow offset for a node (child or top-level) */
+  function getEdgeOffset(nodeId: string): { dx: number; dy: number } {
+    const topId = childToTopNode.get(nodeId) ?? nodeId;
+    return reflowOffsets.get(topId) ?? { dx: 0, dy: 0 };
+  }
+
+  // Extract ELK-computed edge sections (bend points) and attach to groups.
+  // Apply reflow offsets to all edge path coordinates so they match repositioned nodes.
+  // Edges always connect nodes in the same connected component, so source and target
+  // have the same reflow offset.
   for (const elkEdge of laid.edges ?? []) {
     const groupKey = edgeIdToGroupKey.get(elkEdge.id ?? '');
     if (!groupKey) continue;
@@ -446,25 +640,41 @@ export async function runElkLayout(
 
     if (elkEdge.sections && elkEdge.sections.length > 0) {
       const sec = elkEdge.sections[0];
+      // Use source node offset (same as target since they're in the same component)
+      const off = getEdgeOffset(elkEdge.sources?.[0] ?? '');
       const section: EdgeSection = {
-        startPoint: { x: sec.startPoint.x, y: sec.startPoint.y },
-        endPoint: { x: sec.endPoint.x, y: sec.endPoint.y },
-        bendPoints: sec.bendPoints?.map((p) => ({ x: p.x, y: p.y })),
+        startPoint: { x: sec.startPoint.x + off.dx, y: sec.startPoint.y + off.dy },
+        endPoint: { x: sec.endPoint.x + off.dx, y: sec.endPoint.y + off.dy },
+        bendPoints: sec.bendPoints?.map((p) => ({ x: p.x + off.dx, y: p.y + off.dy })),
       };
       group.sections = group.sections ?? [];
       group.sections.push(section);
     }
   }
 
-  // Bounding box
-  const layoutWidth =
-    typeof laid.width === 'number' && laid.width > 0
-      ? laid.width + 80
-      : 800;
-  const layoutHeight =
-    typeof laid.height === 'number' && laid.height > 0
-      ? laid.height + 80
-      : 500;
+  // Bounding box: compute from actual node positions after reflow.
+  // This is more accurate than ELK's reported dimensions when reflow offsets were applied.
+  const allPositionedNodes = [
+    ...compounds.map((c) => ({ x: c.x, y: c.y, w: c.width, h: c.height })),
+    ...nodes.filter((n) => n.kind === 'external').map((n) => ({ x: n.x, y: n.y, w: NODE_W, h: NODE_H })),
+    ...collapsedAggregatesList.map((c) => ({ x: c.x, y: c.y, w: NODE_W, h: NODE_H })),
+  ];
+
+  let layoutWidth: number;
+  let layoutHeight: number;
+
+  if (allPositionedNodes.length > 0) {
+    const maxRight = Math.max(...allPositionedNodes.map((n) => n.x + n.w));
+    const maxBottom = Math.max(...allPositionedNodes.map((n) => n.y + n.h));
+    layoutWidth = maxRight + 80;
+    layoutHeight = maxBottom + 80;
+  } else if (typeof laid.width === 'number' && laid.width > 0) {
+    layoutWidth = laid.width + 80;
+    layoutHeight = typeof laid.height === 'number' && laid.height > 0 ? laid.height + 80 : 500;
+  } else {
+    layoutWidth = 800;
+    layoutHeight = 500;
+  }
 
   return {
     compounds,
