@@ -1,4 +1,6 @@
-import type { LoadedFile, DomainEvent, BoundaryAssumption } from '../schema/types.js';
+import type { LoadedFile } from '../schema/types.js';
+import type { ComparableArtifact, ComparableEvent, ComparableAssumption } from '../contexts/comparison/types.js';
+import { toComparableArtifact } from '../contexts/comparison/adapter.js';
 
 export type OverlapKind = 'same-name' | 'same-aggregate' | 'assumption-conflict';
 
@@ -10,12 +12,12 @@ export interface Overlap {
 }
 
 /** Find events that share the same name across different roles */
-function findNameOverlaps(files: LoadedFile[]): Overlap[] {
-  const byName = new Map<string, { role: string; event: DomainEvent }[]>();
-  for (const f of files) {
-    for (const e of f.data.domain_events) {
+function findNameOverlaps(artifacts: ComparableArtifact[]): Overlap[] {
+  const byName = new Map<string, { role: string; event: ComparableEvent }[]>();
+  for (const a of artifacts) {
+    for (const e of a.events) {
       const list = byName.get(e.name) ?? [];
-      list.push({ role: f.role, event: e });
+      list.push({ role: a.role, event: e });
       byName.set(e.name, list);
     }
   }
@@ -37,12 +39,12 @@ function findNameOverlaps(files: LoadedFile[]): Overlap[] {
 }
 
 /** Find aggregates that appear in multiple roles */
-function findAggregateOverlaps(files: LoadedFile[]): Overlap[] {
+function findAggregateOverlaps(artifacts: ComparableArtifact[]): Overlap[] {
   const byAgg = new Map<string, Set<string>>();
-  for (const f of files) {
-    for (const e of f.data.domain_events) {
+  for (const a of artifacts) {
+    for (const e of a.events) {
       const set = byAgg.get(e.aggregate) ?? new Set();
-      set.add(f.role);
+      set.add(a.role);
       byAgg.set(e.aggregate, set);
     }
   }
@@ -62,12 +64,12 @@ function findAggregateOverlaps(files: LoadedFile[]): Overlap[] {
 }
 
 /** Find boundary assumptions that may conflict across roles */
-function findAssumptionConflicts(files: LoadedFile[]): Overlap[] {
+function findAssumptionConflicts(artifacts: ComparableArtifact[]): Overlap[] {
   const overlaps: Overlap[] = [];
-  const allAssumptions: { role: string; assumption: BoundaryAssumption }[] = [];
-  for (const f of files) {
-    for (const a of f.data.boundary_assumptions) {
-      allAssumptions.push({ role: f.role, assumption: a });
+  const allAssumptions: { role: string; assumption: ComparableAssumption }[] = [];
+  for (const a of artifacts) {
+    for (const assumption of a.assumptions) {
+      allAssumptions.push({ role: a.role, assumption });
     }
   }
 
@@ -78,8 +80,8 @@ function findAssumptionConflicts(files: LoadedFile[]): Overlap[] {
       const b = allAssumptions[j];
       if (a.role === b.role) continue;
 
-      const sharedEvents = a.assumption.affects_events.filter((e) =>
-        b.assumption.affects_events.includes(e)
+      const sharedEvents = a.assumption.affectsEvents.filter((e) =>
+        b.assumption.affectsEvents.includes(e)
       );
 
       if (sharedEvents.length > 0 && a.assumption.type === b.assumption.type) {
@@ -95,11 +97,17 @@ function findAssumptionConflicts(files: LoadedFile[]): Overlap[] {
   return overlaps;
 }
 
-export function compareFiles(files: LoadedFile[]): Overlap[] {
-  if (files.length < 2) return [];
+/** Primary API — works with abstract ComparableArtifact shape */
+export function compareArtifacts(artifacts: ComparableArtifact[]): Overlap[] {
+  if (artifacts.length < 2) return [];
   return [
-    ...findNameOverlaps(files),
-    ...findAggregateOverlaps(files),
-    ...findAssumptionConflicts(files),
+    ...findNameOverlaps(artifacts),
+    ...findAggregateOverlaps(artifacts),
+    ...findAssumptionConflicts(artifacts),
   ];
+}
+
+/** Backward-compatible wrapper — adapts LoadedFile to ComparableArtifact internally */
+export function compareFiles(files: LoadedFile[]): Overlap[] {
+  return compareArtifacts(files.map(toComparableArtifact));
 }

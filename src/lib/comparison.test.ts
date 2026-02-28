@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { compareFiles } from './comparison.js';
+import { compareFiles, compareArtifacts } from './comparison.js';
 import type { LoadedFile, DomainEvent, BoundaryAssumption } from '../schema/types.js';
 import type { Overlap } from './comparison.js';
+import type { ComparableArtifact } from '../contexts/comparison/types.js';
 
 // Helper to build a minimal valid LoadedFile
 function makeFile(
@@ -154,6 +155,99 @@ describe('Given two files with assumptions of different types on same events', (
       }]
     );
     const overlaps = compareFiles([fileA, fileB]);
+    const conflicts = overlaps.filter((o) => o.kind === 'assumption-conflict');
+    expect(conflicts).toHaveLength(0);
+  });
+});
+
+// Helper to build a minimal ComparableArtifact
+function makeArtifact(
+  role: string,
+  events: { name: string; aggregate: string }[] = [],
+  assumptions: { id: string; type: string; statement: string; affectsEvents: string[] }[] = []
+): ComparableArtifact {
+  return { role, events, assumptions };
+}
+
+describe('compareArtifacts — Given fewer than 2 artifacts', () => {
+  it('when no artifacts, returns empty overlap list', () => {
+    expect(compareArtifacts([])).toEqual([]);
+  });
+
+  it('when one artifact, returns empty overlap list', () => {
+    const a = makeArtifact('role-a', [{ name: 'EventA', aggregate: 'AggA' }]);
+    expect(compareArtifacts([a])).toEqual([]);
+  });
+});
+
+describe('compareArtifacts — Given two artifacts with same event name in different roles', () => {
+  it('when event name appears in both roles, returns same-name overlap', () => {
+    const artA = makeArtifact('frontend', [{ name: 'PaymentSucceeded', aggregate: 'Payment' }]);
+    const artB = makeArtifact('backend', [{ name: 'PaymentSucceeded', aggregate: 'Order' }]);
+    const overlaps = compareArtifacts([artA, artB]);
+    const nameOverlaps = overlaps.filter((o) => o.kind === 'same-name');
+    expect(nameOverlaps).toHaveLength(1);
+    expect(nameOverlaps[0].label).toBe('PaymentSucceeded');
+    expect(nameOverlaps[0].roles).toContain('frontend');
+    expect(nameOverlaps[0].roles).toContain('backend');
+  });
+});
+
+describe('compareArtifacts — Given two artifacts with same aggregate in different roles', () => {
+  it('when aggregate is claimed by multiple roles, returns same-aggregate overlap', () => {
+    const artA = makeArtifact('frontend', [{ name: 'EventA', aggregate: 'Checkout' }]);
+    const artB = makeArtifact('backend', [{ name: 'EventB', aggregate: 'Checkout' }]);
+    const overlaps = compareArtifacts([artA, artB]);
+    const aggOverlaps = overlaps.filter((o) => o.kind === 'same-aggregate');
+    expect(aggOverlaps).toHaveLength(1);
+    expect(aggOverlaps[0].label).toBe('Checkout');
+    expect(aggOverlaps[0].roles).toContain('frontend');
+    expect(aggOverlaps[0].roles).toContain('backend');
+  });
+});
+
+describe('compareArtifacts — Given two artifacts with conflicting assumptions', () => {
+  it('when assumptions of same type affect same events in different roles, returns assumption-conflict', () => {
+    const artA = makeArtifact(
+      'frontend',
+      [{ name: 'PaymentSucceeded', aggregate: 'Payment' }],
+      [{
+        id: 'BA-1',
+        type: 'contract',
+        statement: 'PaymentSucceeded carries total as decimal dollars',
+        affectsEvents: ['PaymentSucceeded'],
+      }]
+    );
+    const artB = makeArtifact(
+      'backend',
+      [{ name: 'PaymentSucceeded', aggregate: 'Payment' }],
+      [{
+        id: 'BA-2',
+        type: 'contract',
+        statement: 'PaymentSucceeded carries amount_cents as integer',
+        affectsEvents: ['PaymentSucceeded'],
+      }]
+    );
+    const overlaps = compareArtifacts([artA, artB]);
+    const conflicts = overlaps.filter((o) => o.kind === 'assumption-conflict');
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].roles).toContain('frontend');
+    expect(conflicts[0].roles).toContain('backend');
+    expect(conflicts[0].details).toContain('PaymentSucceeded');
+  });
+
+  it('when assumption types differ, returns no conflict', () => {
+    const artA = makeArtifact(
+      'frontend',
+      [],
+      [{ id: 'BA-1', type: 'contract', statement: 'A contract', affectsEvents: ['OrderPlaced'] }]
+    );
+    const artB = makeArtifact(
+      'backend',
+      [],
+      [{ id: 'BA-2', type: 'ordering', statement: 'An ordering rule', affectsEvents: ['OrderPlaced'] }]
+    );
+    const overlaps = compareArtifacts([artA, artB]);
     const conflicts = overlaps.filter((o) => o.kind === 'assumption-conflict');
     expect(conflicts).toHaveLength(0);
   });
