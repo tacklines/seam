@@ -28,5 +28,9 @@
 - SessionPersistence uses existing SerializedSession type for JSON format — don't reinvent session serialization, session-store.ts already has serializeSession() (added: 2026-02-28, dispatch: multi-human-workflows-27c)
 - Map<string, Participant> round-trips through Participant[] array; reconstruct Map from array in sessionFromJson() using p.id as key (added: 2026-02-28, dispatch: multi-human-workflows-27c)
 
+## Adapter Patterns
+- Use `src/contexts/<context>/adapter.ts` to decouple lib/ functions from concrete types — adapter maps LoadedFile → ComparableArtifact, keeping lib/ functions pure against abstract interfaces (added: 2026-02-28, dispatch: a6r.20)
+- When mapping schema field names (snake_case `affects_events` → camelCase `affectsEvents`), do it in the adapter layer, not in lib/ functions — keeps lib/ aligned with the abstract interface (added: 2026-02-28, dispatch: a6r.20)
+
 ## Cross-Agent Notes
 - (none yet)
