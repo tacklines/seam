@@ -417,10 +417,8 @@ export async function runElkLayout(
         fromId = event.integration.channel;
         toId = isCollapsed ? event.aggregate : rawChildId;
       } else {
-        // internal — self-loop; drop entirely if collapsed
-        if (isCollapsed) continue;
-        fromId = rawChildId;
-        toId = rawChildId;
+        // internal — no edge needed; skip entirely
+        continue;
       }
 
       const key = `${fromId}::${toId}`;

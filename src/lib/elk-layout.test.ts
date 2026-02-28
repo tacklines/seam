@@ -131,7 +131,7 @@ describe('runElkLayout', () => {
       expect(result.nodes).toHaveLength(1); // only the child event node
     });
 
-    it('when laid out, returns a self-loop edge group on the child event node', async () => {
+    it('when laid out, returns no edge group for internal events', async () => {
       // Source: discovered during implementation
       const files = [
         makeFile('ops', [{ name: 'StateUpdated', aggregate: 'Order', direction: 'internal' }]),
@@ -139,12 +139,7 @@ describe('runElkLayout', () => {
 
       const result = await runElkLayout(files);
 
-      const childId = eventNodeId('Order', 'StateUpdated');
-      const selfLoop = result.edgeGroups.find(
-        (g) => g.from === childId && g.to === childId,
-      );
-      expect(selfLoop).toBeDefined();
-      expect(selfLoop?.edges[0].label).toBe('StateUpdated');
+      expect(result.edgeGroups).toHaveLength(0);
     });
   });
 

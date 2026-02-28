@@ -811,64 +811,8 @@ export class FlowDiagram extends LitElement {
     const toCx = this._nodeCx(to);
     const toCy = this._nodeCy(to);
 
-    // ── Self-loop (internal events) ──────────────────────────────────────────
-    if (from.id === to.id) {
-      return group.edges.map((edge, i) => {
-        const loopOffset = i * 20;
-        // Loop hangs off the right side of the node
-        const rx = from.x + NODE_W; // right edge of node
-        const ry = from.y + NODE_H / 2; // vertical center
-        const loopW = 32 + loopOffset;
-        const loopH = 20 + loopOffset;
-        // Arc: start at right-center, loop right and back
-        const startX = rx;
-        const startY = ry - 6;
-        const endX = rx;
-        const endY = ry + 6;
-        const pathId = `loop-${group.from.replace(/[^a-zA-Z0-9]/g, '_')}-${i}`;
-        const color = CONFIDENCE_COLOR[edge.confidence] ?? '#64748b';
-        const loopTooltip = html`
-          <div class="tooltip-name">${edge.label}</div>
-          <hr class="tooltip-divider" />
-          <div class="tooltip-row">
-            <span class="tooltip-key">What triggers?</span>
-            <span class="tooltip-val">${edge.trigger}</span>
-          </div>
-          <div class="tooltip-row">
-            <span class="tooltip-key">Confidence</span>
-            <span class="tooltip-val">
-              <span class="tooltip-dot" style="background:${color}"></span>${edge.confidence}
-            </span>
-          </div>
-          <div class="tooltip-row">
-            <span class="tooltip-key">Integration</span>
-            <span class="tooltip-val">Internal</span>
-          </div>
-        `;
-
-        // Cubic bezier: go out to the right and loop back
-        const cpX = rx + loopW;
-        const loopPath = `M${startX} ${startY} C${cpX} ${startY - loopH} ${cpX} ${endY + loopH} ${endX} ${endY}`;
-
-        return svg`
-          <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
-            @mouseenter=${(e: MouseEvent) => this._showTooltip(e, loopTooltip)}
-            @mousemove=${(e: MouseEvent) => this._showTooltip(e, loopTooltip)}
-            @mouseleave=${() => this._hideTooltip()}>
-            <defs>
-              <path id=${pathId} d=${loopPath} />
-            </defs>
-            <use href="#${pathId}" fill="none" stroke=${color} stroke-width="1.5"
-              marker-end=${this._arrowMarker(edge.confidence)} />
-            ${showEdgeLabels ? svg`
-              <text font-size="9" font-family="'JetBrains Mono', monospace" fill=${color}>
-                <textPath href="#${pathId}" startOffset="50%" text-anchor="middle">${edge.label}</textPath>
-              </text>
-            ` : nothing}
-          </g>
-        `;
-      });
-    }
+    // ── Safety guard: skip any self-loop edges that slip through ────────────
+    if (from.id === to.id) return nothing;
 
     // ── Multi-edge bundling (4+ edges) ──────────────────────────────────────
     const count = group.edges.length;

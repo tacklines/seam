@@ -218,17 +218,14 @@ describe('runForceLayout', () => {
       expect(group).toBeDefined();
     });
 
-    it('when internal event exists, returns self-loop edge group', () => {
+    it('when internal event exists, returns no edge group', () => {
       const files = [
         makeFile('ops', [{ name: 'StateUpdated', aggregate: 'Order', direction: 'internal' }]),
       ];
 
       const result = runForceLayout(files);
 
-      const childId = eventNodeId('Order', 'StateUpdated');
-      const selfLoop = result.edgeGroups.find((g) => g.from === childId && g.to === childId);
-      expect(selfLoop).toBeDefined();
-      expect(selfLoop?.edges[0].label).toBe('StateUpdated');
+      expect(result.edgeGroups).toHaveLength(0);
     });
 
     it('when multiple events share a from-to pair, groups them into one edge group', () => {

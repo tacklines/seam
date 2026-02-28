@@ -353,9 +353,8 @@ export function runForceLayout(files: LoadedFile[]): ForceLayoutResult {
         fromId = event.integration.channel;
         toId = childId;
       } else {
-        // internal — self-loop on the child event node
-        fromId = childId;
-        toId = childId;
+        // internal — no edge needed; skip entirely
+        continue;
       }
 
       const key = `${fromId}::${toId}`;
