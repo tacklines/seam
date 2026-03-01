@@ -157,3 +157,152 @@ export interface JamArtifacts {
   resolutions: ConflictResolution[];
   unresolved: UnresolvedItem[];
 }
+
+/** Session-level configuration — shared across all participants, stored in session state.
+ * Changing a setting emits a `SessionConfigured` domain event that all participants receive.
+ * See: docs/experience-design.md § Settings, configure_session MCP tool */
+
+/** Configuration for the Comparison phase */
+export interface ComparisonConfig {
+  /**
+   * How strictly event names and field names are compared.
+   * `semantic` treats `amountCents` and `amount_cents` as equivalent.
+   * `exact` requires byte-for-byte equality.
+   * Default: `'semantic'`
+   */
+  sensitivity: 'semantic' | 'exact';
+  /**
+   * When true, overlaps and conflicts are detected automatically as artifacts arrive.
+   * Default: `true`
+   */
+  autoDetectConflicts: boolean;
+  /**
+   * When true, resolution suggestions are generated for detected conflicts.
+   * Default: `true`
+   */
+  suggestResolutions: boolean;
+}
+
+/** Configuration for the Contracts (Build) phase */
+export interface ContractsConfig {
+  /**
+   * How non-compliant artifacts are handled.
+   * `strict` — block submission; `warn` — surface warnings; `relaxed` — log only.
+   * Default: `'warn'`
+   */
+  strictness: 'strict' | 'warn' | 'relaxed';
+  /**
+   * When and how participants are notified of contract drift.
+   * `immediate` — toast on every drift event; `batched` — digest at end of session;
+   * `silent` — no notification, drift is visible only in the Contract tab.
+   * Default: `'immediate'`
+   */
+  driftNotifications: 'immediate' | 'batched' | 'silent';
+}
+
+/** Scoring weights and tier defaults for the Rank (Priority) phase */
+export interface RankingWeights {
+  /** Weight applied to the event's confidence score. Default: `1` */
+  confidence: number;
+  /** Weight applied to implementation complexity estimate. Default: `1` */
+  complexity: number;
+  /** Weight applied to how many other events reference this one. Default: `1` */
+  references: number;
+}
+
+/** Configuration for the Rank (Priority View) phase */
+export interface RankingConfig {
+  /**
+   * Numeric multipliers used when computing composite priority scores.
+   * All weights default to `1` (equal weighting).
+   */
+  weights: RankingWeights;
+  /**
+   * The MoSCoW tier assigned to newly discovered events before voting.
+   * Default: `'Should Have'`
+   */
+  defaultTier: string;
+}
+
+/** Configuration for agent delegation autonomy */
+export interface DelegationConfig {
+  /**
+   * How much autonomy agents have when proposing actions.
+   * `assisted` — agent proposes, human must approve (default);
+   * `semi_autonomous` — agent acts, human can undo;
+   * `autonomous` — agent acts without approval.
+   * Default: `'assisted'`
+   */
+  level: 'assisted' | 'semi_autonomous' | 'autonomous';
+  /**
+   * How long (in seconds) a pending approval request remains active before it
+   * auto-expires. Default: `86400` (24 hours).
+   */
+  approvalExpiry: number;
+}
+
+/** Configuration for in-app notification behaviour */
+export interface NotificationsConfig {
+  /**
+   * How long (in milliseconds) toast notifications remain visible before
+   * auto-dismissing. Default: `6000` (6 seconds, matching drift-alert spec).
+   */
+  toastDuration: number;
+  /**
+   * Domain event names that should never trigger a toast notification.
+   * Useful for high-frequency events that would otherwise flood the UI.
+   * Default: `[]` (all events may produce toasts).
+   */
+  silentEvents: string[];
+}
+
+/**
+ * Top-level per-session configuration object.
+ * Stored in session state and shared across all participants.
+ * Consumed by the `configure_session` and `get_session_config` MCP tools.
+ */
+export interface SessionConfig {
+  /** Comparison phase settings */
+  comparison: ComparisonConfig;
+  /** Contract enforcement settings */
+  contracts: ContractsConfig;
+  /** Priority scoring and tier settings */
+  ranking: RankingConfig;
+  /** Agent autonomy and approval settings */
+  delegation: DelegationConfig;
+  /** Toast and notification settings */
+  notifications: NotificationsConfig;
+}
+
+/**
+ * Sane defaults for every SessionConfig field.
+ * The app works correctly without any configuration — these values are applied
+ * when a session is created and no explicit config is provided.
+ */
+export const DEFAULT_SESSION_CONFIG: SessionConfig = {
+  comparison: {
+    sensitivity: 'semantic',
+    autoDetectConflicts: true,
+    suggestResolutions: true,
+  },
+  contracts: {
+    strictness: 'warn',
+    driftNotifications: 'immediate',
+  },
+  ranking: {
+    weights: {
+      confidence: 1,
+      complexity: 1,
+      references: 1,
+    },
+    defaultTier: 'Should Have',
+  },
+  delegation: {
+    level: 'assisted',
+    approvalExpiry: 86400,
+  },
+  notifications: {
+    toastDuration: 6000,
+    silentEvents: [],
+  },
+} as const satisfies SessionConfig;
