@@ -19,14 +19,6 @@
 - Semantic zoom: use a private getter reading from @state() viewTransform.k — re-evaluates automatically on each Lit render triggered by zoom events, no additional @state needed (added: 2026-02-28, dispatch: multi-human-workflows-891)
 - Aggregate event node IDs have form 'AggregateName::EventName'; external system node IDs are plain strings with no '::' — use this to distinguish intra- vs inter-aggregate edges (added: 2026-02-28, dispatch: multi-human-workflows-891)
 
-## Animation Patterns
-- Two-frame CSS transition pattern: set element to old position → await updateComplete → requestAnimationFrame → set new position. CSS then animates old→new. Skipping RAF causes both renders to batch (added: 2026-02-28, dispatch: multi-human-workflows-880)
-- CSS `transition: transform` on SVG `<g>` requires `style="transform: translate(Xpx, Ypx)"` not SVG `transform` attribute — attribute changes don't trigger CSS transitions (added: 2026-02-28, dispatch: multi-human-workflows-880)
-
-## Preferences
-- ELK compound nodes: child node coordinates are relative to parent's top-left, not absolute. Compute absolute positions as `parentX + child.x, parentY + child.y` (added: 2026-02-28, dispatch: multi-human-workflows-apz)
-- Use scoped ID convention (`aggregate::eventName`) for domain event nodes inside compound groups to prevent ID collisions (added: 2026-02-28, dispatch: multi-human-workflows-apz)
-
 ## Session Patterns
 - app-shell.ts uses `_soloMode` boolean @state to switch between session-lobby and file-drop-zone hero landing (added: 2026-02-28, dispatch: multi-human-workflows-zgg)
 - EventSource (SSE) in Lit: connect in method, call close() in disconnectedCallback, store as private field not @state to avoid re-renders (added: 2026-02-28, dispatch: multi-human-workflows-zgg)
@@ -56,13 +48,9 @@
 - Offline mode fallback: fire custom events with composed:true when no session code, let parent handle — supports both connected and standalone usage (added: 2026-02-28, dispatch: a6r.28)
 
 ## Store Data Gaps
-- `SessionParticipant` type lacks `type` (human/agent/service) and `capabilities` fields — check store types before assuming data availability in component requirements (added: 2026-02-28, dispatch: a6r.33)
-- When task requirements mention data fields not in the store, that's a separate schema/server extension task (added: 2026-02-28, dispatch: a6r.33)
+- Check store types before assuming data from task requirements — `SessionParticipant` lacks `type`/`capabilities`; missing fields need a schema extension task (added: 2026-02-28, dispatch: a6r.33)
 
 ## Cross-Agent Notes
 - (from logic) ELK returns top-left (x,y) not center; use `_nodeCx`/`_nodeCy` helpers when computing edge endpoints or zoom targets (added: 2026-02-28)
 - SVG `pointer-events` must be applied via `style=` attribute in Lit svg templates, not as a bare attribute (added: 2026-02-28, dispatch: multi-human-workflows-5ku)
 - Edge filter helpers extracted to `src/lib/edge-filters.ts` — pure functions `isEdgeVisible`/`isEdgeGroupVisible` (added: 2026-02-28, dispatch: multi-human-workflows-5ku)
-- SVG `<textPath startOffset="50%" text-anchor="middle">` with `paint-order="stroke"` creates readable labels along curved paths (added: 2026-02-28, dispatch: multi-human-workflows-5ja)
-- SVG marker `markerUnits="strokeWidth"` scales arrowheads relative to stroke width for crisp zoom-invariant arrows (added: 2026-02-28, dispatch: multi-human-workflows-5ja)
-- ELK edge sections: `laid.edges[].sections[].{startPoint, endPoint, bendPoints}` — track edge ID to group key to retrieve sections after layout (added: 2026-02-28, dispatch: multi-human-workflows-5ja)
