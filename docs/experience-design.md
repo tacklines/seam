@@ -25,11 +25,29 @@ Spark   Explore  Rank   Slice   Agree   Build   Ship
 
 Completed phases show a filled circle with a subtle checkmark. The current phase pulses gently. Future phases are dimmed. Clicking a circle scrolls to the relevant content area — the ribbon indicates, it doesn't control.
 
-The ribbon reads the same `WorkflowStatus` that the workflow engine already computes. It is a projection of reality, never a gatekeeper.
+The ribbon maps UX phases onto the workflow engine's internal phases. The engine tracks seven statuses (`lobby`, `prep`, `compare`, `jam`, `formalize`, `integrate`, `done`) that don't correspond 1:1 with the UX phases:
+
+| UX Phase | Engine Phase(s) | Notes |
+|----------|----------------|-------|
+| Spark | `lobby` → `prep` | Spark ends when the first artifact is submitted |
+| Explore | `prep` | Active while a single participant has submitted |
+| Rank | `prep` | Overlaps with Explore — ranking is available once enough events exist |
+| Slice | `prep` → `compare` | Decomposition can begin before or after comparison |
+| Agree | `compare` → `jam` | The core negotiation phase |
+| Build | `formalize` | Executing against contracts |
+| Ship | `integrate` → `done` | Verification and go/no-go |
+
+The Phase Ribbon is a UX projection that infers the active phase from `WorkflowStatus` plus additional signals (artifact count, priority data, work items). It is never a gatekeeper — participants can access any content regardless of the ribbon's state.
 
 The phase names in the ribbon are deliberately casual — "Spark" instead of "Origination," "Agree" instead of "Negotiation." The formal names exist in documentation. The ribbon speaks in verbs.
 
-**Keyboard:** `Cmd+1` through `Cmd+7` jump to phase-associated content.
+**Keyboard:** `Ctrl+Shift+1` through `Ctrl+Shift+7` jump to phase-associated content. (`Cmd+1–7` is reserved for browser tab switching on macOS.)
+
+### Phases as Scaffolding, Not Gates
+
+The seven phases are a UX narrative — a way to orient users in a process that could otherwise feel formless. They are **not** API constraints. The session server, MCP tools, and A2A protocol impose no phase ordering. An agent can call `record_resolution` before any artifacts are submitted. A human can start decomposing work before comparison.
+
+The Phase Ribbon reflects what has happened, not what must happen next. This preserves the vision principle that "the platform provides primitives, not prescribed phases" (`vision.md`) while giving users a coherent sense of progress.
 
 ---
 
@@ -40,6 +58,8 @@ The phase names in the ribbon are deliberately casual — "Spark" instead of "Or
 The first thing a participant contributes to a session. An event, an aggregate, a domain concept, a hunch. The Spark phase exists to lower the barrier from "I have something in my head" to "the system knows about it."
 
 ### What the user sees
+
+> **Scope:** The Spark Canvas is a **new component**. The `file-drop-zone` (existing) and `session-lobby` (existing) continue to work as alternative entry points.
 
 When a session has no artifacts, the main area shows the **Spark Canvas** — a minimal structured editor that doesn't require YAML knowledge.
 
@@ -91,6 +111,8 @@ When the participant clicks "Submit to session," their events materialize in the
 Exploration is the phase where initial ideas get tested against heuristics, completeness checks, and domain patterns. The goal is to find gaps before other participants' artifacts reveal them as conflicts.
 
 ### What the user sees
+
+> **Scope:** The card-view and aggregate navigation are **existing**. The Exploration Guide sidebar is a **new component**. The flow diagram dashed-outline hints are an **enhancement** to the existing `flow-diagram`.
 
 The existing card-view activates, showing all events grouped by role and aggregate. The sidebar gains a new panel below the aggregate navigation: the **Exploration Guide**.
 
@@ -149,6 +171,8 @@ Not everything is equally important. Ranking surfaces the team's collective judg
 
 ### What the user sees
 
+> **Scope:** The Priority View is an entirely **new component** — no ranking UI exists today.
+
 A **Priority View** tab appears when the session has at least one artifact with 5 or more events. The tab icon is a simple bar chart.
 
 The Priority View has two modes, toggled by a switch in the view header:
@@ -198,6 +222,8 @@ Priority data doesn't reset or disappear when decomposition begins. High-priorit
 Decomposition turns prioritized concepts into work items — vertically sliced, independently deliverable, and testable. Each slice crosses system boundaries end-to-end.
 
 ### What the user sees
+
+> **Scope:** The detail panel is **existing** (320px slide-in). The Breakdown Editor with work items, coverage matrix, and dependency graph is a **new component** that extends the detail panel.
 
 The Slice phase doesn't get its own tab. Instead, it lives inside the existing **detail panel** (the slide-in panel that opens when clicking an aggregate in the flow diagram).
 
@@ -252,6 +278,8 @@ Negotiation is the pivot — the one phase that demands synchronous human conver
 
 ### What the user sees
 
+> **Scope:** The four core components are **existing**: `comparison-view`, `resolution-recorder`, `ownership-grid`, `flag-manager`. Smart Resolution Suggestions, Negotiation Progress bar, and Assumption Matching are **enhancements**.
+
 This is the most-built phase. The existing components handle the core workflow:
 
 - **Comparison View** (`comparison-view`): Overlapping events across participants, with conflict cards highlighting discrepancies. Stats dashboard showing conflict count, shared events, shared aggregates.
@@ -278,7 +306,7 @@ All existing jam tools apply. In the conversational loop, an agent can:
 | Explore context | Agent calls `get_session` + `query_prep_status` to understand the full picture |
 | Explain a conflict | Agent calls `compare_artifacts`, then synthesizes a plain-language explanation for the human |
 | Propose a resolution | Agent calls `record_resolution` with a pending status. Human sees a "Pending approval" banner and can accept or reject |
-| What-if exploration | Agent calls `compare_artifacts` with a hypothetical change to preview consequences before committing |
+| What-if exploration | Agent calls `update_artifact` to revise a draft, then `compare_artifacts` to see how the new version affects overlaps — a two-step preview loop |
 | Iterate on an artifact | Agent calls `update_artifact` with revisions, human reviews the diff |
 
 The key pattern: **propose, don't decide.** The agent drafts; the human confirms. This is the `assisted` delegation level (see Settings below).
@@ -307,6 +335,8 @@ Execution is where participants work independently — each building their piece
 
 ### What the user sees
 
+> **Scope:** The `contract-diff`, `provenance-explorer`, and `schema-display` components are **existing**. The Compliance Badge, Drift Notifications, and Contract Sidebar are **new**.
+
 **Contract Tab.** When contracts are loaded, a new tab appears: "Contracts." It contains the existing `contract-diff`, `provenance-explorer`, and `schema-display` components. The tab badge shows the contract count.
 
 **Compliance Badge.** A persistent indicator in the header, next to the session code:
@@ -326,7 +356,7 @@ Clicking the badge opens a compliance detail panel showing exactly what's drifte
 |----------|-------------|
 | `load_contracts` (existing) | Load a contract bundle into the session |
 | `diff_contracts` (existing) | Compare contracts against prep submissions |
-| `check_compliance` (existing) | Validate session against loaded contracts |
+| `check_compliance` (existing) | Check whether submitted prep events cover the events listed in the contract bundle (event-name coverage, not schema validation) |
 | `validate_against_contract` (new) | Check whether an implementation artifact matches the contract schema |
 | `report_progress` (new) | Report completion percentage on assigned work items |
 
@@ -352,6 +382,8 @@ When all work items report 100% progress and the compliance badge is green, the 
 The final verification. Before merging, the platform checks that independently-produced work is compatible — contract compliance, cross-boundary compatibility, drift detection, and a go/no-go assessment.
 
 ### What the user sees
+
+> **Scope:** The integration report data model exists (`load_integration_report`, `query_integration_status`). The Integration Dashboard UI, Boundary Map visualization, and Celebration Moment are all **new components**.
 
 **Integration Dashboard.** A full-width view (no sidebar) with three columns:
 
@@ -440,7 +472,9 @@ This enables agents to set up optimal configurations for specific workflow types
 
 The difference between "functional" and "delightful" is in the details. These are specific interactions designed to make the platform feel like it understands what the user needs before they ask.
 
-### The Suggestion Bar
+### Tier 1: Low-effort, high-impact (build first)
+
+#### The Suggestion Bar
 
 A thin strip at the bottom of the main content area, just above the footer (or the fold). It shows one contextual suggestion at a time, phrased as a gentle nudge:
 
@@ -455,9 +489,9 @@ A thin strip at the bottom of the main content area, just above the footer (or t
 | Contracts loaded, no integration | "Building against contracts. Run an integration check when ready" |
 | Integration passes | "All systems go. Ship it." |
 
-The suggestion bar reads the `nextAction` field from `computeWorkflowStatus()` and wraps it in conversational language. It slides up from below with a 300ms animation when the suggestion changes.
+The suggestion bar reads the `nextAction` field from `computeWorkflowStatus()` as a starting signal, then wraps it in conversational, context-aware language. The engine's `nextAction` provides fixed strings (e.g., "Share the join code and wait for participants"); the suggestion bar interpolates session-specific details (participant names, conflict counts, session codes) and adjusts tone. This transformation lives in a dedicated `formatSuggestion()` function, not in the workflow engine itself. The bar slides up from below with a 300ms animation when the suggestion changes.
 
-### Seamless Artifact Continuity
+#### Seamless Artifact Continuity
 
 A participant submits events once in Phase I. Those same events:
 - Appear in the card-view (Phase II)
@@ -468,7 +502,19 @@ A participant submits events once in Phase I. Those same events:
 
 No export. No re-upload. No "load your artifacts from the previous phase." The artifact is submitted once and the platform carries it forward through every view. This is the single most important UX principle: **submit once, see everywhere.**
 
-### Live Collaboration Indicators
+#### "Just Works" Defaults
+
+- **Drag-and-drop a YAML file** onto any surface. The existing `file-drop-zone` handles it anywhere.
+- **Paste YAML** from clipboard. A global `Ctrl+V` handler detects valid storm-prep YAML and offers to load it.
+- **URL-based session join**: `/?session=ABC123&name=Alice`. If the session exists, auto-join. No manual code entry.
+- **Copy join code** with a single click on the code chip. "Copied!" micro-confirmation.
+- **Keyboard shortcuts for everything.** `N` for new event. `R` for resolve. `Enter` to confirm. `Escape` to cancel. The full shortcut reference is in the global settings dialog.
+
+### Tier 2: Significant new infrastructure
+
+The following require meaningful new infrastructure:
+
+#### Live Collaboration Indicators
 
 **Presence dots.** In the participant registry and beside artifact cards, a colored dot indicates connection status:
 - Green: connected now (WebSocket active)
@@ -479,7 +525,7 @@ No export. No re-upload. No "load your artifacts from the previous phase." The a
 
 **Activity pulse.** When a participant submits an artifact or records a resolution, their avatar in the header briefly pulses with a ring animation (300ms). Other participants see the pulse in real time — a visual heartbeat of collaboration.
 
-### Contextual First-Time Help
+#### Contextual First-Time Help
 
 The first time a user encounters a new capability, a brief overlay explains what they're looking at:
 
@@ -488,14 +534,6 @@ The first time a user encounters a new capability, a brief overlay explains what
 - First time seeing the Priority View: "Drag events between columns to set priority. Scores are computed from confidence, complexity, and how many participants reference the event."
 
 Help appears once per user (tracked in `localStorage`), not once per session. It uses `sl-tooltip` with `trigger="manual"`, appearing for 5 seconds before fading. Dismissing early is always possible with a click or Escape.
-
-### "Just Works" Defaults
-
-- **Drag-and-drop a YAML file** onto any surface. The existing `file-drop-zone` handles it anywhere.
-- **Paste YAML** from clipboard. A global `Ctrl+V` handler detects valid storm-prep YAML and offers to load it.
-- **URL-based session join**: `/?session=ABC123&name=Alice`. If the session exists, auto-join. No manual code entry.
-- **Copy join code** with a single click on the code chip. "Copied!" micro-confirmation.
-- **Keyboard shortcuts for everything.** `N` for new event. `R` for resolve. `Enter` to confirm. `Escape` to cancel. The full shortcut reference is in the global settings dialog.
 
 ---
 
@@ -524,10 +562,10 @@ This means:
 | IV. Slice | — | `create_work_items`, `get_decomposition`, `suggest_decomposition`, `set_dependency` |
 | V. Agree | `compare_artifacts`, `start_jam`, `record_resolution`, `assign_ownership`, `flag_unresolved`, `export_jam_artifacts` | `suggest_resolution` |
 | VI. Build | `load_contracts`, `diff_contracts`, `check_compliance` | `validate_against_contract`, `report_progress` |
-| VII. Ship | `load_integration_report`, `query_integration_status`, `query_workflow_phase` | `run_integration_check`, `get_go_no_go` |
+| VII. Ship | `load_integration_report`, `query_integration_status`, `query_workflow_phase`, `poll_workflow_phase` | `run_integration_check`, `get_go_no_go` |
 | Cross-cutting | `send_message`, `get_messages` | `configure_session`, `get_session_config` |
 
-**Total: 21 existing + 17 new = 38 MCP tools.**
+**Total: 22 existing + 17 new = 39 MCP tools.** (Existing count includes scoped-mode variants like `my_session`, `my_submit`, `check_messages`.)
 
 ### Scoped Mode
 
@@ -586,6 +624,165 @@ The queue badge shows the count of pending items. Items auto-expire after 24 hou
 The single synchronous bottleneck is the Agree phase — and it's the highest-leverage hour in the entire pipeline. Everything before it prepares for that conversation. Everything after it executes the decisions made there.
 
 The platform's job is to make that synchronous hour as productive as possible by doing all the asynchronous work well.
+
+---
+
+## Appendix: New MCP Tool Schemas
+
+Minimal input/output contracts for the 17 new tools. These are design intent — final schemas will be defined during implementation.
+
+### Phase I: Spark
+
+```typescript
+create_draft(input: {
+  sessionCode: string;
+  participantId: string;
+  content: CandidateEventsFile;
+}) → { draftId: string }
+
+suggest_events(input: {
+  description: string;       // Natural-language domain description
+  existingEvents?: string[]; // Event names already defined, to avoid duplicates
+}) → { events: CandidateEvent[] }
+```
+
+### Phase II: Explore
+
+```typescript
+suggest_improvements(input: {
+  sessionCode: string;
+  fileName: string;          // Which artifact to analyze
+}) → { suggestions: Array<{
+  type: 'missing_event' | 'missing_assumption' | 'confidence_upgrade' | 'pattern_match';
+  description: string;
+  suggestedContent?: Partial<CandidateEvent>;
+}> }
+
+update_artifact(input: {
+  sessionCode: string;
+  participantId: string;
+  fileName: string;
+  content: CandidateEventsFile;
+  changeNote?: string;       // Human-readable description of what changed
+}) → { version: number }
+```
+
+### Phase III: Rank
+
+```typescript
+set_priority(input: {
+  sessionCode: string;
+  eventName: string;
+  tier: 'must_have' | 'should_have' | 'could_have';
+}) → { updated: boolean }
+
+cast_vote(input: {
+  sessionCode: string;
+  participantId: string;
+  eventName: string;
+  direction: 'up' | 'down';
+}) → { newCount: number }
+
+get_priorities(input: {
+  sessionCode: string;
+}) → { events: Array<{ name: string; tier: string; score: number; votes: number }> }
+
+suggest_priorities(input: {
+  sessionCode: string;
+}) → { suggestions: Array<{ eventName: string; suggestedTier: string; reasoning: string }> }
+```
+
+### Phase IV: Slice
+
+```typescript
+create_work_items(input: {
+  sessionCode: string;
+  aggregate: string;
+  items: Array<{
+    title: string;
+    description: string;
+    acceptanceCriteria: string[];
+    complexity: 'S' | 'M' | 'L' | 'XL';
+    linkedEvents: string[];
+  }>;
+}) → { itemIds: string[] }
+
+get_decomposition(input: {
+  sessionCode: string;
+}) → { aggregates: Array<{ name: string; workItems: WorkItem[]; coverage: Record<string, string[]> }> }
+
+suggest_decomposition(input: {
+  sessionCode: string;
+  aggregate: string;
+}) → { suggestedItems: Array<{ title: string; description: string; linkedEvents: string[]; reasoning: string }> }
+
+set_dependency(input: {
+  sessionCode: string;
+  fromItemId: string;
+  toItemId: string;
+}) → { created: boolean }
+```
+
+### Phase V: Agree
+
+```typescript
+suggest_resolution(input: {
+  sessionCode: string;
+  overlapLabel: string;
+}) → { suggestion: { approach: 'merge' | 'pick-left' | 'split' | 'custom'; resolution: string; confidence: number; reasoning: string } }
+```
+
+### Phase VI: Build
+
+```typescript
+validate_against_contract(input: {
+  sessionCode: string;
+  artifactContent: unknown;  // The implementation artifact to validate
+  contractEventName: string; // Which contract to validate against
+}) → { compliant: boolean; violations: Array<{ field: string; expected: string; actual: string }> }
+
+report_progress(input: {
+  sessionCode: string;
+  participantId: string;
+  workItemId: string;
+  percentComplete: number;
+  notes?: string;
+}) → { updated: boolean }
+```
+
+### Phase VII: Ship
+
+```typescript
+run_integration_check(input: {
+  sessionCode: string;
+}) → IntegrationReport
+
+get_go_no_go(input: {
+  sessionCode: string;
+}) → { verdict: 'go' | 'no_go' | 'caution'; summary: string; checkResults: Array<{ name: string; passed: boolean; severity: string }> }
+```
+
+### Cross-cutting
+
+```typescript
+configure_session(input: {
+  sessionCode: string;
+  config: Partial<SessionConfig>;
+}) → { applied: SessionConfig }
+
+get_session_config(input: {
+  sessionCode: string;
+}) → SessionConfig
+
+// SessionConfig shape:
+interface SessionConfig {
+  comparison: { sensitivity: 'semantic' | 'exact'; autoDetectConflicts: boolean; suggestResolutions: boolean };
+  contracts: { strictness: 'strict' | 'warn' | 'relaxed'; driftNotifications: 'immediate' | 'batched' | 'silent' };
+  ranking: { weights: { confidence: number; complexity: number; references: number }; defaultTier: string };
+  delegation: { level: 'assisted' | 'semi_autonomous' | 'autonomous'; approvalExpiry: number };
+  notifications: { toastDuration: number; silentEvents: string[] };
+}
+```
 
 ---
 
