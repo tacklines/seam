@@ -2,6 +2,22 @@
 
 export type Confidence = 'CONFIRMED' | 'LIKELY' | 'POSSIBLE';
 
+// ---------------------------------------------------------------------------
+// Participant — canonical shared type used by both server and client
+// ---------------------------------------------------------------------------
+
+/** The role a participant plays in a session */
+export type ParticipantType = 'human' | 'agent' | 'service';
+
+/** A participant in a session, shared between server and client representations */
+export interface Participant {
+  id: string;
+  name: string;
+  joinedAt: string;
+  type?: ParticipantType;
+  capabilities?: string[];
+}
+
 /** Protocol through which an artifact was submitted */
 export type SubmissionProtocol = 'web' | 'mcp' | 'a2a';
 

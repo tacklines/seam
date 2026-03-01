@@ -8,6 +8,8 @@ import {
   ContractBundle,
   IntegrationReport,
   SessionStatus,
+  Participant,
+  ParticipantType,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -23,11 +25,7 @@ import type {
 import { AgreementService } from '../contexts/agreement/agreement-service.js';
 import { canTransition, transitionSession } from './session-state-machine.js';
 
-export interface Participant {
-  id: string;
-  name: string;
-  joinedAt: string;
-}
+export type { Participant, ParticipantType };
 
 export interface Submission {
   participantId: string;
@@ -132,6 +130,7 @@ export class SessionStore {
       id: creatorId,
       name: creatorName,
       joinedAt: new Date().toISOString(),
+      type: 'human',
     };
 
     const session: Session = {
@@ -162,7 +161,12 @@ export class SessionStore {
     return { session, creatorId };
   }
 
-  joinSession(code: string, participantName: string): { session: Session; participantId: string } | null {
+  joinSession(
+    code: string,
+    participantName: string,
+    participantType: ParticipantType = 'human',
+    capabilities?: string[]
+  ): { session: Session; participantId: string } | null {
     const session = this.sessions.get(code.toUpperCase());
     if (!session) return null;
 
@@ -178,6 +182,8 @@ export class SessionStore {
       id: participantId,
       name: participantName,
       joinedAt: new Date().toISOString(),
+      type: participantType,
+      ...(capabilities !== undefined && { capabilities }),
     };
 
     session.participants.set(participantId, participant);
@@ -190,7 +196,7 @@ export class SessionStore {
         timestamp: participant.joinedAt,
         participantId,
         participantName,
-        participantType: 'human',
+        participantType,
       } satisfies ParticipantJoined);
     }
 

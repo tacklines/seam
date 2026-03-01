@@ -162,6 +162,7 @@ function handleDomainEvent(event: {
       id: event.participantId ?? '',
       name: event.participantName ?? '',
       joinedAt: new Date().toISOString(),
+      type: (event.participantType as SessionParticipant['type']) ?? 'human',
     };
     const already = current.session.participants.find((p) => p.id === participant.id);
     if (!already) {
