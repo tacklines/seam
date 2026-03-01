@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Session, Participant, SerializedSession } from './session-store.js';
+import { DEFAULT_SESSION_CONFIG } from '../schema/types.js';
 
 // ---------------------------------------------------------------------------
 // JSON serialization types
@@ -26,6 +27,7 @@ function sessionToJson(session: Session): SerializedSession {
     contracts: session.contracts,
     integrationReport: session.integrationReport,
     messages: session.messages,
+    config: session.config,
   };
 }
 
@@ -43,6 +45,7 @@ function sessionFromJson(json: SerializedSession): Session {
     contracts: json.contracts,
     integrationReport: json.integrationReport,
     messages: json.messages ?? [],
+    config: json.config ?? DEFAULT_SESSION_CONFIG,
   };
 }
 

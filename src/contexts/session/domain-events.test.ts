@@ -17,6 +17,7 @@ import {
   ContractGeneratedSchema,
   ComplianceCheckCompletedSchema,
   DriftDetectedSchema,
+  SessionConfiguredSchema,
   DomainEventSchema,
   DOMAIN_EVENT_TYPES,
 } from "./domain-events.ts";
@@ -418,6 +419,37 @@ describe("DriftDetected", () => {
   });
 });
 
+describe("SessionConfigured", () => {
+  it("validates with correct data", () => {
+    const result = SessionConfiguredSchema.safeParse({
+      ...base,
+      type: "SessionConfigured",
+      configDelta: { comparison: { sensitivity: "exact" } },
+      configuredBy: "Alice",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("validates with an empty configDelta", () => {
+    const result = SessionConfiguredSchema.safeParse({
+      ...base,
+      type: "SessionConfigured",
+      configDelta: {},
+      configuredBy: "system",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails when configuredBy is missing", () => {
+    const result = SessionConfiguredSchema.safeParse({
+      ...base,
+      type: "SessionConfigured",
+      configDelta: {},
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Discriminated union
 // ---------------------------------------------------------------------------
@@ -488,10 +520,11 @@ describe("DOMAIN_EVENT_TYPES", () => {
     "ContractGenerated",
     "ComplianceCheckCompleted",
     "DriftDetected",
+    "SessionConfigured",
   ];
 
-  it("contains all 17 event types", () => {
-    expect(DOMAIN_EVENT_TYPES).toHaveLength(17);
+  it("contains all 18 event types", () => {
+    expect(DOMAIN_EVENT_TYPES).toHaveLength(18);
   });
 
   it("contains every expected type", () => {

@@ -10,6 +10,8 @@ import {
   SessionStatus,
   Participant,
   ParticipantType,
+  SessionConfig,
+  DEFAULT_SESSION_CONFIG,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -21,6 +23,7 @@ import type {
   SessionPaused,
   SessionResumed,
   SessionClosed,
+  SessionConfigured,
 } from '../contexts/session/domain-events.js';
 import { AgreementService } from '../contexts/agreement/agreement-service.js';
 import { canTransition, transitionSession } from './session-state-machine.js';
@@ -54,6 +57,7 @@ export interface Session {
   jam: JamArtifacts | null;
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
+  config: SessionConfig;
 }
 
 export interface SerializedSession {
@@ -66,6 +70,7 @@ export interface SerializedSession {
   jam: JamArtifacts | null;
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
+  config: SessionConfig;
 }
 
 function generateCode(): string {
@@ -92,6 +97,7 @@ export function serializeSession(session: Session): SerializedSession {
     jam: session.jam,
     contracts: session.contracts,
     integrationReport: session.integrationReport,
+    config: session.config,
   };
 }
 
@@ -106,6 +112,7 @@ export function deserializeSession(serialized: SerializedSession): Session {
     jam: serialized.jam,
     contracts: serialized.contracts,
     integrationReport: serialized.integrationReport,
+    config: serialized.config ?? DEFAULT_SESSION_CONFIG,
   };
 }
 
@@ -143,6 +150,7 @@ export class SessionStore {
       jam: null,
       contracts: null,
       integrationReport: null,
+      config: { ...DEFAULT_SESSION_CONFIG },
     };
 
     this.sessions.set(code, session);
@@ -418,6 +426,50 @@ export class SessionStore {
   getIntegrationReport(code: string): IntegrationReport | null {
     const session = this.sessions.get(code.toUpperCase());
     return session?.integrationReport ?? null;
+  }
+
+  getSessionConfig(code: string): SessionConfig {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) throw new Error(`Session not found: ${code}`);
+    return session.config;
+  }
+
+  updateSessionConfig(
+    code: string,
+    delta: Partial<SessionConfig>,
+    configuredBy: string = 'system'
+  ): SessionConfig {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) throw new Error(`Session not found: ${code}`);
+
+    // Deep merge: shallow merge at each top-level key
+    const updatedConfig: SessionConfig = { ...session.config };
+    for (const key of Object.keys(delta) as (keyof SessionConfig)[]) {
+      const sectionDelta = delta[key];
+      if (sectionDelta !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedConfig as any)[key] = {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(session.config[key] as any),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(sectionDelta as any),
+        };
+      }
+    }
+    session.config = updatedConfig;
+
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'SessionConfigured',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: new Date().toISOString(),
+        configDelta: delta as Record<string, unknown>,
+        configuredBy,
+      } satisfies SessionConfigured);
+    }
+
+    return session.config;
   }
 
   sendMessage(

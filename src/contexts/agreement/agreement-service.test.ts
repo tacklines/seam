@@ -3,6 +3,7 @@ import { AgreementService } from './agreement-service.js';
 import { EventStore } from '../session/event-store.js';
 import type { Session } from '../../lib/session-store.js';
 import type { JamArtifacts } from '../../schema/types.js';
+import { DEFAULT_SESSION_CONFIG } from '../../schema/types.js';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -19,6 +20,7 @@ function makeSession(code = 'ABCDEF', jam: JamArtifacts | null = null): Session 
     jam,
     contracts: null,
     integrationReport: null,
+    config: DEFAULT_SESSION_CONFIG,
   };
 }
 

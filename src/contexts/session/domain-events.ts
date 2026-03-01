@@ -168,7 +168,18 @@ export const DriftDetectedSchema = baseEventSchema.extend({
 export type DriftDetected = z.infer<typeof DriftDetectedSchema>;
 
 // ---------------------------------------------------------------------------
-// Discriminated union — all 17 domain events
+// Configuration Context events
+// ---------------------------------------------------------------------------
+
+export const SessionConfiguredSchema = baseEventSchema.extend({
+  type: z.literal("SessionConfigured"),
+  configDelta: z.record(z.string(), z.unknown()),
+  configuredBy: z.string(),
+});
+export type SessionConfigured = z.infer<typeof SessionConfiguredSchema>;
+
+// ---------------------------------------------------------------------------
+// Discriminated union — all 18 domain events
 // ---------------------------------------------------------------------------
 
 export const DomainEventSchema = z.discriminatedUnion("type", [
@@ -189,6 +200,7 @@ export const DomainEventSchema = z.discriminatedUnion("type", [
   ContractGeneratedSchema,
   ComplianceCheckCompletedSchema,
   DriftDetectedSchema,
+  SessionConfiguredSchema,
 ]);
 
 export type DomainEvent = z.infer<typeof DomainEventSchema>;
@@ -217,4 +229,5 @@ export const DOMAIN_EVENT_TYPES: readonly DomainEventType[] = [
   "ContractGenerated",
   "ComplianceCheckCompleted",
   "DriftDetected",
+  "SessionConfigured",
 ] as const;

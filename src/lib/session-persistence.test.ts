@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { SessionPersistence } from './session-persistence.js';
 import type { Session, Participant, Submission } from './session-store.js';
 import type { CandidateEventsFile, JamArtifacts, ContractBundle, IntegrationReport } from '../schema/types.js';
+import { DEFAULT_SESSION_CONFIG } from '../schema/types.js';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -71,6 +72,7 @@ function makeSession(overrides: Partial<Omit<Session, 'participants'>> & { parti
     jam: null,
     contracts: null,
     integrationReport: null,
+    config: DEFAULT_SESSION_CONFIG,
     ...overrides,
   };
 }

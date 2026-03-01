@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { SessionStore, serializeSession } from './session-store.js';
+import { SessionStore, serializeSession, deserializeSession } from './session-store.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type { CandidateEventsFile, IntegrationReport } from '../schema/types.js';
+import { DEFAULT_SESSION_CONFIG } from '../schema/types.js';
 
 const makeFile = (role: string): CandidateEventsFile => ({
   metadata: {
@@ -766,6 +767,141 @@ describe('SessionStore', () => {
       expect(event.sessionCode).toBe(session.code);
       expect(typeof event.timestamp).toBe('string');
       expect(() => new Date(event.timestamp)).not.toThrow();
+    });
+  });
+
+  describe('getSessionConfig', () => {
+    it('returns DEFAULT_SESSION_CONFIG for a newly created session', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      const config = store.getSessionConfig(session.code);
+      expect(config.comparison.sensitivity).toBe(DEFAULT_SESSION_CONFIG.comparison.sensitivity);
+      expect(config.contracts.strictness).toBe(DEFAULT_SESSION_CONFIG.contracts.strictness);
+      expect(config.ranking.defaultTier).toBe(DEFAULT_SESSION_CONFIG.ranking.defaultTier);
+      expect(config.delegation.level).toBe(DEFAULT_SESSION_CONFIG.delegation.level);
+      expect(config.notifications.toastDuration).toBe(DEFAULT_SESSION_CONFIG.notifications.toastDuration);
+    });
+
+    it('throws for an unknown session code', () => {
+      const store = new SessionStore();
+      expect(() => store.getSessionConfig('XXXXXX')).toThrow('Session not found: XXXXXX');
+    });
+
+    it('session object carries config field initialized to defaults', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      expect(session.config).toBeDefined();
+      expect(session.config.comparison.autoDetectConflicts).toBe(true);
+    });
+  });
+
+  describe('updateSessionConfig', () => {
+    it('merges a partial delta into the session config', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      const updated = store.updateSessionConfig(session.code, {
+        comparison: { sensitivity: 'exact', autoDetectConflicts: true, suggestResolutions: true },
+      });
+      expect(updated.comparison.sensitivity).toBe('exact');
+      // Other sections remain at defaults
+      expect(updated.contracts.strictness).toBe(DEFAULT_SESSION_CONFIG.contracts.strictness);
+    });
+
+    it('deep-merges within a section — unspecified keys keep their defaults', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      const updated = store.updateSessionConfig(session.code, {
+        notifications: { toastDuration: 3000, silentEvents: [] },
+      });
+      // toastDuration changed
+      expect(updated.notifications.toastDuration).toBe(3000);
+      // silentEvents keeps its default (empty array in this case)
+      expect(updated.notifications.silentEvents).toEqual([]);
+    });
+
+    it('returns the updated config', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      const result = store.updateSessionConfig(session.code, {
+        delegation: { level: 'autonomous', approvalExpiry: 3600 },
+      });
+      expect(result.delegation.level).toBe('autonomous');
+      expect(result.delegation.approvalExpiry).toBe(3600);
+    });
+
+    it('persists the updated config on the session', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      store.updateSessionConfig(session.code, {
+        contracts: { strictness: 'strict', driftNotifications: 'batched' },
+      });
+      expect(session.config.contracts.strictness).toBe('strict');
+      expect(session.config.contracts.driftNotifications).toBe('batched');
+    });
+
+    it('throws for an unknown session code', () => {
+      const store = new SessionStore();
+      expect(() =>
+        store.updateSessionConfig('XXXXXX', { comparison: { sensitivity: 'exact', autoDetectConflicts: true, suggestResolutions: true } })
+      ).toThrow('Session not found: XXXXXX');
+    });
+
+    it('emits a SessionConfigured event when EventStore is provided', () => {
+      const eventStore = new EventStore();
+      const store = new SessionStore(eventStore);
+      const { session } = store.createSession('Alice');
+      store.updateSessionConfig(session.code, {
+        ranking: { weights: { confidence: 2, complexity: 1, references: 1 }, defaultTier: 'Must Have' },
+      }, 'Alice');
+
+      const events = eventStore.getEvents(session.code);
+      const configEvent = events.find((e) => e.type === 'SessionConfigured');
+      expect(configEvent).toBeDefined();
+      expect((configEvent as { configuredBy: string }).configuredBy).toBe('Alice');
+      expect((configEvent as { sessionCode: string }).sessionCode).toBe(session.code);
+    });
+
+    it('does not emit a SessionConfigured event when EventStore is absent', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      // No EventStore — should not throw
+      expect(() =>
+        store.updateSessionConfig(session.code, { delegation: { level: 'assisted', approvalExpiry: 86400 } })
+      ).not.toThrow();
+    });
+  });
+
+  describe('config serialization', () => {
+    it('serializeSession includes config', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      store.updateSessionConfig(session.code, {
+        contracts: { strictness: 'relaxed', driftNotifications: 'silent' },
+      });
+      const serialized = serializeSession(session);
+      expect(serialized.config.contracts.strictness).toBe('relaxed');
+    });
+
+    it('deserializeSession restores config', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      store.updateSessionConfig(session.code, {
+        notifications: { toastDuration: 1000, silentEvents: ['ArtifactSubmitted'] },
+      });
+      const serialized = serializeSession(session);
+      const restored = deserializeSession(serialized);
+      expect(restored.config.notifications.toastDuration).toBe(1000);
+      expect(restored.config.notifications.silentEvents).toEqual(['ArtifactSubmitted']);
+    });
+
+    it('deserializeSession falls back to DEFAULT_SESSION_CONFIG when config is missing', () => {
+      const store = new SessionStore();
+      const { session } = store.createSession('Alice');
+      const serialized = serializeSession(session);
+      // Simulate old data without config field
+      const withoutConfig = { ...serialized, config: undefined as unknown as typeof serialized.config };
+      const restored = deserializeSession(withoutConfig);
+      expect(restored.config).toEqual(DEFAULT_SESSION_CONFIG);
     });
   });
 });
