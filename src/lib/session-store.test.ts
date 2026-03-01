@@ -857,7 +857,7 @@ describe('SessionStore', () => {
       const events = eventStore.getEvents(session.code);
       const configEvent = events.find((e) => e.type === 'SessionConfigured');
       expect(configEvent).toBeDefined();
-      expect((configEvent as { configuredBy: string }).configuredBy).toBe('Alice');
+      expect((configEvent as { changedBy: string }).changedBy).toBe('Alice');
       expect((configEvent as { sessionCode: string }).sessionCode).toBe(session.code);
     });
 

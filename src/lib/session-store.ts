@@ -437,7 +437,7 @@ export class SessionStore {
   updateSessionConfig(
     code: string,
     delta: Partial<SessionConfig>,
-    configuredBy: string = 'system'
+    changedBy: string = 'system'
   ): SessionConfig {
     const session = this.sessions.get(code.toUpperCase());
     if (!session) throw new Error(`Session not found: ${code}`);
@@ -465,7 +465,7 @@ export class SessionStore {
         sessionCode: session.code,
         timestamp: new Date().toISOString(),
         configDelta: delta as Record<string, unknown>,
-        configuredBy,
+        changedBy,
       } satisfies SessionConfigured);
     }
 
