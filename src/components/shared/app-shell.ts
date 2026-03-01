@@ -141,10 +141,17 @@ export class AppShell extends LitElement {
     .main sl-tab-group::part(body) {
       flex: 1;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column;
     }
 
     .main sl-tab-panel {
       padding: 1rem;
+    }
+    .main sl-tab-panel[name="flow"] {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     /* ── Errors ── */
@@ -300,7 +307,7 @@ export class AppShell extends LitElement {
                 @flow-search=${this._onFlowSearch}
                 @flow-search-next=${this._onFlowSearchNext}
               ></flow-search>
-              <div style="position: relative;">
+              <div style="position: relative; flex: 1; min-height: 0;">
                 <flow-diagram
                   .files=${files}
                   .searchQuery=${this._searchQuery}

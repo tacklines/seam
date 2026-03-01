@@ -54,6 +54,12 @@
 - i18n module at `src/lib/i18n.ts` — `t(key, params?)` with `{{param}}` interpolation; keys organized by component name (added: 2026-03-01, dispatch: a6r.29)
 - When loop variable shadows imported `t`, rename the loop variable (e.g., `changeType` not `t`) — Lit templates call `t()` frequently (added: 2026-03-01, dispatch: a6r.29)
 
+## Storybook
+- Storybook config files (.storybook/main.ts) run as ESM — use `fileURLToPath(import.meta.url)` + `path.dirname()` instead of `__dirname` (added: 2026-03-01, dispatch: jat)
+- StorybookConfig hook for Vite customization is `viteFinal` (not `viteFinalConfig`). Import the type from `@storybook/web-components-vite` to catch naming mismatches (added: 2026-03-01, dispatch: jat)
+- Storybook 10 with @storybook/web-components-vite: add Tailwind CSS v4 plugin and @ path alias in `viteFinal` hook; don't duplicate vite.config.ts (added: 2026-03-01, dispatch: jat)
+- Stories live in `src/stories/` (one file per component), not colocated with component source (added: 2026-03-01, dispatch: jat)
+
 ## Cross-Agent Notes
 - (from logic) ELK returns top-left (x,y) not center; use `_nodeCx`/`_nodeCy` helpers when computing edge endpoints or zoom targets (added: 2026-02-28)
 - SVG `pointer-events` must be applied via `style=` attribute in Lit svg templates, not as a bare attribute (added: 2026-02-28, dispatch: multi-human-workflows-5ku)

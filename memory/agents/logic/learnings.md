@@ -46,5 +46,9 @@
 - Column count formula `ceil(sqrt(n * aspectRatio))` gives correct landscape packing for any number of disconnected components (added: 2026-02-28, dispatch: x42)
 - When reflowing positions, update three coordinate systems: compound positions, child node absolute positions (parent offset + child relative), and edge section bend points (added: 2026-02-28, dispatch: x42)
 
+## UX Phase Mapping
+- When multiple UX phases share a single engine phase (e.g., spark/explore/rank during prep), use artifact inventory counts inside the switch case — keeps logic co-located and readable (added: 2026-03-01, dispatch: 6vh)
+- Never-exhaustive check (`const _exhaustive: never = value`) in default switch cases provides compile-time safety for string unions without runtime cost (added: 2026-03-01, dispatch: 6vh)
+
 ## Cross-Agent Notes
-- (none yet)
+- Task descriptions may reference types not yet in codebase — check src/schema/types.ts before assuming prior agent's work landed in your worktree (added: 2026-03-01, dispatch: 6vh)

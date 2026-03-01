@@ -43,12 +43,14 @@ export class FlowDiagram extends LitElement {
   static styles = css`
     :host {
       display: block;
+      height: 100%;
     }
     .diagram-wrapper {
       position: relative;
       border: 1px solid var(--sl-color-neutral-200);
       border-radius: var(--sl-border-radius-medium);
       background: #fafbfc;
+      height: 100%;
       min-height: 400px;
       overflow: hidden;
     }

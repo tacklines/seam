@@ -2817,6 +2817,581 @@
       "jam": null,
       "contracts": null,
       "integrationReport": null
+    },
+    {
+      "code": "VGZQQH",
+      "createdAt": "2026-02-28T21:34:52.448Z",
+      "participants": [
+        {
+          "id": "8l16t61px2cmm6uaejk",
+          "name": "Ty",
+          "joinedAt": "2026-02-28T21:34:52.448Z"
+        }
+      ],
+      "submissions": [],
+      "jam": null,
+      "contracts": null,
+      "integrationReport": null
+    },
+    {
+      "code": "83BPNN",
+      "createdAt": "2026-02-28T21:44:15.053Z",
+      "participants": [
+        {
+          "id": "u3mgbvxj3u8mm6umgnh",
+          "name": "Ty",
+          "joinedAt": "2026-02-28T21:44:15.053Z"
+        }
+      ],
+      "submissions": [
+        {
+          "participantId": "u3mgbvxj3u8mm6umgnh",
+          "fileName": "collaborative-storytelling.yaml",
+          "data": {
+            "metadata": {
+              "role": "collaborative-storytelling",
+              "scope": "Collaborative storytelling (whole domain — session lifecycle, jam collaboration, workflow phases, client UI state)",
+              "goal": "Improve collaborative storytelling using tried and tested approaches to product development",
+              "generated_at": "2026-02-28T16:00:00Z",
+              "event_count": 16,
+              "assumption_count": 5
+            },
+            "domain_events": [
+              {
+                "name": "SessionCreated",
+                "aggregate": "Session",
+                "trigger": "User initiates Start a Session via POST /api/sessions with creatorName",
+                "payload": [
+                  {
+                    "field": "code",
+                    "type": "str"
+                  },
+                  {
+                    "field": "creator_id",
+                    "type": "str"
+                  },
+                  {
+                    "field": "creator_name",
+                    "type": "str"
+                  },
+                  {
+                    "field": "created_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "non-existent -> new session with code, creator participant, empty submissions",
+                "integration": {
+                  "direction": "outbound",
+                  "channel": "HTTP REST response (201)"
+                },
+                "sources": [
+                  "src/server/http.ts:69-85",
+                  "src/lib/session-store.ts:73-98"
+                ],
+                "confidence": "CONFIRMED"
+              },
+              {
+                "name": "ParticipantJoined",
+                "aggregate": "Session",
+                "trigger": "User joins via join code POST /api/sessions/:code/join with participantName",
+                "payload": [
+                  {
+                    "field": "code",
+                    "type": "str"
+                  },
+                  {
+                    "field": "participant_id",
+                    "type": "str"
+                  },
+                  {
+                    "field": "participant_name",
+                    "type": "str"
+                  },
+                  {
+                    "field": "joined_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "participants map -> new participant added",
+                "integration": {
+                  "direction": "outbound",
+                  "channel": "SSE broadcast (event-type: participant)"
+                },
+                "sources": [
+                  "src/server/http.ts:87-113",
+                  "src/lib/session-store.ts:100-113"
+                ],
+                "confidence": "CONFIRMED"
+              },
+              {
+                "name": "SubmissionReceived",
+                "aggregate": "Session",
+                "trigger": "Participant submits YAML file via POST /api/sessions/:code/submit",
+                "payload": [
+                  {
+                    "field": "code",
+                    "type": "str"
+                  },
+                  {
+                    "field": "participant_id",
+                    "type": "str"
+                  },
+                  {
+                    "field": "file_name",
+                    "type": "str"
+                  },
+                  {
+                    "field": "event_count",
+                    "type": "int"
+                  },
+                  {
+                    "field": "assumption_count",
+                    "type": "int"
+                  },
+                  {
+                    "field": "submitted_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "empty submissions list -> submission appended",
+                "integration": {
+                  "direction": "outbound",
+                  "channel": "SSE broadcast (event-type: submission)"
+                },
+                "sources": [
+                  "src/server/http.ts:115-151",
+                  "src/lib/session-store.ts:115-134"
+                ],
+                "confidence": "CONFIRMED",
+                "notes": "Validates YAML against candidate-events.schema.json before accepting"
+              },
+              {
+                "name": "JamSessionStarted",
+                "aggregate": "JamArtifacts",
+                "trigger": "Facilitator calls POST /api/sessions/:code/jam/start or jam_start MCP tool",
+                "payload": [
+                  {
+                    "field": "code",
+                    "type": "str"
+                  },
+                  {
+                    "field": "started_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "jam null -> JamArtifacts with empty resolutions, ownership map, unresolved items",
+                "integration": {
+                  "direction": "outbound",
+                  "channel": "SSE broadcast (event-type: jam, action: started)"
+                },
+                "sources": [
+                  "src/server/http.ts:153-166",
+                  "src/lib/session-store.ts:140-151"
+                ],
+                "confidence": "CONFIRMED",
+                "notes": "Idempotent — re-requesting returns existing jam rather than creating new one"
+              },
+              {
+                "name": "ConflictResolved",
+                "aggregate": "JamArtifacts",
+                "trigger": "Facilitator records conflict resolution via POST /api/sessions/:code/jam/resolve",
+                "payload": [
+                  {
+                    "field": "overlap_label",
+                    "type": "str"
+                  },
+                  {
+                    "field": "resolution",
+                    "type": "str"
+                  },
+                  {
+                    "field": "chosen_approach",
+                    "type": "str"
+                  },
+                  {
+                    "field": "resolved_by",
+                    "type": "list[str]"
+                  },
+                  {
+                    "field": "resolved_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "resolutions list -> ConflictResolution appended",
+                "integration": {
+                  "direction": "outbound",
+                  "channel": "SSE broadcast (event-type: jam, action: resolved)"
+                },
+                "sources": [
+                  "src/server/http.ts:168-196",
+                  "src/lib/session-store.ts:153-165"
+                ],
+                "confidence": "CONFIRMED"
+              },
+              {
+                "name": "AggregateOwnershipAssigned",
+                "aggregate": "JamArtifacts",
+                "trigger": "Facilitator assigns aggregate ownership via POST /api/sessions/:code/jam/assign",
+                "payload": [
+                  {
+                    "field": "aggregate",
+                    "type": "str"
+                  },
+                  {
+                    "field": "owner_role",
+                    "type": "str"
+                  },
+                  {
+                    "field": "assigned_by",
+                    "type": "str"
+                  },
+                  {
+                    "field": "assigned_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "ownershipMap -> OwnershipAssignment added or replaced for aggregate",
+                "integration": {
+                  "direction": "outbound",
+                  "channel": "SSE broadcast (event-type: jam, action: assigned)"
+                },
+                "sources": [
+                  "src/server/http.ts:198-224",
+                  "src/lib/session-store.ts:167-183"
+                ],
+                "confidence": "CONFIRMED"
+              },
+              {
+                "name": "UnresolvedItemFlagged",
+                "aggregate": "JamArtifacts",
+                "trigger": "Facilitator flags unresolved item via flagUnresolved on SessionStore",
+                "payload": [
+                  {
+                    "field": "item_id",
+                    "type": "str"
+                  },
+                  {
+                    "field": "description",
+                    "type": "str"
+                  },
+                  {
+                    "field": "related_overlap",
+                    "type": "str"
+                  },
+                  {
+                    "field": "flagged_by",
+                    "type": "str"
+                  },
+                  {
+                    "field": "flagged_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "unresolved list -> UnresolvedItem appended",
+                "integration": {
+                  "direction": "internal"
+                },
+                "sources": [
+                  "src/lib/session-store.ts:185-198"
+                ],
+                "confidence": "CONFIRMED",
+                "notes": "MCP interface not yet exposed in http.ts — only available via store directly"
+              },
+              {
+                "name": "ContractBundleLoaded",
+                "aggregate": "Session",
+                "trigger": "System loads contract output from /formalize via MCP contract_load tool",
+                "payload": [
+                  {
+                    "field": "code",
+                    "type": "str"
+                  },
+                  {
+                    "field": "event_contract_count",
+                    "type": "int"
+                  },
+                  {
+                    "field": "boundary_contract_count",
+                    "type": "int"
+                  },
+                  {
+                    "field": "generated_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "contracts null -> ContractBundle stored",
+                "integration": {
+                  "direction": "inbound",
+                  "channel": "MCP tool (contract_load)"
+                },
+                "sources": [
+                  "src/server/mcp.ts:350-382",
+                  "src/lib/session-store.ts:206-211"
+                ],
+                "confidence": "CONFIRMED"
+              },
+              {
+                "name": "IntegrationReportLoaded",
+                "aggregate": "Session",
+                "trigger": "System loads integration report via MCP integration_load tool",
+                "payload": [
+                  {
+                    "field": "code",
+                    "type": "str"
+                  },
+                  {
+                    "field": "overall_status",
+                    "type": "str"
+                  },
+                  {
+                    "field": "check_count",
+                    "type": "int"
+                  },
+                  {
+                    "field": "generated_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "integrationReport null -> IntegrationReport stored",
+                "integration": {
+                  "direction": "inbound",
+                  "channel": "MCP tool (integration_load)"
+                },
+                "sources": [
+                  "src/server/mcp.ts:417-449",
+                  "src/lib/session-store.ts:218-223"
+                ],
+                "confidence": "CONFIRMED",
+                "notes": "Final validation before workflow completion; determines if session reaches done phase"
+              },
+              {
+                "name": "SessionPersisted",
+                "aggregate": "Session",
+                "trigger": "Any state mutation triggers persistence to data/sessions.json",
+                "payload": [
+                  {
+                    "field": "code",
+                    "type": "str"
+                  },
+                  {
+                    "field": "persisted_at",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "in-memory session -> serialized to JSON file",
+                "integration": {
+                  "direction": "internal"
+                },
+                "sources": [
+                  "src/lib/session-persistence.ts:58-66"
+                ],
+                "confidence": "CONFIRMED"
+              },
+              {
+                "name": "WorkflowPhaseTransitioned",
+                "aggregate": "Session",
+                "trigger": "Session state changes trigger workflow phase inference (computed from artifact inventory)",
+                "payload": [
+                  {
+                    "field": "code",
+                    "type": "str"
+                  },
+                  {
+                    "field": "previous_phase",
+                    "type": "str"
+                  },
+                  {
+                    "field": "current_phase",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "previous workflow phase -> next workflow phase",
+                "integration": {
+                  "direction": "internal"
+                },
+                "sources": [
+                  "src/lib/workflow-engine.ts:108-128"
+                ],
+                "confidence": "LIKELY",
+                "notes": "Phases inferred not commanded: lobby -> prep -> compare -> jam -> formalize -> integrate -> done"
+              },
+              {
+                "name": "FileLoaded",
+                "aggregate": "AppState",
+                "trigger": "User loads a YAML file via file picker or drag-and-drop in the client UI",
+                "payload": [
+                  {
+                    "field": "role",
+                    "type": "str"
+                  },
+                  {
+                    "field": "file_name",
+                    "type": "str"
+                  },
+                  {
+                    "field": "event_count",
+                    "type": "int"
+                  }
+                ],
+                "state_change": "files list -> LoadedFile added or replaced by role",
+                "integration": {
+                  "direction": "internal"
+                },
+                "sources": [
+                  "src/state/app-state.ts:53-67"
+                ],
+                "confidence": "CONFIRMED",
+                "notes": "Auto-switches to comparison view if 2+ files loaded"
+              },
+              {
+                "name": "FileRemoved",
+                "aggregate": "AppState",
+                "trigger": "User removes a loaded file from the client UI",
+                "payload": [
+                  {
+                    "field": "role",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "files list -> LoadedFile with matching role removed",
+                "integration": {
+                  "direction": "internal"
+                },
+                "sources": [
+                  "src/state/app-state.ts:69-78"
+                ],
+                "confidence": "LIKELY",
+                "notes": "Reverts view to cards if fewer than 2 files remain"
+              },
+              {
+                "name": "ViewModeChanged",
+                "aggregate": "AppState",
+                "trigger": "User switches between cards, flow, or comparison view",
+                "payload": [
+                  {
+                    "field": "active_view",
+                    "type": "str"
+                  }
+                ],
+                "state_change": "activeView -> switched between cards, flow, or comparison",
+                "integration": {
+                  "direction": "internal"
+                },
+                "sources": [
+                  "src/state/app-state.ts:80-83"
+                ],
+                "confidence": "CONFIRMED"
+              },
+              {
+                "name": "FilterApplied",
+                "aggregate": "AppState",
+                "trigger": "User toggles confidence level or direction filter in the UI",
+                "payload": [
+                  {
+                    "field": "filter_type",
+                    "type": "str"
+                  },
+                  {
+                    "field": "filter_value",
+                    "type": "str"
+                  },
+                  {
+                    "field": "enabled",
+                    "type": "bool"
+                  }
+                ],
+                "state_change": "filters.confidence or filters.direction sets updated",
+                "integration": {
+                  "direction": "internal"
+                },
+                "sources": [
+                  "src/state/app-state.ts:85-105"
+                ],
+                "confidence": "LIKELY"
+              },
+              {
+                "name": "AggregateSelected",
+                "aggregate": "AppState",
+                "trigger": "User clicks an aggregate to filter or highlight related events",
+                "payload": [
+                  {
+                    "field": "aggregate_name",
+                    "type": "str | None"
+                  }
+                ],
+                "state_change": "selectedAggregate -> set to aggregate name or null",
+                "integration": {
+                  "direction": "internal"
+                },
+                "sources": [
+                  "src/state/app-state.ts:120-123"
+                ],
+                "confidence": "LIKELY"
+              }
+            ],
+            "boundary_assumptions": [
+              {
+                "id": "BA-1",
+                "type": "contract",
+                "statement": "ContractBundleLoaded assumes /formalize produces EventContract[] and BoundaryContract[] with a specific shape defined in src/server/types.ts",
+                "affects_events": [
+                  "ContractBundleLoaded"
+                ],
+                "confidence": "CONFIRMED",
+                "verify_with": "Review /formalize output schema against ContractBundle type definition"
+              },
+              {
+                "id": "BA-2",
+                "type": "contract",
+                "statement": "IntegrationReportLoaded assumes /integrate produces checks with pass|fail|warn|skip status and an overall status field",
+                "affects_events": [
+                  "IntegrationReportLoaded"
+                ],
+                "confidence": "CONFIRMED",
+                "verify_with": "Review /integrate output schema against IntegrationReport type definition"
+              },
+              {
+                "id": "BA-3",
+                "type": "ordering",
+                "statement": "Workflow phases progress linearly: lobby -> prep -> compare -> jam -> formalize -> integrate -> done, with no backward transitions",
+                "affects_events": [
+                  "WorkflowPhaseTransitioned"
+                ],
+                "confidence": "LIKELY",
+                "verify_with": "Review workflow-engine.ts phase transition logic for backward transitions"
+              },
+              {
+                "id": "BA-4",
+                "type": "existence",
+                "statement": "YAML submissions validate against candidate-events.schema.json which is the shared contract with the tackline pipeline",
+                "affects_events": [
+                  "SubmissionReceived"
+                ],
+                "confidence": "CONFIRMED",
+                "verify_with": "Schema is checked into src/schema/candidate-events.schema.json"
+              },
+              {
+                "id": "BA-5",
+                "type": "ownership",
+                "statement": "Client-side UI state events (FileLoaded, FileRemoved, ViewModeChanged, FilterApplied, AggregateSelected) belong to the AppState bounded context, separate from the Session server-side domain",
+                "affects_events": [
+                  "FileLoaded",
+                  "FileRemoved",
+                  "ViewModeChanged",
+                  "FilterApplied",
+                  "AggregateSelected"
+                ],
+                "confidence": "LIKELY",
+                "verify_with": "Confirm whether client-side state should be modeled as a separate bounded context or folded into Session"
+              }
+            ]
+          },
+          "submittedAt": "2026-02-28T21:44:20.852Z"
+        }
+      ],
+      "jam": null,
+      "contracts": null,
+      "integrationReport": null
     }
   ]
 }

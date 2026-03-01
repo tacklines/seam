@@ -14,6 +14,7 @@
 - Use `satisfies EventType` on event literal objects — compile-time safety without widening inferred type (added: 2026-02-28)
 - Transition tables as `Record<State, Partial<Record<Action, State>>>` preferable to switch statements (added: 2026-02-28)
 - Zod v4 requires `z.record(z.string(), z.unknown())` — single-arg form is a type error (added: 2026-02-28)
+- Use `as const satisfies T` for frozen config objects with string union fields — `Object.freeze` alone widens literals to `string` (added: 2026-03-01, dispatch: b79)
 
 ### Architecture Patterns
 - Inject narrow accessor `(code: string) => Session | null` into context services — avoids circular imports (added: 2026-02-28)
@@ -44,5 +45,9 @@
 - Keycloak `--import-realm` with volume mount to `/opt/keycloak/data/import/` for pre-configured realm (added: 2026-02-28)
 - For polling MCP tools, callers must track semantic values (e.g., currentPhase) not timestamp-based `changed` booleans (added: 2026-02-28)
 
+### Type Unification
+- When consolidating duplicate types, the alias pattern (`export type ClientType = CanonicalType`) preserves all downstream consumers without touching import sites (added: 2026-03-01, dispatch: xiu)
+- `src/schema/types.ts` is the correct home for types shared across server (src/lib/) and client (src/state/) layers (added: 2026-03-01, dispatch: xiu)
+
 ## Cross-Agent Notes
-- Two parallel participant types: `SessionParticipant` (client, `src/state/app-state.ts`) and `Participant` (server, `src/lib/session-store.ts`) — both need updating if a field should be available on both sides (added: 2026-03-01, dispatch: pmf)
+- Participant type now unified in `src/schema/types.ts` — `SessionParticipant` is an alias. Both layers import from schema/ (added: 2026-03-01, dispatch: xiu)
