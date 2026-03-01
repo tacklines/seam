@@ -109,17 +109,24 @@ export class FlowSearch extends LitElement {
 
   render() {
     return html`
-      <div class="search-bar">
+      <div class="search-bar" role="search" aria-label="Search flow diagram nodes">
         <sl-input
           type="search"
           placeholder="Search nodes..."
+          label="Search nodes"
           clearable
           size="small"
+          aria-label="Search flow diagram nodes. Press Enter to go to next match."
           @sl-input=${this._onInput}
           @sl-clear=${this._onClear}
           @keydown=${this._onKeyDown}
         ></sl-input>
-        <span class=${this._matchClass()}>${this._matchLabel()}</span>
+        <span
+          class=${this._matchClass()}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >${this._matchLabel()}</span>
       </div>
     `;
   }

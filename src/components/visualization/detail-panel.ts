@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { ref, createRef } from 'lit/directives/ref.js';
 
 export interface DetailEventEntry {
   name: string;
@@ -43,6 +44,8 @@ const DIRECTION_LABELS: Record<string, string> = {
 
 @customElement('detail-panel')
 export class DetailPanel extends LitElement {
+  private _closeBtnRef = createRef<HTMLButtonElement>();
+  private _previouslyFocusedElement: HTMLElement | null = null;
   static styles = css`
     :host {
       display: block;
@@ -122,6 +125,11 @@ export class DetailPanel extends LitElement {
     .close-btn:hover {
       background: #f3f4f6;
       color: #111827;
+    }
+
+    .close-btn:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 1px;
     }
 
     .panel-body {
@@ -253,6 +261,31 @@ export class DetailPanel extends LitElement {
   /** The node data to display. Set to null to close the panel. */
   @property({ attribute: false }) nodeData: DetailNodeData | null = null;
 
+  override updated(changed: Map<string, unknown>) {
+    if (changed.has('nodeData')) {
+      const wasOpen = changed.get('nodeData') !== undefined && changed.get('nodeData') !== null;
+      const isNowOpen = this.nodeData !== null;
+      if (isNowOpen && !wasOpen) {
+        // Panel just opened — save focused element and focus close button
+        this._previouslyFocusedElement = document.activeElement as HTMLElement;
+        requestAnimationFrame(() => {
+          this._closeBtnRef.value?.focus();
+        });
+      } else if (!isNowOpen && wasOpen) {
+        // Panel just closed — restore focus
+        this._previouslyFocusedElement?.focus();
+        this._previouslyFocusedElement = null;
+      }
+    }
+  }
+
+  private _onKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && this.nodeData !== null) {
+      e.stopPropagation();
+      this._onClose();
+    }
+  }
+
   private _onClose() {
     this.dispatchEvent(
       new CustomEvent('detail-panel-close', {
@@ -372,7 +405,14 @@ export class DetailPanel extends LitElement {
     const data = this.nodeData;
 
     return html`
-      <div class="panel ${isOpen ? 'open' : ''}">
+      <div
+        class="panel ${isOpen ? 'open' : ''}"
+        role="dialog"
+        aria-modal="false"
+        aria-label=${data ? `${data.kind === 'aggregate' ? 'Aggregate' : 'External System'}: ${data.label}` : 'Detail panel'}
+        aria-hidden=${isOpen ? 'false' : 'true'}
+        @keydown=${this._onKeyDown}
+      >
         ${data
           ? html`
             <div class="panel-header">
@@ -382,7 +422,13 @@ export class DetailPanel extends LitElement {
                 </div>
                 <div class="panel-title">${data.label}</div>
               </div>
-              <button class="close-btn" @click=${this._onClose} title="Close panel" aria-label="Close detail panel">
+              <button
+                class="close-btn"
+                ${ref(this._closeBtnRef)}
+                @click=${this._onClose}
+                title="Close panel"
+                aria-label="Close detail panel for ${data.label}"
+              >
                 &times;
               </button>
             </div>

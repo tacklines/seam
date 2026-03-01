@@ -140,35 +140,35 @@ export class CardView extends LitElement {
     const { total, byConfidence: conf, byDirection: dir } = this._eventFilterCtrl.stats;
 
     return html`
-      <div class="stats-bar">
+      <div class="stats-bar" role="status" aria-label="Event statistics: ${total} total events">
         <span class="stat-label">${total} events</span>
 
-        <div class="stat-group">
+        <div class="stat-group" aria-label="By confidence">
           <span class="stat-item">
-            <span class="stat-dot stat-dot--confirmed"></span>
+            <span class="stat-dot stat-dot--confirmed" aria-hidden="true"></span>
             ${conf.CONFIRMED} confirmed
           </span>
           <span class="stat-item">
-            <span class="stat-dot stat-dot--likely"></span>
+            <span class="stat-dot stat-dot--likely" aria-hidden="true"></span>
             ${conf.LIKELY} likely
           </span>
           <span class="stat-item">
-            <span class="stat-dot stat-dot--possible"></span>
+            <span class="stat-dot stat-dot--possible" aria-hidden="true"></span>
             ${conf.POSSIBLE} possible
           </span>
         </div>
 
-        <div class="stat-group">
+        <div class="stat-group" aria-label="By direction">
           <span class="stat-item">
-            <span class="stat-dot stat-dot--inbound"></span>
+            <span class="stat-dot stat-dot--inbound" aria-hidden="true"></span>
             ${dir.inbound} inbound
           </span>
           <span class="stat-item">
-            <span class="stat-dot stat-dot--outbound"></span>
+            <span class="stat-dot stat-dot--outbound" aria-hidden="true"></span>
             ${dir.outbound} outbound
           </span>
           <span class="stat-item">
-            <span class="stat-dot stat-dot--internal"></span>
+            <span class="stat-dot stat-dot--internal" aria-hidden="true"></span>
             ${dir.internal} internal
           </span>
         </div>
@@ -193,7 +193,7 @@ export class CardView extends LitElement {
         const groups = this._eventFilterCtrl.groupsForFile(file);
 
         return html`
-          <div class="role-section">
+          <section class="role-section" aria-label="${file.role} role">
             <div class="role-header">
               <span class="role-name">${file.role}</span>
               <sl-tag size="small">${file.data.metadata.scope}</sl-tag>
@@ -226,7 +226,7 @@ export class CardView extends LitElement {
                 `;
               })}
             <assumption-list .assumptions=${file.data.boundary_assumptions}></assumption-list>
-          </div>
+          </section>
         `;
       })}
     `;

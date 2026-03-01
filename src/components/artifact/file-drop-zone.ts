@@ -121,19 +121,26 @@ export class FileDropZone extends LitElement {
     return html`
       <div
         class="drop-zone ${this.dragging ? 'dragging' : ''}"
+        role="button"
+        tabindex="0"
+        aria-label="Drop storm-prep YAML files here, or press Enter or Space to browse for files"
+        aria-dropeffect="copy"
+        aria-live="polite"
         @dragover=${this.onDragOver}
         @dragleave=${this.onDragLeave}
         @drop=${this.onDrop}
         @click=${this.onClick}
+        @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.onClick(); } }}
       >
-        <sl-icon name="cloud-arrow-up" class="drop-icon"></sl-icon>
-        <p class="cta">Drop storm-prep YAML files here</p>
+        <sl-icon name="cloud-arrow-up" class="drop-icon" aria-hidden="true"></sl-icon>
+        <p class="cta">${this.dragging ? 'Release to upload files' : 'Drop storm-prep YAML files here'}</p>
         <p class="cta-secondary">or click to browse</p>
       </div>
       <input
         type="file"
         accept=".yaml,.yml"
         multiple
+        aria-label="Choose storm-prep YAML files to upload"
         @change=${this.onFileInput}
       />
     `;

@@ -206,7 +206,7 @@ export class AppShell extends LitElement {
     return html`
       ${errors.length > 0
         ? html`
-            <div class="errors">
+            <div class="errors" role="alert" aria-live="assertive">
               ${errors.map(
                 (err) => html`
                   <sl-alert variant="danger" open closable @sl-after-hide=${() => store.clearErrors()}>
@@ -248,8 +248,13 @@ export class AppShell extends LitElement {
         <!-- Sidebar -->
         <div class="sidebar">
           <div class="sidebar-toggle">
-            <sl-button size="small" variant="text" @click=${() => store.toggleSidebar()}>
-              <sl-icon name=${sidebarCollapsed ? 'chevron-right' : 'chevron-left'}></sl-icon>
+            <sl-button
+              size="small"
+              variant="text"
+              aria-label=${sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              @click=${() => store.toggleSidebar()}
+            >
+              <sl-icon name=${sidebarCollapsed ? 'chevron-right' : 'chevron-left'} aria-hidden="true"></sl-icon>
             </sl-button>
           </div>
           <div class="sidebar-content">

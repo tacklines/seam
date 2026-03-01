@@ -59,7 +59,7 @@ export class ComparisonView extends LitElement {
     .section-heading {
       font-size: 1.125rem;
       font-weight: 700;
-      margin-bottom: 0.75rem;
+      margin: 0 0 0.75rem;
       padding-left: 0.75rem;
       border-left: 3px solid currentColor;
     }
@@ -139,24 +139,24 @@ export class ComparisonView extends LitElement {
 
     return html`
       <!-- Dashboard Header -->
-      <div class="stats">
-        <div class="stat-card conflicts">
-          <div class="stat-number">${conflicts.length}</div>
+      <div class="stats" role="region" aria-label="Comparison summary">
+        <div class="stat-card conflicts" role="status" aria-label="${conflicts.length} conflicts found">
+          <div class="stat-number" aria-hidden="true">${conflicts.length}</div>
           <div class="stat-label">Conflicts</div>
         </div>
-        <div class="stat-card shared-events">
-          <div class="stat-number">${sharedEvents.length}</div>
+        <div class="stat-card shared-events" role="status" aria-label="${sharedEvents.length} shared events">
+          <div class="stat-number" aria-hidden="true">${sharedEvents.length}</div>
           <div class="stat-label">Shared Events</div>
         </div>
-        <div class="stat-card shared-aggregates">
-          <div class="stat-number">${sharedAggregates.length}</div>
+        <div class="stat-card shared-aggregates" role="status" aria-label="${sharedAggregates.length} shared aggregates">
+          <div class="stat-number" aria-hidden="true">${sharedAggregates.length}</div>
           <div class="stat-label">Shared Aggregates</div>
         </div>
       </div>
 
       <!-- Conflicts Section -->
-      <div class="section">
-        <div class="section-heading conflicts">Conflicts</div>
+      <div class="section" role="region" aria-label="Conflicts" aria-live="polite">
+        <h2 class="section-heading conflicts">Conflicts</h2>
         ${conflicts.length > 0
           ? html`<div class="card-list">
               ${conflicts.map(
@@ -167,8 +167,8 @@ export class ComparisonView extends LitElement {
       </div>
 
       <!-- Shared Events Section -->
-      <div class="section">
-        <div class="section-heading shared-events">Shared Events</div>
+      <div class="section" role="region" aria-label="Shared Events">
+        <h2 class="section-heading shared-events">Shared Events</h2>
         ${sharedEvents.length > 0
           ? html`<div class="card-list">
               ${sharedEvents.map(
@@ -179,8 +179,8 @@ export class ComparisonView extends LitElement {
       </div>
 
       <!-- Shared Aggregates Section -->
-      <div class="section">
-        <div class="section-heading shared-aggregates">Shared Aggregates</div>
+      <div class="section" role="region" aria-label="Shared Aggregates">
+        <h2 class="section-heading shared-aggregates">Shared Aggregates</h2>
         ${sharedAggregates.length > 0
           ? html`<div class="card-list">
               ${sharedAggregates.map(
@@ -195,7 +195,7 @@ export class ComparisonView extends LitElement {
         <div class="panels">
           ${this.files.map(
             (file) => html`
-              <div class="panel">
+              <div class="panel" role="region" aria-label="${file.role} role panel">
                 <div class="panel-header">${file.role}</div>
                 <div class="panel-meta">
                   ${file.data.metadata.scope} &middot;

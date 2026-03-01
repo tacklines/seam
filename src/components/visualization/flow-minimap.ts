@@ -172,10 +172,15 @@ export class FlowMinimap extends LitElement {
     const vh = Math.min(MINIMAP_H - vy, viewport.h);
 
     return html`
-      <div class="minimap-container">
+      <div
+        class="minimap-container"
+        role="img"
+        aria-label="Flow diagram minimap showing ${this.nodes.length} nodes. Drag the blue viewport rectangle to navigate."
+      >
         <svg
           viewBox="0 0 ${MINIMAP_W} ${MINIMAP_H}"
           xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
         >
           <!-- Scale the graph content to minimap size -->
           <g transform="scale(${MINIMAP_W / gw}, ${MINIMAP_H / gh})">

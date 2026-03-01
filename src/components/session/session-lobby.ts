@@ -98,6 +98,11 @@ export class SessionLobby extends LitElement {
       transform: translateY(-2px);
     }
 
+    .option-card:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500);
+      outline-offset: 2px;
+    }
+
     .option-card sl-icon {
       font-size: 2.5rem;
       margin-bottom: 0.75rem;
@@ -174,6 +179,12 @@ export class SessionLobby extends LitElement {
 
     .flow-card .back-link:hover {
       color: var(--sl-color-primary-600);
+    }
+
+    .flow-card .back-link:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500);
+      outline-offset: 2px;
+      border-radius: 2px;
     }
 
     /* ── Join code display ── */
@@ -526,14 +537,28 @@ export class SessionLobby extends LitElement {
           then see the combined results together.
         </p>
 
-        <div class="landing-options">
-          <div class="option-card option-card--create" @click=${() => { this._lobbyState = 'creating'; this._error = ''; }}>
-            <sl-icon name="plus-circle-fill"></sl-icon>
+        <div class="landing-options" role="group" aria-label="Session options">
+          <div
+            class="option-card option-card--create"
+            role="button"
+            tabindex="0"
+            aria-label="Start a Session: Create a new session and invite your team with a join code"
+            @click=${() => { this._lobbyState = 'creating'; this._error = ''; }}
+            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'creating'; this._error = ''; } }}
+          >
+            <sl-icon name="plus-circle-fill" aria-hidden="true"></sl-icon>
             <p class="option-title">Start a Session</p>
             <p class="option-desc">Create a new session and invite your team with a join code</p>
           </div>
-          <div class="option-card option-card--join" @click=${() => { this._lobbyState = 'joining'; this._error = ''; }}>
-            <sl-icon name="box-arrow-in-right"></sl-icon>
+          <div
+            class="option-card option-card--join"
+            role="button"
+            tabindex="0"
+            aria-label="Join a Session: Enter a join code from your team lead to participate"
+            @click=${() => { this._lobbyState = 'joining'; this._error = ''; }}
+            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'joining'; this._error = ''; } }}
+          >
+            <sl-icon name="box-arrow-in-right" aria-hidden="true"></sl-icon>
             <p class="option-title">Join a Session</p>
             <p class="option-desc">Enter a join code from your team lead to participate</p>
           </div>
@@ -541,7 +566,7 @@ export class SessionLobby extends LitElement {
 
         <p class="solo-option">
           Just exploring?
-          <a @click=${this._onSoloClick}>Load files locally</a>
+          <a role="button" tabindex="0" @click=${this._onSoloClick} @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._onSoloClick(); } }}>Load files locally</a>
           without a session.
         </p>
       </div>
@@ -556,8 +581,15 @@ export class SessionLobby extends LitElement {
     return html`
       <div class="flow-container">
         <div class="flow-card">
-          <span class="back-link" @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}>
-            <sl-icon name="arrow-left"></sl-icon> Back
+          <span
+            class="back-link"
+            role="button"
+            tabindex="0"
+            aria-label="Back to landing"
+            @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}
+            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'landing'; this._error = ''; } }}
+          >
+            <sl-icon name="arrow-left" aria-hidden="true"></sl-icon> Back
           </span>
           <h2>Start a Session</h2>
 
@@ -591,8 +623,15 @@ export class SessionLobby extends LitElement {
     return html`
       <div class="flow-container">
         <div class="flow-card">
-          <span class="back-link" @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}>
-            <sl-icon name="arrow-left"></sl-icon> Back
+          <span
+            class="back-link"
+            role="button"
+            tabindex="0"
+            aria-label="Back to landing"
+            @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}
+            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'landing'; this._error = ''; } }}
+          >
+            <sl-icon name="arrow-left" aria-hidden="true"></sl-icon> Back
           </span>
           <h2>Join a Session</h2>
 
@@ -644,9 +683,12 @@ export class SessionLobby extends LitElement {
             <h2 class="session-title">Session Lobby</h2>
             <span
               class="session-code-chip"
-              title="Share this code with your team"
-              style="cursor:pointer"
+              role="button"
+              tabindex="0"
+              title="Copy session code to clipboard"
+              aria-label="Session code ${session.code}. Click to copy."
               @click=${() => void navigator.clipboard.writeText(session.code)}
+              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void navigator.clipboard.writeText(session.code); } }}
             >${session.code}</span>
           </div>
 
@@ -677,18 +719,18 @@ export class SessionLobby extends LitElement {
           </sl-alert>
 
           <!-- Participants -->
-          <p class="section-label">
+          <p class="section-label" id="participants-label">
             Participants
             <sl-badge variant="neutral" pill style="margin-left:0.4rem;">${session.participants.length}</sl-badge>
           </p>
-          <ul class="participant-list">
+          <ul class="participant-list" aria-labelledby="participants-label" role="list" aria-live="polite">
             ${session.participants.map((p) => {
               const submitted = session.submissions.some((s) => s.participantId === p.id);
               const isMe = p.id === participantId;
               return html`
-                <li class="participant-item">
+                <li class="participant-item" aria-label="${p.name}${isMe ? ' (you)' : ''}, ${submitted ? 'submitted' : 'waiting'}">
                   <span class="participant-name">
-                    <sl-icon name="person-fill"></sl-icon>
+                    <sl-icon name="person-fill" aria-hidden="true"></sl-icon>
                     ${p.name}
                     ${isMe ? html`<span class="you-label">(you)</span>` : nothing}
                   </span>
@@ -739,8 +781,8 @@ export class SessionLobby extends LitElement {
                   </sl-button>
                 `
               : html`
-                  <div class="waiting">
-                    <sl-spinner></sl-spinner>
+                  <div class="waiting" role="status" aria-live="polite">
+                    <sl-spinner aria-hidden="true"></sl-spinner>
                     Waiting for participants to submit files...
                   </div>
                 `}

@@ -215,14 +215,14 @@ export class AssumptionList extends LitElement {
 
   private _renderStats(confCounts: Record<Confidence, number>, conflictCount: number) {
     return html`
-      <div class="stats-bar">
+      <div class="stats-bar" role="status" aria-label="Boundary assumptions summary">
         <span class="stat">
           <span class="stat-count">${this.assumptions.length}</span> assumptions
         </span>
         ${(['CONFIRMED', 'LIKELY', 'POSSIBLE'] as Confidence[]).map(
           (c) => html`
             <span class="stat">
-              <span class="stat-dot" style="background:${CONFIDENCE_DOT[c]}"></span>
+              <span class="stat-dot" style="background:${CONFIDENCE_DOT[c]}" aria-hidden="true"></span>
               <span class="stat-count">${confCounts[c]}</span>
               ${c.toLowerCase()}
             </span>
@@ -230,7 +230,7 @@ export class AssumptionList extends LitElement {
         )}
         ${conflictCount > 0
           ? html`
-              <span class="stat stat-conflict">
+              <span class="stat stat-conflict" role="alert" aria-live="polite">
                 <span class="stat-count">${conflictCount}</span> conflicting
               </span>
             `
@@ -246,9 +246,9 @@ export class AssumptionList extends LitElement {
   ) {
     const color = TYPE_COLORS[type];
     return html`
-      <sl-details open>
+      <sl-details open aria-label="${type} assumptions, ${items.length} items">
         <div slot="summary" class="section-header">
-          <span class="section-border" style="background:${color}"></span>
+          <span class="section-border" style="background:${color}" aria-hidden="true"></span>
           ${type}
           <span class="section-count">(${items.length})</span>
         </div>
@@ -265,6 +265,8 @@ export class AssumptionList extends LitElement {
       <div
         class="assumption ${isConflicting ? 'conflicting' : ''}"
         style="border-left-color:${borderColor}"
+        role="article"
+        aria-label="${a.id}${isConflicting ? ', conflicting assumption' : ''}: ${a.statement}"
       >
         <div class="assumption-header">
           <div class="assumption-id-group">

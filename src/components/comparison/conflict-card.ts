@@ -197,14 +197,15 @@ export class ConflictCard extends LitElement {
 
   render() {
     const o = this.overlap;
+    const kindLabel = o.kind === 'same-name' ? 'Shared Event' : o.kind === 'same-aggregate' ? 'Shared Aggregate' : 'Assumption Conflict';
     return html`
-      <div class="card ${o.kind}">
+      <article class="card ${o.kind}" aria-label="${kindLabel}: ${o.label}">
         <div class="header">
           <span class="label">${o.label}</span>
           <div class="badges">${this._renderBadge()}</div>
         </div>
         ${this._renderBody()}
-      </div>
+      </article>
     `;
   }
 
@@ -261,14 +262,14 @@ export class ConflictCard extends LitElement {
     const rightFields = new Set(re.payload.map((p) => `${p.field}:${p.type}`));
 
     return html`
-      <div class="comparison">
-        <div class="role-column">
-          <div class="role-header"><span class="role-dot left"></span>${left.role}</div>
+      <div class="comparison" role="table" aria-label="Side-by-side comparison of ${eventName}">
+        <div class="role-column" role="columnheader">
+          <div class="role-header"><span class="role-dot left" aria-hidden="true"></span>${left.role}</div>
           ${this._renderEventFields(le, aggDiffers, triggerDiffers, stateDiffers, channelDiffers, 'left')}
           ${this._renderPayloadColumn(le, rightFields, 'left')}
         </div>
-        <div class="role-column">
-          <div class="role-header"><span class="role-dot right"></span>${right.role}</div>
+        <div class="role-column" role="columnheader">
+          <div class="role-header"><span class="role-dot right" aria-hidden="true"></span>${right.role}</div>
           ${this._renderEventFields(re, aggDiffers, triggerDiffers, stateDiffers, channelDiffers, 'right')}
           ${this._renderPayloadColumn(re, leftFields, 'right')}
         </div>
@@ -372,13 +373,13 @@ export class ConflictCard extends LitElement {
     }
 
     return html`
-      <div class="comparison">
-        <div class="role-column">
-          <div class="role-header"><span class="role-dot left"></span>${roles[0]}</div>
+      <div class="comparison" role="table" aria-label="Conflicting assumptions: ${leftId} vs ${rightId}">
+        <div class="role-column" role="columnheader">
+          <div class="role-header"><span class="role-dot left" aria-hidden="true"></span>${roles[0]}</div>
           ${this._renderAssumptionDetail(leftAssumption)}
         </div>
-        <div class="role-column">
-          <div class="role-header"><span class="role-dot right"></span>${roles[1]}</div>
+        <div class="role-column" role="columnheader">
+          <div class="role-header"><span class="role-dot right" aria-hidden="true"></span>${roles[1]}</div>
           ${this._renderAssumptionDetail(rightAssumption)}
         </div>
       </div>

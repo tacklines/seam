@@ -46,6 +46,11 @@ export class AggregateNav extends LitElement {
       background: var(--sl-color-neutral-100);
     }
 
+    .nav-row:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500);
+      outline-offset: -2px;
+    }
+
     .nav-row.selected {
       background: var(--sl-color-neutral-200);
     }
@@ -144,7 +149,12 @@ export class AggregateNav extends LitElement {
     return html`
       <div
         class="nav-row ${isSelected ? 'selected' : ''}"
+        role="button"
+        tabindex="0"
+        aria-pressed=${isSelected ? 'true' : 'false'}
+        aria-label="Show all aggregates"
         @click=${() => this.handleSelect(null)}
+        @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.handleSelect(null); } }}
       >
         <span class="show-all-label">Show all</span>
         <sl-badge variant="neutral" pill>${this.totalEventCount}</sl-badge>
@@ -162,7 +172,12 @@ export class AggregateNav extends LitElement {
       <div
         class="nav-row aggregate-row ${isSelected ? 'selected' : ''}"
         style="border-left-color: ${borderColor}; ${bgColor ? `--row-bg: ${bgColor}` : ''}"
+        role="button"
+        tabindex="0"
+        aria-pressed=${isSelected ? 'true' : 'false'}
+        aria-label="Filter by aggregate: ${entry.name}, ${entry.count} events"
         @click=${() => this.handleSelect(entry.name)}
+        @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.handleSelect(entry.name); } }}
       >
         <span class="aggregate-name">${entry.name}</span>
         <sl-badge variant="neutral" pill>${entry.count}</sl-badge>

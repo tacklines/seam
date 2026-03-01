@@ -173,6 +173,18 @@ export class ComparisonDiff extends LitElement {
       vertical-align: middle;
     }
 
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+
     .svg-wrapper {
       border: 1px solid #e5e7eb;
       border-radius: 8px;
@@ -319,14 +331,23 @@ export class ComparisonDiff extends LitElement {
 
       ${!this._loading && this._fileAIndex !== this._fileBIndex && this._layoutNodes.length > 0
         ? html`
-            <div class="summary">
+            <div class="summary" role="status" aria-live="polite">
               ${this._diffNodes.length} events total —
               ${sharedCount} shared, ${onlyACount} only in A, ${onlyBCount} only in B
             </div>
-            <div class="svg-wrapper">
+            <div class="svg-wrapper" role="img" aria-label="Overlay diff graph: ${sharedCount} shared events, ${onlyACount} only in file A, ${onlyBCount} only in file B">
               ${this._renderSvg()}
             </div>
             ${this._renderLegend()}
+            <table class="sr-only" aria-label="Diff events list">
+              <caption>All ${this._diffNodes.length} events in the diff</caption>
+              <thead><tr><th>Event Name</th><th>Aggregate</th><th>Status</th></tr></thead>
+              <tbody>
+                ${this._diffNodes.map(
+                  (n) => html`<tr><td>${n.eventName}</td><td>${n.aggregate}</td><td>${STATUS_LABEL[n.status]}</td></tr>`
+                )}
+              </tbody>
+            </table>
           `
         : nothing}
 
