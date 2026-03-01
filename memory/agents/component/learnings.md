@@ -6,10 +6,6 @@
 - `experimentalDecorators: true` + `useDefineForClassFields: false` in tsconfig (required for Lit)
 - Components organized by domain feature: shared/, session/, artifact/, comparison/, visualization/ under src/components/ (added: 2026-02-28, dispatch: a6r.12)
 
-## File Move Patterns
-- When moving TS files to deeper paths, run two sed passes: one for `from '...'` imports, one for `import('...')` inline type expressions — the latter hides in method signatures (added: 2026-02-28, dispatch: a6r.12)
-- `shared/` subdirectory for cross-domain UI primitives (event-card, assumption-list, aggregate-nav, filter-panel) avoids circular dependencies between domain directories (added: 2026-02-28, dispatch: a6r.12)
-
 ## Gotchas
 - ELK TypeScript types: `elk.layout()` returns `ElkNode` — annotate children/edges with explicit `ElkNode` type to avoid implicit-any on `.x`/`.y` access (added: 2026-02-28, dispatch: multi-human-workflows-ort)
 - Shoelace `sl-change` event: `e.target` is `SlSelect` not `HTMLSelectElement`; cast via `(e.target as unknown as { value: string }).value` for type-safe access (added: 2026-02-28, dispatch: multi-human-workflows-ort)
@@ -38,10 +34,6 @@
 ## Accessibility
 - SVG keyboard navigation: add `tabindex="0"`, `role="application"`, `aria-label`, `aria-activedescendant` to the SVG element; use `role="img"` and `aria-label` on node `<g>` elements (added: 2026-02-28, dispatch: multi-human-workflows-jus)
 - Roving tabindex pattern for graph: build adjacency map from edges, use ArrowRight/Down (+1) and ArrowLeft/Up (-1) to traverse, Enter/Space to activate, Escape to clear focus (added: 2026-02-28, dispatch: multi-human-workflows-jus)
-
-## Force Layout
-- d3-force fixed-node pattern: setting `fx`/`fy` on a simulation node makes it immovable — useful as a gravity anchor for cluster layout (added: 2026-02-28, dispatch: multi-human-workflows-82g)
-- `simulation.stop()` then `for (i) sim.tick()` for synchronous force convergence; calling `.stop()` before adding forces is safe (added: 2026-02-28, dispatch: multi-human-workflows-82g)
 
 ## State Lifting
 - When a Lit component manages connection lifecycle (EventSource, WebSocket), put the connection in `state/` with a module-level variable, not in the component — state persists across navigation, components focus on rendering (added: 2026-02-28, dispatch: a6r.34)
