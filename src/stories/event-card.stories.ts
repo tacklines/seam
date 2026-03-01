@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/web-components';
+import type { Args, Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
 import type { DomainEvent } from '../schema/types.js';
 
@@ -8,7 +8,7 @@ import '../components/shared/event-card.js';
 const meta: Meta = {
   title: 'Shared/EventCard',
   tags: ['autodocs'],
-  render: (args) => html`
+  render: (args: Args) => html`
     <div style="max-width: 400px; padding: 1rem;">
       <event-card
         .event=${args.event as DomainEvent}
