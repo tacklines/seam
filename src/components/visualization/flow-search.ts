@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
 import type SlInput from '@shoelace-style/shoelace/dist/components/input/input.js';
+import { t } from '../../lib/i18n.js';
 
 @customElement('flow-search')
 export class FlowSearch extends LitElement {
@@ -96,9 +97,9 @@ export class FlowSearch extends LitElement {
 
   private _matchLabel(): string {
     if (!this._query) return '';
-    if (this.matchCount === 0) return 'No matches';
+    if (this.matchCount === 0) return t('flowSearch.noMatches');
     const current = this.currentMatch >= 0 ? this.currentMatch + 1 : 1;
-    return `${current} of ${this.matchCount} matches`;
+    return t('flowSearch.matchCount', { current, total: this.matchCount });
   }
 
   private _matchClass(): string {
@@ -109,14 +110,14 @@ export class FlowSearch extends LitElement {
 
   render() {
     return html`
-      <div class="search-bar" role="search" aria-label="Search flow diagram nodes">
+      <div class="search-bar" role="search" aria-label="${t('flowSearch.regionAriaLabel')}">
         <sl-input
           type="search"
-          placeholder="Search nodes..."
-          label="Search nodes"
+          placeholder="${t('flowSearch.placeholder')}"
+          label="${t('flowSearch.label')}"
           clearable
           size="small"
-          aria-label="Search flow diagram nodes. Press Enter to go to next match."
+          aria-label="${t('flowSearch.regionAriaLabel')}. Press Enter to go to next match."
           @sl-input=${this._onInput}
           @sl-clear=${this._onClear}
           @keydown=${this._onKeyDown}

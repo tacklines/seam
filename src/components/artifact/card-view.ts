@@ -4,6 +4,7 @@ import type { LoadedFile, Confidence, Direction } from '../../schema/types.js';
 import { getAllAggregates } from '../../lib/grouping.js';
 import { getAggregateColor } from '../../lib/aggregate-colors.js';
 import { EventFilterController } from '../controllers/event-filter-controller.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -140,36 +141,36 @@ export class CardView extends LitElement {
     const { total, byConfidence: conf, byDirection: dir } = this._eventFilterCtrl.stats;
 
     return html`
-      <div class="stats-bar" role="status" aria-label="Event statistics: ${total} total events">
-        <span class="stat-label">${total} events</span>
+      <div class="stats-bar" role="status" aria-label="${t('cardView.ariaLabel.eventStats')}: ${total} total events">
+        <span class="stat-label">${t('cardView.nEvents', { total })}</span>
 
-        <div class="stat-group" aria-label="By confidence">
+        <div class="stat-group" aria-label="${t('cardView.ariaLabel.byConfidence')}">
           <span class="stat-item">
             <span class="stat-dot stat-dot--confirmed" aria-hidden="true"></span>
-            ${conf.CONFIRMED} confirmed
+            ${conf.CONFIRMED} ${t('cardView.stat.confirmed')}
           </span>
           <span class="stat-item">
             <span class="stat-dot stat-dot--likely" aria-hidden="true"></span>
-            ${conf.LIKELY} likely
+            ${conf.LIKELY} ${t('cardView.stat.likely')}
           </span>
           <span class="stat-item">
             <span class="stat-dot stat-dot--possible" aria-hidden="true"></span>
-            ${conf.POSSIBLE} possible
+            ${conf.POSSIBLE} ${t('cardView.stat.possible')}
           </span>
         </div>
 
-        <div class="stat-group" aria-label="By direction">
+        <div class="stat-group" aria-label="${t('cardView.ariaLabel.byDirection')}">
           <span class="stat-item">
             <span class="stat-dot stat-dot--inbound" aria-hidden="true"></span>
-            ${dir.inbound} inbound
+            ${dir.inbound} ${t('cardView.stat.inbound')}
           </span>
           <span class="stat-item">
             <span class="stat-dot stat-dot--outbound" aria-hidden="true"></span>
-            ${dir.outbound} outbound
+            ${dir.outbound} ${t('cardView.stat.outbound')}
           </span>
           <span class="stat-item">
             <span class="stat-dot stat-dot--internal" aria-hidden="true"></span>
-            ${dir.internal} internal
+            ${dir.internal} ${t('cardView.stat.internal')}
           </span>
         </div>
       </div>
@@ -178,7 +179,7 @@ export class CardView extends LitElement {
 
   render() {
     if (this.files.length === 0) {
-      return html`<div class="empty">Load a storm-prep YAML file to view events</div>`;
+      return html`<div class="empty">${t('cardView.empty')}</div>`;
     }
 
     this._eventFilterCtrl.setFiles(this.files);

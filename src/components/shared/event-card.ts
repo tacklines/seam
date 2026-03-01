@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DomainEvent } from '../../schema/types.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
@@ -156,14 +157,14 @@ export class EventCard extends LitElement {
           </div>
         </div>
         <div class="meta">
-          <strong>Trigger:</strong> ${e.trigger}
+          <strong>${t('eventCard.trigger')}</strong> ${e.trigger}
         </div>
-        ${e.state_change ? html`<div class="meta"><strong>State:</strong> ${e.state_change}</div>` : nothing}
-        ${e.integration.channel ? html`<div class="meta"><strong>Channel:</strong> ${e.integration.channel}</div>` : nothing}
+        ${e.state_change ? html`<div class="meta"><strong>${t('eventCard.state')}</strong> ${e.state_change}</div>` : nothing}
+        ${e.integration.channel ? html`<div class="meta"><strong>${t('eventCard.channel')}</strong> ${e.integration.channel}</div>` : nothing}
         ${e.payload.length > 0 ? html`
-          <sl-details summary="Payload (${e.payload.length} fields)">
+          <sl-details summary="${t('eventCard.payload', { count: e.payload.length })}">
             <table class="payload-table">
-              <thead><tr><th>field</th><th>type</th></tr></thead>
+              <thead><tr><th>${t('eventCard.payloadField')}</th><th>${t('eventCard.payloadType')}</th></tr></thead>
               <tbody>
                 ${e.payload.map(
                   (f) => html`<tr><td>${f.field}</td><td>${f.type}</td></tr>`

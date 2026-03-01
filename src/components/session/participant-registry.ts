@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { store } from '../../state/app-state.js';
+import { t } from '../../lib/i18n.js';
 import type { AppStateEvent, SessionParticipant, SessionState } from '../../state/app-state.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -244,10 +245,10 @@ export class ParticipantRegistry extends LitElement {
   render() {
     if (!this._sessionState) {
       return html`
-        <div class="registry" role="region" aria-label="Participant registry">
+        <div class="registry" role="region" aria-label="${t('participantRegistry.regionAriaLabel')}">
           <div class="no-session" aria-live="polite">
             <sl-icon name="people" aria-hidden="true"></sl-icon>
-            No active session
+            ${t('participantRegistry.noSession')}
           </div>
         </div>
       `;
@@ -257,13 +258,13 @@ export class ParticipantRegistry extends LitElement {
     const { participants, submissions, code } = session;
 
     return html`
-      <div class="registry" role="region" aria-label="Participant registry">
+      <div class="registry" role="region" aria-label="${t('participantRegistry.regionAriaLabel')}">
         <!-- Header -->
         <div class="registry-header">
           <h2 class="registry-title" id="participant-registry-heading">
-            Participants
+            ${t('participantRegistry.heading')}
           </h2>
-          <sl-badge variant="neutral" pill aria-label="${participants.length} participants">
+          <sl-badge variant="neutral" pill aria-label="${t('participantRegistry.nParticipantsAriaLabel', { count: participants.length })}">
             ${participants.length}
           </sl-badge>
         </div>
@@ -273,7 +274,7 @@ export class ParticipantRegistry extends LitElement {
           ? html`
               <div class="empty-state" role="status" aria-live="polite">
                 <sl-icon name="person-plus" aria-hidden="true"></sl-icon>
-                Waiting for participants…
+                ${t('participantRegistry.empty')}
               </div>
             `
           : html`
@@ -287,14 +288,14 @@ export class ParticipantRegistry extends LitElement {
             `}
 
         <!-- Session code footer -->
-        <div class="session-code" aria-label="Session code">
-          <span class="session-code-label">Code:</span>
-          <sl-tooltip content="Click to copy session code">
+        <div class="session-code" aria-label="${t('participantRegistry.codeLabel')}">
+          <span class="session-code-label">${t('participantRegistry.codeLabel')}</span>
+          <sl-tooltip content="${t('participantRegistry.copyTooltip')}">
             <span
               class="session-code-value"
               role="button"
               tabindex="0"
-              aria-label="Session code ${code}, click to copy"
+              aria-label="${t('participantRegistry.codeAriaLabel', { code })}"
               @click=${() => void this._copyCode(code)}
               @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') void this._copyCode(code); }}
             >${code}</span>
@@ -313,7 +314,7 @@ export class ParticipantRegistry extends LitElement {
     const isMe = participant.id === myId;
     const submittedFile = submissions.find((s) => s.participantId === participant.id)?.fileName;
 
-    const statusLabel = submitted ? 'Submitted' : 'Waiting to submit';
+    const statusLabel = submitted ? t('participantRegistry.status.submitted') : t('participantRegistry.status.waiting');
     const statusIcon = submitted ? 'check-circle-fill' : 'hourglass-split';
     const statusClass = submitted ? 'submitted' : 'waiting';
 
@@ -322,7 +323,7 @@ export class ParticipantRegistry extends LitElement {
         class="participant-item"
         tabindex="0"
         role="listitem"
-        aria-label="${participant.name}${isMe ? ', you' : ''}, ${statusLabel}"
+        aria-label="${participant.name}${isMe ? `, ${t('participantRegistry.you')}` : ''}, ${statusLabel}"
       >
         <!-- Status indicator: color + icon shape (accessibility rule) -->
         <sl-tooltip content="${statusLabel}">
@@ -335,11 +336,11 @@ export class ParticipantRegistry extends LitElement {
         <div class="participant-name">
           <span class="participant-display-name ${isMe ? 'is-me' : ''}">
             ${participant.name}
-            ${isMe ? html`<span class="you-label"> (you)</span>` : nothing}
+            ${isMe ? html`<span class="you-label"> ${t('participantRegistry.you')}</span>` : nothing}
           </span>
           ${submitted && submittedFile
             ? html`<span class="participant-meta" title="${submittedFile}">${submittedFile}</span>`
-            : html`<span class="participant-meta">Waiting…</span>`}
+            : html`<span class="participant-meta">${t('participantRegistry.waiting')}</span>`}
         </div>
       </li>
     `;

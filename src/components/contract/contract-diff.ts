@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { ContractBundle } from '../../schema/types.js';
 import { ContractService } from '../../contexts/contract/index.js';
 import type { ContractChange } from '../../contexts/contract/index.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
@@ -236,19 +237,19 @@ export class ContractDiff extends LitElement {
 
   override render() {
     if (!this.bundleBefore || !this.bundleAfter) {
-      return html`<div class="empty">Provide two contract bundles to compare versions</div>`;
+      return html`<div class="empty">${t('contractDiff.empty')}</div>`;
     }
 
     const diff = this._computeDiff();
     if (!diff) {
-      return html`<div class="empty">Unable to compute diff</div>`;
+      return html`<div class="empty">${t('contractDiff.error')}</div>`;
     }
 
     if (diff.changes.length === 0) {
       return html`
         <div class="no-changes">
           <span class="no-changes-icon" aria-hidden="true">&#10003;</span>
-          No changes between these contract versions
+          ${t('contractDiff.noChanges')}
         </div>
       `;
     }
@@ -262,16 +263,16 @@ export class ContractDiff extends LitElement {
     const modifiedCount = diff.changes.filter((c) => c.type === 'modified').length;
 
     return html`
-      <div class="summary-bar" role="status" aria-live="polite" aria-label="${diff.changes.length} changes: ${addedCount} added, ${removedCount} removed, ${modifiedCount} modified">
-        <span class="summary-label">${diff.changes.length} change${diff.changes.length !== 1 ? 's' : ''}</span>
+      <div class="summary-bar" role="status" aria-live="polite" aria-label="${t('contractDiff.nChanges', { count: diff.changes.length })}: ${t('contractDiff.nAdded', { count: addedCount })}, ${t('contractDiff.nRemoved', { count: removedCount })}, ${t('contractDiff.nModified', { count: modifiedCount })}">
+        <span class="summary-label">${t('contractDiff.nChanges', { count: diff.changes.length })}</span>
         ${addedCount > 0
-          ? html`<sl-badge variant="success">${addedCount} added</sl-badge>`
+          ? html`<sl-badge variant="success">${t('contractDiff.nAdded', { count: addedCount })}</sl-badge>`
           : nothing}
         ${removedCount > 0
-          ? html`<sl-badge variant="danger">${removedCount} removed</sl-badge>`
+          ? html`<sl-badge variant="danger">${t('contractDiff.nRemoved', { count: removedCount })}</sl-badge>`
           : nothing}
         ${modifiedCount > 0
-          ? html`<sl-badge variant="warning">${modifiedCount} modified</sl-badge>`
+          ? html`<sl-badge variant="warning">${t('contractDiff.nModified', { count: modifiedCount })}</sl-badge>`
           : nothing}
       </div>
 
@@ -280,24 +281,24 @@ export class ContractDiff extends LitElement {
           this._activeTab = (e.detail as { name: string }).name as typeof this._activeTab;
         }}
       >
-        <sl-tab slot="nav" panel="all">All (${allChanges.length})</sl-tab>
-        <sl-tab slot="nav" panel="events">Events (${eventChanges.length})</sl-tab>
-        <sl-tab slot="nav" panel="boundaries">Boundaries (${boundaryChanges.length})</sl-tab>
+        <sl-tab slot="nav" panel="all">${t('contractDiff.tab.all', { count: allChanges.length })}</sl-tab>
+        <sl-tab slot="nav" panel="events">${t('contractDiff.tab.events', { count: eventChanges.length })}</sl-tab>
+        <sl-tab slot="nav" panel="boundaries">${t('contractDiff.tab.boundaries', { count: boundaryChanges.length })}</sl-tab>
 
         <sl-tab-panel name="all">
-          ${this._renderChangeList(allChanges, 'All contract changes')}
+          ${this._renderChangeList(allChanges, t('contractDiff.ariaLabel.all'))}
         </sl-tab-panel>
 
         <sl-tab-panel name="events">
           ${eventChanges.length > 0
-            ? this._renderChangeList(eventChanges, 'Event contract changes')
-            : html`<div class="empty-section">No event contract changes</div>`}
+            ? this._renderChangeList(eventChanges, t('contractDiff.ariaLabel.events'))
+            : html`<div class="empty-section">${t('contractDiff.empty.events')}</div>`}
         </sl-tab-panel>
 
         <sl-tab-panel name="boundaries">
           ${boundaryChanges.length > 0
-            ? this._renderChangeList(boundaryChanges, 'Boundary contract changes')
-            : html`<div class="empty-section">No boundary contract changes</div>`}
+            ? this._renderChangeList(boundaryChanges, t('contractDiff.ariaLabel.boundaries'))
+            : html`<div class="empty-section">${t('contractDiff.empty.boundaries')}</div>`}
         </sl-tab-panel>
       </sl-tab-group>
 
@@ -317,18 +318,19 @@ export class ContractDiff extends LitElement {
     const config = CHANGE_TYPE_CONFIG[change.type as ChangeType];
     if (!config) return nothing;
 
-    const kindLabel = change.kind === 'eventContract' ? 'Event' : 'Boundary';
+    const kindLabel = change.kind === 'eventContract' ? t('contractDiff.kind.event') : t('contractDiff.kind.boundary');
+    const typeLabel = t(`contractDiff.changeType.${change.type}`);
 
     return html`
       <li
         class="change-item ${config.rowClass}"
         role="listitem"
-        aria-label="${config.ariaLabel}: ${change.name} (${kindLabel})"
+        aria-label="${typeLabel}: ${change.name} (${kindLabel})"
       >
         <span
           class="change-icon ${config.iconClass}"
           aria-hidden="true"
-          title="${config.label}"
+          title="${typeLabel}"
         >${config.icon}</span>
         <div class="change-content">
           <div class="change-name">${change.name}</div>
@@ -346,13 +348,13 @@ export class ContractDiff extends LitElement {
   private _renderLegend() {
     const types: ChangeType[] = ['added', 'removed', 'modified'];
     return html`
-      <div class="legend" role="list" aria-label="Legend">
-        ${types.map((t) => {
-          const config = CHANGE_TYPE_CONFIG[t];
+      <div class="legend" role="list" aria-label="${t('contractDiff.legend')}">
+        ${types.map((changeType) => {
+          const config = CHANGE_TYPE_CONFIG[changeType];
           return html`
             <div class="legend-item" role="listitem">
               <span class="legend-icon ${config.iconClass}" aria-hidden="true">${config.icon}</span>
-              ${config.label}
+              ${t(`contractDiff.changeType.${changeType}`)}
             </div>
           `;
         })}

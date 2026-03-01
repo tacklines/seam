@@ -5,6 +5,7 @@ import { getAllAggregates } from '../../lib/grouping.js';
 import { getAggregateColorIndex } from '../../lib/aggregate-colors.js';
 import { StoreController } from '../controllers/store-controller.js';
 import { ComparisonController } from '../controllers/comparison-controller.js';
+import { t } from '../../lib/i18n.js';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../visualization/flow-minimap.js';
 import type { FlowDiagram } from '../visualization/flow-diagram.js';
 import type { DetailNodeData } from '../visualization/detail-panel.js';
@@ -225,7 +226,7 @@ export class AppShell extends LitElement {
         <!-- Header -->
         <div class="header">
           <div class="header-left">
-            <span class="header-title">Storm-Prep</span>
+            <span class="header-title">${t('shell.title')}</span>
           </div>
           <div class="header-right">
             <div class="file-pills">
@@ -240,7 +241,7 @@ export class AppShell extends LitElement {
             </div>
             <sl-button size="small" variant="default" outline @click=${this.onAddFilesClick}>
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-              Add files
+              ${t('shell.addFiles')}
             </sl-button>
           </div>
         </div>
@@ -251,7 +252,7 @@ export class AppShell extends LitElement {
             <sl-button
               size="small"
               variant="text"
-              aria-label=${sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label=${sidebarCollapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')}
               @click=${() => store.toggleSidebar()}
             >
               <sl-icon name=${sidebarCollapsed ? 'chevron-right' : 'chevron-left'} aria-hidden="true"></sl-icon>
@@ -272,14 +273,14 @@ export class AppShell extends LitElement {
         <div class="main">
           <sl-tab-group @sl-tab-show=${this.onTabChange}>
             <sl-tab slot="nav" panel="cards" ?active=${activeView === 'cards'}>
-              Events
+              ${t('shell.tab.events')}
             </sl-tab>
             <sl-tab slot="nav" panel="flow" ?active=${activeView === 'flow'}>
-              Flow
+              ${t('shell.tab.flow')}
             </sl-tab>
             <sl-tab slot="nav" panel="comparison" ?active=${activeView === 'comparison'}
               ?disabled=${files.length < 2}>
-              Conflicts
+              ${t('shell.tab.conflicts')}
               ${conflictCount > 0
                 ? html`<sl-badge class="conflict-badge" variant="warning" pill>${conflictCount}</sl-badge>`
                 : nothing}

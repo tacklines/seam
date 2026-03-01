@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { BoundaryAssumption, AssumptionType, Confidence } from '../../schema/types.js';
 import type { Overlap } from '../../lib/comparison.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
@@ -195,7 +196,7 @@ export class AssumptionList extends LitElement {
 
   render() {
     if (this.assumptions.length === 0) {
-      return html`<div class="empty">No boundary assumptions</div>`;
+      return html`<div class="empty">${t('assumptionList.empty')}</div>`;
     }
 
     const conflictingIds = this._getConflictingIds();
@@ -217,21 +218,21 @@ export class AssumptionList extends LitElement {
     return html`
       <div class="stats-bar" role="status" aria-label="Boundary assumptions summary">
         <span class="stat">
-          <span class="stat-count">${this.assumptions.length}</span> assumptions
+          <span class="stat-count">${this.assumptions.length}</span> ${t('assumptionList.heading')}
         </span>
         ${(['CONFIRMED', 'LIKELY', 'POSSIBLE'] as Confidence[]).map(
           (c) => html`
             <span class="stat">
               <span class="stat-dot" style="background:${CONFIDENCE_DOT[c]}" aria-hidden="true"></span>
               <span class="stat-count">${confCounts[c]}</span>
-              ${c.toLowerCase()}
+              ${t(`assumptionList.stat.${c.toLowerCase()}`)}
             </span>
           `
         )}
         ${conflictCount > 0
           ? html`
               <span class="stat stat-conflict" role="alert" aria-live="polite">
-                <span class="stat-count">${conflictCount}</span> conflicting
+                <span class="stat-count">${conflictCount}</span> ${t('assumptionList.stat.conflicting')}
               </span>
             `
           : nothing}
@@ -272,17 +273,17 @@ export class AssumptionList extends LitElement {
           <div class="assumption-id-group">
             <span class="assumption-id">${a.id}</span>
             ${isConflicting
-              ? html`<sl-badge variant="danger" pill>Conflicting</sl-badge>`
+              ? html`<sl-badge variant="danger" pill>${t('assumptionList.badge.conflicting')}</sl-badge>`
               : nothing}
           </div>
           <sl-badge variant=${confVariant}>${a.confidence}</sl-badge>
         </div>
         <div class="statement">${a.statement}</div>
         <div class="affects">
-          <span class="affects-label">Affects:</span>
+          <span class="affects-label">${t('assumptionList.affects')}</span>
           ${a.affects_events.map((e) => html`<span class="event-chip">${e}</span>`)}
         </div>
-        <div class="verify">Verify with: ${a.verify_with}</div>
+        <div class="verify">${t('assumptionList.verifyWith')} ${a.verify_with}</div>
       </div>
     `;
   }

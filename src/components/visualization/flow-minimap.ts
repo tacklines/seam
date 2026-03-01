@@ -1,5 +1,6 @@
 import { LitElement, html, css, svg, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { t } from '../../lib/i18n.js';
 
 const MINIMAP_W = 200;
 const MINIMAP_H = 140;
@@ -175,7 +176,7 @@ export class FlowMinimap extends LitElement {
       <div
         class="minimap-container"
         role="img"
-        aria-label="Flow diagram minimap showing ${this.nodes.length} nodes. Drag the blue viewport rectangle to navigate."
+        aria-label="${t('flowMinimap.ariaLabel', { count: this.nodes.length })}"
       >
         <svg
           viewBox="0 0 ${MINIMAP_W} ${MINIMAP_H}"

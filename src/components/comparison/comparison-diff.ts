@@ -1,6 +1,7 @@
 import { LitElement, html, css, svg, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { LoadedFile } from '../../schema/types.js';
+import { t } from '../../lib/i18n.js';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode } from 'elkjs/lib/elk-api.js';
 
@@ -42,11 +43,6 @@ const STATUS_STROKE: Record<DiffStatus, string> = {
   'only-b': '#ea580c',
 };
 
-const STATUS_LABEL: Record<DiffStatus, string> = {
-  shared: 'In both files',
-  'only-a': 'Only in file A',
-  'only-b': 'Only in file B',
-};
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -279,7 +275,7 @@ export class ComparisonDiff extends LitElement {
 
   render() {
     if (this.files.length < 2) {
-      return html`<div class="empty">Load two or more storm-prep YAML files to use the diff view</div>`;
+      return html`<div class="empty">${t('comparisonDiff.empty')}</div>`;
     }
 
     const sharedCount = this._diffNodes.filter((n) => n.status === 'shared').length;
@@ -291,7 +287,7 @@ export class ComparisonDiff extends LitElement {
         <div class="select-group">
           <div class="select-label">
             <span class="badge" style="background:${STATUS_FILL['only-a']};border-color:${STATUS_STROKE['only-a']}"></span>
-            File A
+            ${t('comparisonDiff.fileA')}
           </div>
           <sl-select
             value=${String(this._fileAIndex)}
@@ -307,7 +303,7 @@ export class ComparisonDiff extends LitElement {
         <div class="select-group">
           <div class="select-label">
             <span class="badge" style="background:${STATUS_FILL['only-b']};border-color:${STATUS_STROKE['only-b']}"></span>
-            File B
+            ${t('comparisonDiff.fileB')}
           </div>
           <sl-select
             value=${String(this._fileBIndex)}
@@ -322,29 +318,28 @@ export class ComparisonDiff extends LitElement {
       </div>
 
       ${this._fileAIndex === this._fileBIndex
-        ? html`<div class="empty">Select two different files to compare</div>`
+        ? html`<div class="empty">${t('comparisonDiff.selectDifferentFiles')}</div>`
         : nothing}
 
       ${this._loading
-        ? html`<div class="empty">Computing layout…</div>`
+        ? html`<div class="empty">${t('comparisonDiff.computing')}</div>`
         : nothing}
 
       ${!this._loading && this._fileAIndex !== this._fileBIndex && this._layoutNodes.length > 0
         ? html`
             <div class="summary" role="status" aria-live="polite">
-              ${this._diffNodes.length} events total —
-              ${sharedCount} shared, ${onlyACount} only in A, ${onlyBCount} only in B
+              ${t('comparisonDiff.summary', { total: this._diffNodes.length, shared: sharedCount, onlyA: onlyACount, onlyB: onlyBCount })}
             </div>
-            <div class="svg-wrapper" role="img" aria-label="Overlay diff graph: ${sharedCount} shared events, ${onlyACount} only in file A, ${onlyBCount} only in file B">
+            <div class="svg-wrapper" role="img" aria-label="${t('comparisonDiff.svgAriaLabel', { shared: sharedCount, onlyA: onlyACount, onlyB: onlyBCount })}">
               ${this._renderSvg()}
             </div>
             ${this._renderLegend()}
-            <table class="sr-only" aria-label="Diff events list">
-              <caption>All ${this._diffNodes.length} events in the diff</caption>
-              <thead><tr><th>Event Name</th><th>Aggregate</th><th>Status</th></tr></thead>
+            <table class="sr-only" aria-label="${t('comparisonDiff.tableAriaLabel')}">
+              <caption>${t('comparisonDiff.tableCaption', { total: this._diffNodes.length })}</caption>
+              <thead><tr><th>${t('comparisonDiff.col.eventName')}</th><th>${t('comparisonDiff.col.aggregate')}</th><th>${t('comparisonDiff.col.status')}</th></tr></thead>
               <tbody>
                 ${this._diffNodes.map(
-                  (n) => html`<tr><td>${n.eventName}</td><td>${n.aggregate}</td><td>${STATUS_LABEL[n.status]}</td></tr>`
+                  (n) => html`<tr><td>${n.eventName}</td><td>${n.aggregate}</td><td>${t(`comparisonDiff.status.${n.status}`)}</td></tr>`
                 )}
               </tbody>
             </table>
@@ -352,7 +347,7 @@ export class ComparisonDiff extends LitElement {
         : nothing}
 
       ${!this._loading && this._fileAIndex !== this._fileBIndex && this._diffNodes.length === 0
-        ? html`<div class="empty">No events found in selected files</div>`
+        ? html`<div class="empty">${t('comparisonDiff.noEvents')}</div>`
         : nothing}
     `;
   }
@@ -365,7 +360,7 @@ export class ComparisonDiff extends LitElement {
         height=${this._svgHeight}
         viewBox="0 0 ${this._svgWidth} ${this._svgHeight}"
         role="img"
-        aria-label="Overlay diff graph"
+        aria-label="${t('comparisonDiff.svgAriaLabelShort')}"
       >
         ${this._layoutNodes.map((ln) => this._renderNode(ln))}
       </svg>
@@ -428,7 +423,7 @@ export class ComparisonDiff extends LitElement {
                 class="legend-swatch"
                 style="background:${STATUS_FILL[s]};border-color:${STATUS_STROKE[s]}"
               ></div>
-              ${STATUS_LABEL[s]}
+              ${t(`comparisonDiff.status.${s}`)}
             </div>
           `
         )}

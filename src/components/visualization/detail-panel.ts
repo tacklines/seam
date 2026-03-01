@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { ref, createRef } from 'lit/directives/ref.js';
+import { t } from '../../lib/i18n.js';
 
 export interface DetailEventEntry {
   name: string;
@@ -28,19 +29,15 @@ const CONFIDENCE_COLOR: Record<string, string> = {
 const AGG_COLORS = ['#4338ca', '#0d9488', '#c026d3', '#ea580c', '#2563eb', '#dc2626', '#65a30d', '#0891b2'];
 const AGG_BGS = ['#e0e7ff', '#ccfbf1', '#fae8ff', '#fff7ed', '#dbeafe', '#ffe4e6', '#ecfccb', '#cffafe'];
 
-const TRIGGER_LABELS: Record<string, string> = {
-  command: 'User Command',
-  event: 'Domain Event',
-  query: 'Query',
-  schedule: 'Scheduled Task',
-  external: 'External System',
-};
+function getTriggerLabel(trigger: string): string {
+  const key = `detailPanel.trigger.${trigger === 'command' ? 'userCommand' : trigger === 'event' ? 'domainEvent' : trigger === 'query' ? 'query' : trigger === 'schedule' ? 'scheduledTask' : trigger === 'external' ? 'externalSystem' : ''}`;
+  return key.endsWith('.') ? trigger : t(key);
+}
 
-const DIRECTION_LABELS: Record<string, string> = {
-  inbound: 'Inbound (receives)',
-  outbound: 'Outbound (sends)',
-  internal: 'Internal',
-};
+function getDirectionLabel(direction: string): string {
+  const key = direction === 'inbound' ? 'detailPanel.direction.inbound' : direction === 'outbound' ? 'detailPanel.direction.outbound' : direction === 'internal' ? 'detailPanel.direction.internal' : '';
+  return key ? t(key) : direction;
+}
 
 @customElement('detail-panel')
 export class DetailPanel extends LitElement {
@@ -305,17 +302,17 @@ export class DetailPanel extends LitElement {
     const aggBg = AGG_BGS[data.colorIndex] ?? AGG_BGS[0];
 
     return html`
-      <div class="section-label">About this aggregate</div>
+      <div class="section-label">${t('detailPanel.aboutAggregate')}</div>
       <div class="summary-pills">
         <span class="pill aggregate"
           style="--agg-text:${AGG_COLORS[data.colorIndex] ?? '#374151'};--agg-bg:${aggBg};--agg-stroke:${aggColor}">
-          ${data.events.length} domain event${data.events.length !== 1 ? 's' : ''}
+          ${t('detailPanel.nDomainEvents', { count: data.events.length, label: data.events.length !== 1 ? t('detailPanel.domainEvents.plural') : t('detailPanel.domainEvent') })}
         </span>
       </div>
 
-      <div class="section-label" style="margin-top:16px">Domain Events</div>
+      <div class="section-label" style="margin-top:16px">${t('detailPanel.domainEvents')}</div>
       ${data.events.length === 0
-        ? html`<div class="empty-state">No events in this aggregate.</div>`
+        ? html`<div class="empty-state">${t('detailPanel.noEvents')}</div>`
         : html`
           <div class="event-list">
             ${data.events.map((ev) => this._renderEventCard(ev))}
@@ -324,7 +321,7 @@ export class DetailPanel extends LitElement {
 
       ${data.connectedSystems && data.connectedSystems.length > 0
         ? html`
-          <div class="section-label" style="margin-top:20px">Connected External Systems</div>
+          <div class="section-label" style="margin-top:20px">${t('detailPanel.connectedSystems')}</div>
           <div class="systems-list">
             ${data.connectedSystems.map(
               (sys) => html`<div class="system-item">&#8594; ${sys}</div>`,
@@ -336,29 +333,29 @@ export class DetailPanel extends LitElement {
   }
 
   private _renderEventCard(ev: DetailEventEntry) {
-    const triggerLabel = TRIGGER_LABELS[ev.trigger] ?? ev.trigger;
-    const directionLabel = DIRECTION_LABELS[ev.direction] ?? ev.direction;
+    const triggerLabel = getTriggerLabel(ev.trigger);
+    const directionLabel = getDirectionLabel(ev.direction);
 
     return html`
       <div class="event-card">
         <div class="event-name">${ev.name}</div>
         <div class="event-meta">
           <div class="meta-row">
-            <span class="meta-key">Confidence Level</span>
+            <span class="meta-key">${t('detailPanel.meta.confidenceLevel')}</span>
             <span class="meta-val">${this._renderConfidenceBadge(ev.confidence)}</span>
           </div>
           <div class="meta-row">
-            <span class="meta-key">What triggers this?</span>
+            <span class="meta-key">${t('detailPanel.meta.trigger')}</span>
             <span class="meta-val">${triggerLabel}</span>
           </div>
           <div class="meta-row">
-            <span class="meta-key">Integration</span>
+            <span class="meta-key">${t('detailPanel.meta.integration')}</span>
             <span class="meta-val">${directionLabel}</span>
           </div>
           ${ev.channel
             ? html`
               <div class="meta-row">
-                <span class="meta-key">Channel</span>
+                <span class="meta-key">${t('detailPanel.meta.channel')}</span>
                 <span class="meta-val">${ev.channel}</span>
               </div>
             `
@@ -370,14 +367,14 @@ export class DetailPanel extends LitElement {
 
   private _renderExternalPanel(data: DetailNodeData) {
     return html`
-      <div class="section-label">About this external system</div>
+      <div class="section-label">${t('detailPanel.aboutExternalSystem')}</div>
       <div class="summary-pills">
-        <span class="pill">${data.events.length} connected event${data.events.length !== 1 ? 's' : ''}</span>
+        <span class="pill">${t('detailPanel.nDomainEvents', { count: data.events.length, label: data.events.length !== 1 ? t('detailPanel.connectedEvents.plural') : t('detailPanel.connectedEvent') })}</span>
       </div>
 
-      <div class="section-label" style="margin-top:16px">Connected Events</div>
+      <div class="section-label" style="margin-top:16px">${t('detailPanel.connectedEvents')}</div>
       ${data.events.length === 0
-        ? html`<div class="empty-state">No events connected to this system.</div>`
+        ? html`<div class="empty-state">${t('detailPanel.noConnectedEvents')}</div>`
         : html`
           <div class="event-list">
             ${data.events.map((ev) => html`
@@ -385,11 +382,11 @@ export class DetailPanel extends LitElement {
                 <div class="event-name">${ev.name}</div>
                 <div class="event-meta">
                   <div class="meta-row">
-                    <span class="meta-key">Direction</span>
-                    <span class="meta-val">${ev.direction === 'inbound' ? 'System sends to aggregate' : 'Aggregate sends to system'}</span>
+                    <span class="meta-key">${t('detailPanel.meta.direction')}</span>
+                    <span class="meta-val">${ev.direction === 'inbound' ? t('detailPanel.direction.systemToAggregate') : t('detailPanel.direction.aggregateToSystem')}</span>
                   </div>
                   <div class="meta-row">
-                    <span class="meta-key">Confidence Level</span>
+                    <span class="meta-key">${t('detailPanel.meta.confidenceLevel')}</span>
                     <span class="meta-val">${this._renderConfidenceBadge(ev.confidence)}</span>
                   </div>
                 </div>
@@ -409,7 +406,7 @@ export class DetailPanel extends LitElement {
         class="panel ${isOpen ? 'open' : ''}"
         role="dialog"
         aria-modal="false"
-        aria-label=${data ? `${data.kind === 'aggregate' ? 'Aggregate' : 'External System'}: ${data.label}` : 'Detail panel'}
+        aria-label=${data ? `${data.kind === 'aggregate' ? t('detailPanel.kind.aggregate') : t('detailPanel.kind.externalSystem')}: ${data.label}` : t('detailPanel.defaultAriaLabel')}
         aria-hidden=${isOpen ? 'false' : 'true'}
         @keydown=${this._onKeyDown}
       >
@@ -418,7 +415,7 @@ export class DetailPanel extends LitElement {
             <div class="panel-header">
               <div class="panel-header-info">
                 <div class="panel-kind-label">
-                  ${data.kind === 'aggregate' ? 'Aggregate' : 'External System'}
+                  ${data.kind === 'aggregate' ? t('detailPanel.kind.aggregate') : t('detailPanel.kind.externalSystem')}
                 </div>
                 <div class="panel-title">${data.label}</div>
               </div>
@@ -426,8 +423,8 @@ export class DetailPanel extends LitElement {
                 class="close-btn"
                 ${ref(this._closeBtnRef)}
                 @click=${this._onClose}
-                title="Close panel"
-                aria-label="Close detail panel for ${data.label}"
+                title="${t('detailPanel.closeTitle')}"
+                aria-label="${t('detailPanel.closeAriaLabel', { name: data.label })}"
               >
                 &times;
               </button>

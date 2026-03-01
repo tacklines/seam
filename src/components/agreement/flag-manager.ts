@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { UnresolvedItem } from '../../schema/types.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -214,7 +215,7 @@ export class FlagManager extends LitElement {
         <div class="header">
           <h3 class="header-title">
             <sl-icon name="flag-fill" aria-hidden="true" style="color:#d97706;margin-right:0.25rem;"></sl-icon>
-            Unresolved Items
+            ${t('flagManager.heading')}
           </h3>
           <sl-badge variant=${this.items.length > 0 ? 'warning' : 'neutral'} pill>
             ${this.items.length}
@@ -224,14 +225,14 @@ export class FlagManager extends LitElement {
         <!-- Flag list -->
         ${this.items.length > 0
           ? html`
-              <ul class="flag-list" aria-label="Unresolved items" role="list">
+              <ul class="flag-list" aria-label="${t('flagManager.listAriaLabel')}" role="list">
                 ${this.items.map((item) => this._renderFlag(item))}
               </ul>
             `
           : html`
               <div class="empty" role="status">
                 <sl-icon name="check2-all" aria-hidden="true"></sl-icon>
-                <div>No unresolved items — everything has been addressed.</div>
+                <div>${t('flagManager.empty')}</div>
               </div>
             `}
 
@@ -249,7 +250,7 @@ export class FlagManager extends LitElement {
       minute: '2-digit',
     });
     return html`
-      <li class="flag-item" aria-label="Unresolved item: ${item.description}">
+      <li class="flag-item" aria-label="${t('flagManager.itemAriaLabel', { desc: item.description })}">
         <sl-icon class="flag-icon" name="flag-fill" aria-hidden="true"></sl-icon>
         <div class="flag-body">
           <div class="flag-description">${item.description}</div>
@@ -280,12 +281,12 @@ export class FlagManager extends LitElement {
     return html`
       <button
         class="toggle-btn"
-        aria-label="Flag an unresolved item"
+        aria-label="${t('flagManager.toggleAriaLabel')}"
         aria-expanded="false"
         @click=${() => { this._showForm = true; }}
       >
         <sl-icon name="flag" aria-hidden="true"></sl-icon>
-        Flag something unresolved
+        ${t('flagManager.toggleButton')}
       </button>
     `;
   }
@@ -294,14 +295,14 @@ export class FlagManager extends LitElement {
     const canSubmit = this._description.trim().length > 0;
 
     return html`
-      <div class="add-form" role="group" aria-label="Flag a new unresolved item">
+      <div class="add-form" role="group" aria-label="${t('flagManager.formLabel')}">
         <div class="add-form-label">
           <sl-icon name="flag" aria-hidden="true"></sl-icon>
-          What needs follow-up?
+          ${t('flagManager.formLabel')}
         </div>
 
         <sl-textarea
-          label="Description"
+          label="${t('flagManager.descriptionLabel')}"
           placeholder="e.g. We couldn't agree on whether OrderPlaced or PaymentReceived should trigger inventory deduction"
           rows="2"
           resize="auto"
@@ -315,8 +316,8 @@ export class FlagManager extends LitElement {
         ${this.overlapLabels.length > 0
           ? html`
               <sl-input
-                label="Related overlap (optional)"
-                placeholder="e.g. OrderPlaced"
+                label="${t('flagManager.relatedOverlapLabel')}"
+                placeholder="${t('flagManager.relatedOverlapPlaceholder')}"
                 list="overlap-labels"
                 value=${this._relatedOverlap}
                 @sl-input=${(e: CustomEvent) => {
@@ -340,16 +341,16 @@ export class FlagManager extends LitElement {
             @click=${() => void this._submit()}
           >
             <sl-icon slot="prefix" name="flag-fill" aria-hidden="true"></sl-icon>
-            Flag it
+            ${t('flagManager.submitButton')}
           </sl-button>
 
           <sl-button
             variant="text"
             size="small"
             @click=${this._cancelForm}
-            aria-label="Cancel flagging"
+            aria-label="${t('flagManager.cancelAriaLabel')}"
           >
-            Cancel
+            ${t('flagManager.cancelButton')}
           </sl-button>
 
           ${this._error
@@ -375,7 +376,7 @@ export class FlagManager extends LitElement {
   private async _submit() {
     const description = this._description.trim();
     if (!description) {
-      this._error = 'Please describe what needs follow-up.';
+      this._error = t('flagManager.error.descriptionRequired');
       return;
     }
 

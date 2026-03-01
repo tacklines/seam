@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { LoadedFile, DomainEvent, BoundaryAssumption } from '../../schema/types.js';
 import type { Overlap } from '../../lib/comparison.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 
@@ -197,7 +198,7 @@ export class ConflictCard extends LitElement {
 
   render() {
     const o = this.overlap;
-    const kindLabel = o.kind === 'same-name' ? 'Shared Event' : o.kind === 'same-aggregate' ? 'Shared Aggregate' : 'Assumption Conflict';
+    const kindLabel = o.kind === 'same-name' ? t('conflictCard.kind.sharedEvent') : o.kind === 'same-aggregate' ? t('conflictCard.kind.sharedAggregate') : t('conflictCard.kind.assumptionConflict');
     return html`
       <article class="card ${o.kind}" aria-label="${kindLabel}: ${o.label}">
         <div class="header">
@@ -212,11 +213,11 @@ export class ConflictCard extends LitElement {
   private _renderBadge() {
     switch (this.overlap.kind) {
       case 'same-name':
-        return html`<sl-badge variant="warning" pill>Shared Event</sl-badge>`;
+        return html`<sl-badge variant="warning" pill>${t('conflictCard.kind.sharedEvent')}</sl-badge>`;
       case 'same-aggregate':
-        return html`<sl-badge variant="primary" pill>Shared Aggregate</sl-badge>`;
+        return html`<sl-badge variant="primary" pill>${t('conflictCard.kind.sharedAggregate')}</sl-badge>`;
       case 'assumption-conflict':
-        return html`<sl-badge variant="danger" pill>Assumption Conflict</sl-badge>`;
+        return html`<sl-badge variant="danger" pill>${t('conflictCard.kind.assumptionConflict')}</sl-badge>`;
     }
   }
 
@@ -262,7 +263,7 @@ export class ConflictCard extends LitElement {
     const rightFields = new Set(re.payload.map((p) => `${p.field}:${p.type}`));
 
     return html`
-      <div class="comparison" role="table" aria-label="Side-by-side comparison of ${eventName}">
+      <div class="comparison" role="table" aria-label="${t('conflictCard.comparisonAriaLabel', { name: eventName })}">
         <div class="role-column" role="columnheader">
           <div class="role-header"><span class="role-dot left" aria-hidden="true"></span>${left.role}</div>
           ${this._renderEventFields(le, aggDiffers, triggerDiffers, stateDiffers, channelDiffers, 'left')}
@@ -288,24 +289,24 @@ export class ConflictCard extends LitElement {
     const diffClass = side === 'left' ? 'diff-left' : 'diff-right';
     return html`
       <div class="field-row ${aggDiff ? diffClass : ''}">
-        <strong>Aggregate:</strong> <span class="mono">${e.aggregate}</span>
+        <strong>${t('conflictCard.aggregate')}</strong> <span class="mono">${e.aggregate}</span>
       </div>
       <div class="field-row ${trigDiff ? diffClass : ''}">
-        <strong>Trigger:</strong> ${e.trigger}
+        <strong>${t('conflictCard.trigger')}</strong> ${e.trigger}
       </div>
       ${e.state_change
         ? html`<div class="field-row ${stateDiff ? diffClass : ''}">
-            <strong>State:</strong> ${e.state_change}
+            <strong>${t('conflictCard.state')}</strong> ${e.state_change}
           </div>`
         : stateDiff
-          ? html`<div class="field-row ${diffClass}"><strong>State:</strong> <em>none</em></div>`
+          ? html`<div class="field-row ${diffClass}"><strong>${t('conflictCard.state')}</strong> <em>${t('conflictCard.none')}</em></div>`
           : nothing}
       ${e.integration.channel
         ? html`<div class="field-row ${chanDiff ? diffClass : ''}">
-            <strong>Channel:</strong> ${e.integration.channel}
+            <strong>${t('conflictCard.channel')}</strong> ${e.integration.channel}
           </div>`
         : chanDiff
-          ? html`<div class="field-row ${diffClass}"><strong>Channel:</strong> <em>none</em></div>`
+          ? html`<div class="field-row ${diffClass}"><strong>${t('conflictCard.channel')}</strong> <em>${t('conflictCard.none')}</em></div>`
           : nothing}
     `;
   }
@@ -318,7 +319,7 @@ export class ConflictCard extends LitElement {
     if (e.payload.length === 0) return nothing;
     const diffClass = side === 'left' ? 'diff-left' : 'diff-right';
     return html`
-      <div class="field-row"><strong>Payload:</strong></div>
+      <div class="field-row"><strong>${t('conflictCard.payload')}</strong></div>
       <ul class="payload-list">
         ${e.payload.map((p) => {
           const key = `${p.field}:${p.type}`;
@@ -373,7 +374,7 @@ export class ConflictCard extends LitElement {
     }
 
     return html`
-      <div class="comparison" role="table" aria-label="Conflicting assumptions: ${leftId} vs ${rightId}">
+      <div class="comparison" role="table" aria-label="${t('conflictCard.conflictingAssumptionsAriaLabel', { leftId, rightId })}">
         <div class="role-column" role="columnheader">
           <div class="role-header"><span class="role-dot left" aria-hidden="true"></span>${roles[0]}</div>
           ${this._renderAssumptionDetail(leftAssumption)}
@@ -394,13 +395,13 @@ export class ConflictCard extends LitElement {
       </div>
       <div class="assumption-statement">${a.statement}</div>
       <div class="affected-events">
-        <strong>Affects:</strong>
+        <strong>${t('conflictCard.affects')}</strong>
         ${a.affects_events.map(
           (e, i) =>
             html`<span class="mono">${e}</span>${i < a.affects_events.length - 1 ? ', ' : ''}`
         )}
       </div>
-      <div class="verify-with">Verify with: ${a.verify_with}</div>
+      <div class="verify-with">${t('conflictCard.verifyWith')} ${a.verify_with}</div>
     `;
   }
 }

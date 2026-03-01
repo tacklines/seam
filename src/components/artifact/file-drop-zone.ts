@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { loadFile } from '../../lib/yaml-loader.js';
 import { store } from '../../state/app-state.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
@@ -123,7 +124,7 @@ export class FileDropZone extends LitElement {
         class="drop-zone ${this.dragging ? 'dragging' : ''}"
         role="button"
         tabindex="0"
-        aria-label="Drop storm-prep YAML files here, or press Enter or Space to browse for files"
+        aria-label=${t('dropZone.ariaLabel')}
         aria-dropeffect="copy"
         aria-live="polite"
         @dragover=${this.onDragOver}
@@ -133,14 +134,14 @@ export class FileDropZone extends LitElement {
         @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.onClick(); } }}
       >
         <sl-icon name="cloud-arrow-up" class="drop-icon" aria-hidden="true"></sl-icon>
-        <p class="cta">${this.dragging ? 'Release to upload files' : 'Drop storm-prep YAML files here'}</p>
-        <p class="cta-secondary">or click to browse</p>
+        <p class="cta">${this.dragging ? t('dropZone.ctaActive') : t('dropZone.ctaIdle')}</p>
+        <p class="cta-secondary">${t('dropZone.ctaSecondary')}</p>
       </div>
       <input
         type="file"
         accept=".yaml,.yml"
         multiple
-        aria-label="Choose storm-prep YAML files to upload"
+        aria-label=${t('dropZone.fileInputAriaLabel')}
         @change=${this.onFileInput}
       />
     `;
@@ -150,10 +151,10 @@ export class FileDropZone extends LitElement {
     return html`
       <div class="hero">
         <sl-icon name="cloud-arrow-up" class="hero-icon"></sl-icon>
-        <h1>Storm-Prep Visualizer</h1>
-        <p class="subtitle">Visualize and compare domain event candidates across roles</p>
+        <h1>${t('dropZone.heroTitle')}</h1>
+        <p class="subtitle">${t('dropZone.heroSubtitle')}</p>
         ${this.renderDropZone()}
-        <p class="hero-hint">Supports multiple files for cross-role comparison</p>
+        <p class="hero-hint">${t('dropZone.hint')}</p>
       </div>
     `;
   }

@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { LoadedFile } from '../../schema/types.js';
 import { ComparisonController } from '../controllers/comparison-controller.js';
+import { t } from '../../lib/i18n.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import './conflict-card.js';
@@ -128,7 +129,7 @@ export class ComparisonView extends LitElement {
 
   render() {
     if (this.files.length < 2) {
-      return html`<div class="empty">Load two or more storm-prep YAML files to compare roles</div>`;
+      return html`<div class="empty">${t('comparisonView.empty')}</div>`;
     }
 
     this._comparisonCtrl.setFiles(this.files);
@@ -140,58 +141,58 @@ export class ComparisonView extends LitElement {
     return html`
       <!-- Dashboard Header -->
       <div class="stats" role="region" aria-label="Comparison summary">
-        <div class="stat-card conflicts" role="status" aria-label="${conflicts.length} conflicts found">
+        <div class="stat-card conflicts" role="status" aria-label="${conflicts.length} ${t('comparisonView.conflicts').toLowerCase()} found">
           <div class="stat-number" aria-hidden="true">${conflicts.length}</div>
-          <div class="stat-label">Conflicts</div>
+          <div class="stat-label">${t('comparisonView.conflicts')}</div>
         </div>
-        <div class="stat-card shared-events" role="status" aria-label="${sharedEvents.length} shared events">
+        <div class="stat-card shared-events" role="status" aria-label="${sharedEvents.length} ${t('comparisonView.sharedEvents').toLowerCase()}">
           <div class="stat-number" aria-hidden="true">${sharedEvents.length}</div>
-          <div class="stat-label">Shared Events</div>
+          <div class="stat-label">${t('comparisonView.sharedEvents')}</div>
         </div>
-        <div class="stat-card shared-aggregates" role="status" aria-label="${sharedAggregates.length} shared aggregates">
+        <div class="stat-card shared-aggregates" role="status" aria-label="${sharedAggregates.length} ${t('comparisonView.sharedAggregates').toLowerCase()}">
           <div class="stat-number" aria-hidden="true">${sharedAggregates.length}</div>
-          <div class="stat-label">Shared Aggregates</div>
+          <div class="stat-label">${t('comparisonView.sharedAggregates')}</div>
         </div>
       </div>
 
       <!-- Conflicts Section -->
-      <div class="section" role="region" aria-label="Conflicts" aria-live="polite">
-        <h2 class="section-heading conflicts">Conflicts</h2>
+      <div class="section" role="region" aria-label="${t('comparisonView.conflicts')}" aria-live="polite">
+        <h2 class="section-heading conflicts">${t('comparisonView.conflicts')}</h2>
         ${conflicts.length > 0
           ? html`<div class="card-list">
               ${conflicts.map(
                 (o) => html`<conflict-card .overlap=${o} .files=${this.files}></conflict-card>`
               )}
             </div>`
-          : html`<div class="none-found">None found</div>`}
+          : html`<div class="none-found">${t('comparisonView.noneFound')}</div>`}
       </div>
 
       <!-- Shared Events Section -->
-      <div class="section" role="region" aria-label="Shared Events">
-        <h2 class="section-heading shared-events">Shared Events</h2>
+      <div class="section" role="region" aria-label="${t('comparisonView.sharedEvents')}">
+        <h2 class="section-heading shared-events">${t('comparisonView.sharedEvents')}</h2>
         ${sharedEvents.length > 0
           ? html`<div class="card-list">
               ${sharedEvents.map(
                 (o) => html`<conflict-card .overlap=${o} .files=${this.files}></conflict-card>`
               )}
             </div>`
-          : html`<div class="none-found">None found</div>`}
+          : html`<div class="none-found">${t('comparisonView.noneFound')}</div>`}
       </div>
 
       <!-- Shared Aggregates Section -->
-      <div class="section" role="region" aria-label="Shared Aggregates">
-        <h2 class="section-heading shared-aggregates">Shared Aggregates</h2>
+      <div class="section" role="region" aria-label="${t('comparisonView.sharedAggregates')}">
+        <h2 class="section-heading shared-aggregates">${t('comparisonView.sharedAggregates')}</h2>
         ${sharedAggregates.length > 0
           ? html`<div class="card-list">
               ${sharedAggregates.map(
                 (o) => html`<conflict-card .overlap=${o} .files=${this.files}></conflict-card>`
               )}
             </div>`
-          : html`<div class="none-found">None found</div>`}
+          : html`<div class="none-found">${t('comparisonView.noneFound')}</div>`}
       </div>
 
       <!-- Agreements (collapsible role panels) -->
-      <sl-details summary="Role Panels">
+      <sl-details summary="${t('comparisonView.rolePanels')}">
         <div class="panels">
           ${this.files.map(
             (file) => html`
@@ -199,8 +200,8 @@ export class ComparisonView extends LitElement {
                 <div class="panel-header">${file.role}</div>
                 <div class="panel-meta">
                   ${file.data.metadata.scope} &middot;
-                  ${file.data.domain_events.length} events &middot;
-                  ${file.data.boundary_assumptions.length} assumptions
+                  ${t('comparisonView.nEvents', { count: file.data.domain_events.length })} &middot;
+                  ${t('comparisonView.nAssumptions', { count: file.data.boundary_assumptions.length })}
                 </div>
                 <div class="events-list">
                   ${file.data.domain_events.map(

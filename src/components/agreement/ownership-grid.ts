@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { OwnershipAssignment } from '../../schema/types.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -204,19 +205,19 @@ export class OwnershipGrid extends LitElement {
       return html`
         <div class="empty" role="status">
           <sl-icon name="grid-3x3" aria-hidden="true"></sl-icon>
-          <div>No aggregates or roles to display.</div>
-          <div>Load storm-prep files to see the ownership grid.</div>
+          <div>${t('ownershipGrid.empty')}</div>
+          <div>${t('ownershipGrid.emptyHint')}</div>
         </div>
       `;
     }
 
     return html`
       <div>
-        <div class="grid-scroll" role="region" aria-label="Aggregate ownership grid">
+        <div class="grid-scroll" role="region" aria-label="${t('ownershipGrid.ariaLabel')}">
           <table>
             <thead>
               <tr>
-                <th class="aggregate-col" scope="col">Aggregate</th>
+                <th class="aggregate-col" scope="col">${t('ownershipGrid.column.aggregate')}</th>
                 ${this.roles.map(
                   (role) => html`<th scope="col">${role}</th>`
                 )}
@@ -240,8 +241,7 @@ export class OwnershipGrid extends LitElement {
         <div class="status-bar">
           <sl-icon name="info-circle" aria-hidden="true"></sl-icon>
           <span>
-            ${this._assignedCount()} of ${this.aggregates.length} aggregate${this.aggregates.length !== 1 ? 's' : ''} assigned.
-            Click a role cell to assign ownership.
+            ${t('ownershipGrid.status', { assigned: this._assignedCount(), total: this.aggregates.length })}
           </span>
         </div>
       </div>
@@ -276,7 +276,7 @@ export class OwnershipGrid extends LitElement {
       <td style="text-align:center;">
         <button
           class="cell-btn ${isOwner ? 'owned' : ''} ${isLoading ? 'loading' : ''}"
-          aria-label="${role} ${isOwner ? 'owns' : 'does not own'} ${agg}. ${isOwner ? 'Click to reassign.' : 'Click to assign.'}"
+          aria-label="${isOwner ? t('ownershipGrid.cell.owns', { role, agg }) : t('ownershipGrid.cell.notOwns', { role, agg })}"
           aria-pressed=${isOwner ? 'true' : 'false'}
           @click=${() => void this._assign(agg, role)}
           ?disabled=${isLoading}
@@ -289,7 +289,7 @@ export class OwnershipGrid extends LitElement {
                   name=${isOwner ? 'record-circle-fill' : 'circle'}
                   aria-hidden="true"
                 ></sl-icon>
-                <span class="cell-label">${isOwner ? 'Owner' : 'Assign'}</span>
+                <span class="cell-label">${isOwner ? t('ownershipGrid.cell.owner') : t('ownershipGrid.cell.assign')}</span>
               `}
         </button>
       </td>

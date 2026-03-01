@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { ConflictResolution } from '../../schema/types.js';
 import type { Overlap } from '../../lib/comparison.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -177,14 +178,14 @@ export class ResolutionRecorder extends LitElement {
   private _renderResolved() {
     const r = this.existingResolution!;
     return html`
-      <div class="resolved-banner" role="status" aria-label="Conflict resolved">
+      <div class="resolved-banner" role="status" aria-label="${t('resolutionRecorder.resolvedAriaLabel')}">
         <sl-icon name="check-circle-fill" aria-hidden="true"></sl-icon>
         <div>
           <div>
             <strong>${r.chosenApproach}</strong> — ${r.resolution}
           </div>
           <div class="resolved-meta">
-            Resolved by ${r.resolvedBy.join(', ')}
+            ${t('resolutionRecorder.resolvedBy', { names: r.resolvedBy.join(', ') })}
           </div>
         </div>
       </div>
@@ -198,23 +199,26 @@ export class ResolutionRecorder extends LitElement {
       (this._selectedApproach !== 'custom' || this._customText.trim().length > 0);
 
     return html`
-      <div role="group" aria-label="Record resolution for ${this.overlap?.label ?? 'conflict'}">
+      <div role="group" aria-label="${t('resolutionRecorder.groupAriaLabel', { label: this.overlap?.label ?? 'conflict' })}">
         <!-- Quick-approach pill buttons -->
-        <div class="approach-row" role="group" aria-label="Choose a resolution approach">
+        <div class="approach-row" role="group" aria-label="${t('resolutionRecorder.approachGroupAriaLabel')}">
           ${QUICK_APPROACHES.map(
-            (a) => html`
-              <sl-tooltip content=${a.description}>
+            (a) => {
+              const approachLabel = t(`resolutionRecorder.approach.${a.value}`);
+              const approachDesc = t(`resolutionRecorder.approach.${a.value}.description`);
+              return html`
+              <sl-tooltip content=${approachDesc}>
                 <button
                   class="approach-btn ${this._selectedApproach === a.value ? 'selected' : ''}"
                   aria-pressed=${this._selectedApproach === a.value ? 'true' : 'false'}
-                  aria-label="${a.label}: ${a.description}"
+                  aria-label="${approachLabel}: ${approachDesc}"
                   @click=${() => this._selectApproach(a.value)}
                 >
                   <sl-icon name=${a.icon} aria-hidden="true"></sl-icon>
-                  ${a.label}
+                  ${approachLabel}
                 </button>
               </sl-tooltip>
-            `
+            `;}
           )}
         </div>
 
@@ -224,8 +228,8 @@ export class ResolutionRecorder extends LitElement {
               <div class="detail-area">
                 <sl-textarea
                   label=${this._selectedApproach === 'custom'
-                    ? 'Describe the resolution'
-                    : 'Add context (optional)'}
+                    ? t('resolutionRecorder.describeLabel')
+                    : t('resolutionRecorder.contextLabel')}
                   placeholder=${this._selectedApproach === 'custom'
                     ? 'e.g. We agreed that Order context owns this event, Payment context subscribes'
                     : 'Optional notes about how this was resolved…'}
@@ -246,16 +250,16 @@ export class ResolutionRecorder extends LitElement {
                     @click=${() => void this._submit()}
                   >
                     <sl-icon slot="prefix" name="check2-circle" aria-hidden="true"></sl-icon>
-                    Record resolution
+                    ${t('resolutionRecorder.submitButton')}
                   </sl-button>
 
                   <button
                     class="approach-btn"
-                    aria-label="Cancel — clear selection"
+                    aria-label="${t('resolutionRecorder.cancelAriaLabel')}"
                     @click=${this._cancel}
                     style="border-color: transparent; background: transparent; color: #6b7280;"
                   >
-                    Cancel
+                    ${t('resolutionRecorder.cancelButton')}
                   </button>
 
                   ${this._error
@@ -266,7 +270,7 @@ export class ResolutionRecorder extends LitElement {
             `
           : html`
               <p class="hint">
-                Choose an approach above to record how this was resolved.
+                ${t('resolutionRecorder.hint')}
               </p>
             `}
       </div>
@@ -282,8 +286,7 @@ export class ResolutionRecorder extends LitElement {
       this._selectedApproach = value;
       if (value !== 'custom') {
         // Pre-fill a sensible default text so the user can just click "Record"
-        const approach = QUICK_APPROACHES.find((a) => a.value === value);
-        this._customText = approach?.description ?? '';
+        this._customText = t(`resolutionRecorder.approach.${value}.description`);
       } else {
         this._customText = '';
       }
@@ -304,10 +307,10 @@ export class ResolutionRecorder extends LitElement {
       this._selectedApproach === 'custom'
         ? this._customText.trim()
         : this._customText.trim() ||
-          (QUICK_APPROACHES.find((a) => a.value === this._selectedApproach)?.description ?? '');
+          t(`resolutionRecorder.approach.${this._selectedApproach}.description`);
 
     if (!resolutionText) {
-      this._error = 'Please describe the resolution.';
+      this._error = t('resolutionRecorder.error.descriptionRequired');
       return;
     }
 

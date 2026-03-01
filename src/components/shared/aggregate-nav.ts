@@ -3,6 +3,7 @@ import { customElement, property } from 'lit/decorators.js';
 import type { LoadedFile, DomainEvent } from '../../schema/types.js';
 import { getAllAggregates } from '../../lib/grouping.js';
 import { getAggregateColor, getAggregateBg } from '../../lib/aggregate-colors.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 
@@ -152,11 +153,11 @@ export class AggregateNav extends LitElement {
         role="button"
         tabindex="0"
         aria-pressed=${isSelected ? 'true' : 'false'}
-        aria-label="Show all aggregates"
+        aria-label=${t('aggregateNav.showAllAriaLabel')}
         @click=${() => this.handleSelect(null)}
         @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.handleSelect(null); } }}
       >
-        <span class="show-all-label">Show all</span>
+        <span class="show-all-label">${t('aggregateNav.showAll')}</span>
         <sl-badge variant="neutral" pill>${this.totalEventCount}</sl-badge>
       </div>
     `;
@@ -175,7 +176,7 @@ export class AggregateNav extends LitElement {
         role="button"
         tabindex="0"
         aria-pressed=${isSelected ? 'true' : 'false'}
-        aria-label="Filter by aggregate: ${entry.name}, ${entry.count} events"
+        aria-label=${t('aggregateNav.filterAriaLabel', { name: entry.name, count: entry.count })}
         @click=${() => this.handleSelect(entry.name)}
         @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.handleSelect(entry.name); } }}
       >
@@ -193,7 +194,7 @@ export class AggregateNav extends LitElement {
     const grouped = this.groupedByRole;
 
     return html`
-      <div class="section-header">Aggregates</div>
+      <div class="section-header">${t('aggregateNav.heading')}</div>
       ${this.renderShowAll()}
       ${[...grouped.entries()].map(
         ([role, entries]) => html`

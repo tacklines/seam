@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { LoadedFile } from '../../schema/types.js';
 import { loadFile } from '../../lib/yaml-loader.js';
+import { t } from '../../lib/i18n.js';
 import { store } from '../../state/app-state.js';
 import type { SessionState } from '../../state/app-state.js';
 import { connectSession, disconnectSession } from '../../state/session-connection.js';
@@ -363,7 +364,7 @@ export class SessionLobby extends LitElement {
 
   private async _createSession() {
     if (!this._name.trim()) {
-      this._error = 'Please enter your name.';
+      this._error = t('lobby.error.nameRequired');
       return;
     }
     this._loading = true;
@@ -395,11 +396,11 @@ export class SessionLobby extends LitElement {
 
   private async _joinSession() {
     if (!this._name.trim()) {
-      this._error = 'Please enter your name.';
+      this._error = t('lobby.error.nameRequired');
       return;
     }
     if (!this._joinCode.trim()) {
-      this._error = 'Please enter a join code.';
+      this._error = t('lobby.error.joinCodeRequired');
       return;
     }
     this._loading = true;
@@ -483,7 +484,7 @@ export class SessionLobby extends LitElement {
         });
 
       if (files.length === 0) {
-        this._error = 'No file data available yet. Please wait for participants to submit.';
+        this._error = t('lobby.error.noFileData');
         return;
       }
 
@@ -531,43 +532,40 @@ export class SessionLobby extends LitElement {
     return html`
       <div class="landing">
         <sl-icon name="people-fill" class="landing-icon"></sl-icon>
-        <h1>Storm-Prep Visualizer</h1>
-        <p class="subtitle">
-          Collaborate with your team in real time. Each participant loads their own storm-prep YAML file,
-          then see the combined results together.
-        </p>
+        <h1>${t('lobby.heroTitle')}</h1>
+        <p class="subtitle">${t('lobby.heroSubtitle')}</p>
 
-        <div class="landing-options" role="group" aria-label="Session options">
+        <div class="landing-options" role="group" aria-label="${t('lobby.sessionOptions')}">
           <div
             class="option-card option-card--create"
             role="button"
             tabindex="0"
-            aria-label="Start a Session: Create a new session and invite your team with a join code"
+            aria-label="${t('lobby.startSession.ariaLabel')}"
             @click=${() => { this._lobbyState = 'creating'; this._error = ''; }}
             @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'creating'; this._error = ''; } }}
           >
             <sl-icon name="plus-circle-fill" aria-hidden="true"></sl-icon>
-            <p class="option-title">Start a Session</p>
-            <p class="option-desc">Create a new session and invite your team with a join code</p>
+            <p class="option-title">${t('lobby.startSession.title')}</p>
+            <p class="option-desc">${t('lobby.startSession.description')}</p>
           </div>
           <div
             class="option-card option-card--join"
             role="button"
             tabindex="0"
-            aria-label="Join a Session: Enter a join code from your team lead to participate"
+            aria-label="${t('lobby.joinSession.ariaLabel')}"
             @click=${() => { this._lobbyState = 'joining'; this._error = ''; }}
             @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'joining'; this._error = ''; } }}
           >
             <sl-icon name="box-arrow-in-right" aria-hidden="true"></sl-icon>
-            <p class="option-title">Join a Session</p>
-            <p class="option-desc">Enter a join code from your team lead to participate</p>
+            <p class="option-title">${t('lobby.joinSession.title')}</p>
+            <p class="option-desc">${t('lobby.joinSession.description')}</p>
           </div>
         </div>
 
         <p class="solo-option">
-          Just exploring?
-          <a role="button" tabindex="0" @click=${this._onSoloClick} @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._onSoloClick(); } }}>Load files locally</a>
-          without a session.
+          ${t('lobby.solo.prompt')}
+          <a role="button" tabindex="0" @click=${this._onSoloClick} @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._onSoloClick(); } }}>${t('lobby.solo.link')}</a>
+          ${t('lobby.solo.suffix')}
         </p>
       </div>
     `;
@@ -585,20 +583,20 @@ export class SessionLobby extends LitElement {
             class="back-link"
             role="button"
             tabindex="0"
-            aria-label="Back to landing"
+            aria-label="${t('lobby.backAriaLabel')}"
             @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}
             @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'landing'; this._error = ''; } }}
           >
-            <sl-icon name="arrow-left" aria-hidden="true"></sl-icon> Back
+            <sl-icon name="arrow-left" aria-hidden="true"></sl-icon> ${t('lobby.back')}
           </span>
-          <h2>Start a Session</h2>
+          <h2>${t('lobby.startSession.title')}</h2>
 
           ${this._error
             ? html`<sl-alert variant="danger" open class="error-msg">${this._error}</sl-alert>`
             : nothing}
 
           <sl-input
-            label="Your name"
+            label="${t('lobby.yourName')}"
             placeholder="e.g. Alice"
             value=${this._name}
             @sl-input=${(e: CustomEvent) => { this._name = (e.target as HTMLInputElement).value; }}
@@ -612,7 +610,7 @@ export class SessionLobby extends LitElement {
             @click=${() => void this._createSession()}
           >
             <sl-icon slot="prefix" name="arrow-right-circle"></sl-icon>
-            Create Session
+            ${t('lobby.createSession')}
           </sl-button>
         </div>
       </div>
@@ -627,20 +625,20 @@ export class SessionLobby extends LitElement {
             class="back-link"
             role="button"
             tabindex="0"
-            aria-label="Back to landing"
+            aria-label="${t('lobby.backAriaLabel')}"
             @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}
             @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'landing'; this._error = ''; } }}
           >
-            <sl-icon name="arrow-left" aria-hidden="true"></sl-icon> Back
+            <sl-icon name="arrow-left" aria-hidden="true"></sl-icon> ${t('lobby.back')}
           </span>
-          <h2>Join a Session</h2>
+          <h2>${t('lobby.joinSession.title')}</h2>
 
           ${this._error
             ? html`<sl-alert variant="danger" open class="error-msg">${this._error}</sl-alert>`
             : nothing}
 
           <sl-input
-            label="Your name"
+            label="${t('lobby.yourName')}"
             placeholder="e.g. Bob"
             value=${this._name}
             @sl-input=${(e: CustomEvent) => { this._name = (e.target as HTMLInputElement).value; }}
@@ -648,7 +646,7 @@ export class SessionLobby extends LitElement {
           ></sl-input>
 
           <sl-input
-            label="Join code"
+            label="${t('lobby.joinCode')}"
             placeholder="e.g. ABC123"
             value=${this._joinCode}
             @sl-input=${(e: CustomEvent) => { this._joinCode = (e.target as HTMLInputElement).value; }}
@@ -662,7 +660,7 @@ export class SessionLobby extends LitElement {
             @click=${() => void this._joinSession()}
           >
             <sl-icon slot="prefix" name="box-arrow-in-right"></sl-icon>
-            Join Session
+            ${t('lobby.joinSession.button')}
           </sl-button>
         </div>
       </div>
@@ -680,13 +678,13 @@ export class SessionLobby extends LitElement {
         <div class="session-card">
           <!-- Header: title + code chip -->
           <div class="session-header">
-            <h2 class="session-title">Session Lobby</h2>
+            <h2 class="session-title">${t('lobby.sessionLobby')}</h2>
             <span
               class="session-code-chip"
               role="button"
               tabindex="0"
-              title="Copy session code to clipboard"
-              aria-label="Session code ${session.code}. Click to copy."
+              title="${t('lobby.copyCodeTooltip')}"
+              aria-label="${t('lobby.codeChipAriaLabel', { code: session.code })}"
               @click=${() => void navigator.clipboard.writeText(session.code)}
               @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void navigator.clipboard.writeText(session.code); } }}
             >${session.code}</span>
@@ -696,11 +694,11 @@ export class SessionLobby extends LitElement {
           ${this._joinCode
             ? html`
                 <div class="join-code-box">
-                  <div class="join-code-label">Share this code</div>
+                  <div class="join-code-label">${t('lobby.shareCode')}</div>
                   <div class="join-code-value">${session.code}</div>
                   <sl-button size="small" variant="neutral" @click=${() => void navigator.clipboard.writeText(session.code)}>
                     <sl-icon slot="prefix" name="clipboard"></sl-icon>
-                    Copy code
+                    ${t('lobby.copyCode')}
                   </sl-button>
                 </div>
               `
@@ -709,18 +707,18 @@ export class SessionLobby extends LitElement {
           <!-- Share code hint -->
           <sl-alert variant="primary" open style="margin-bottom:1.25rem;">
             <sl-icon slot="icon" name="info-circle"></sl-icon>
-            Share code <strong>${session.code}</strong> with your team so they can join.
+            ${t('lobby.shareCodeAlert', { code: session.code })}
             <sl-button
               size="small"
               variant="text"
               style="margin-left:0.5rem;"
               @click=${() => void navigator.clipboard.writeText(session.code)}
-            >Copy</sl-button>
+            >${t('lobby.copy')}</sl-button>
           </sl-alert>
 
           <!-- Participants -->
           <p class="section-label" id="participants-label">
-            Participants
+            ${t('lobby.participants')}
             <sl-badge variant="neutral" pill style="margin-left:0.4rem;">${session.participants.length}</sl-badge>
           </p>
           <ul class="participant-list" aria-labelledby="participants-label" role="list" aria-live="polite">
@@ -728,15 +726,15 @@ export class SessionLobby extends LitElement {
               const submitted = session.submissions.some((s) => s.participantId === p.id);
               const isMe = p.id === participantId;
               return html`
-                <li class="participant-item" aria-label="${p.name}${isMe ? ' (you)' : ''}, ${submitted ? 'submitted' : 'waiting'}">
+                <li class="participant-item" aria-label="${p.name}${isMe ? ` ${t('lobby.you')}` : ''}, ${submitted ? t('lobby.status.submitted') : t('lobby.status.waiting')}">
                   <span class="participant-name">
                     <sl-icon name="person-fill" aria-hidden="true"></sl-icon>
                     ${p.name}
-                    ${isMe ? html`<span class="you-label">(you)</span>` : nothing}
+                    ${isMe ? html`<span class="you-label">${t('lobby.you')}</span>` : nothing}
                   </span>
                   ${submitted
-                    ? html`<sl-badge variant="success">Submitted</sl-badge>`
-                    : html`<sl-badge variant="neutral">Waiting</sl-badge>`}
+                    ? html`<sl-badge variant="success">${t('lobby.status.submitted')}</sl-badge>`
+                    : html`<sl-badge variant="neutral">${t('lobby.status.waiting')}</sl-badge>`}
                 </li>
               `;
             })}
@@ -754,7 +752,7 @@ export class SessionLobby extends LitElement {
               ? html`
                   <sl-alert variant="success" open>
                     <sl-icon slot="icon" name="check-circle"></sl-icon>
-                    You have submitted <strong>${mySubmission.fileName}</strong>.
+                    ${t('lobby.youHaveSubmitted')} <strong>${mySubmission.fileName}</strong>.
                   </sl-alert>
                 `
               : html`
@@ -764,7 +762,7 @@ export class SessionLobby extends LitElement {
                     @click=${this._triggerFileInput}
                   >
                     <sl-icon slot="prefix" name="cloud-arrow-up"></sl-icon>
-                    Load &amp; Submit Files
+                    ${t('lobby.loadAndSubmit')}
                   </sl-button>
                 `}
 
@@ -776,14 +774,14 @@ export class SessionLobby extends LitElement {
                     @click=${() => void this._viewCombined()}
                   >
                     <sl-icon slot="prefix" name="eye-fill"></sl-icon>
-                    View Combined Results
+                    ${t('lobby.viewResults')}
                     <sl-badge slot="suffix" variant="neutral" pill>${session.submissions.length}</sl-badge>
                   </sl-button>
                 `
               : html`
                   <div class="waiting" role="status" aria-live="polite">
                     <sl-spinner aria-hidden="true"></sl-spinner>
-                    Waiting for participants to submit files...
+                    ${t('lobby.waitingForParticipants')}
                   </div>
                 `}
           </div>

@@ -2,21 +2,22 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { Confidence, Direction } from '../../schema/types.js';
 import { store } from '../../state/app-state.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
-const CONFIDENCE_OPTIONS: { value: Confidence; label: string; color: string }[] = [
-  { value: 'CONFIRMED', label: 'Confirmed', color: 'var(--sl-color-emerald-600, #059669)' },
-  { value: 'LIKELY', label: 'Likely', color: 'var(--sl-color-blue-600, #2563eb)' },
-  { value: 'POSSIBLE', label: 'Possible', color: 'var(--sl-color-amber-500, #f59e0b)' },
+const CONFIDENCE_OPTIONS: { value: Confidence; labelKey: string; color: string }[] = [
+  { value: 'CONFIRMED', labelKey: 'filterPanel.confidence.confirmed', color: 'var(--sl-color-emerald-600, #059669)' },
+  { value: 'LIKELY', labelKey: 'filterPanel.confidence.likely', color: 'var(--sl-color-blue-600, #2563eb)' },
+  { value: 'POSSIBLE', labelKey: 'filterPanel.confidence.possible', color: 'var(--sl-color-amber-500, #f59e0b)' },
 ];
 
-const DIRECTION_OPTIONS: { value: Direction; label: string; color: string }[] = [
-  { value: 'inbound', label: 'Inbound', color: 'var(--sl-color-blue-600, #2563eb)' },
-  { value: 'outbound', label: 'Outbound', color: 'var(--sl-color-rose-600, #e11d48)' },
-  { value: 'internal', label: 'Internal', color: 'var(--sl-color-neutral-500, #64748b)' },
+const DIRECTION_OPTIONS: { value: Direction; labelKey: string; color: string }[] = [
+  { value: 'inbound', labelKey: 'filterPanel.direction.inbound', color: 'var(--sl-color-blue-600, #2563eb)' },
+  { value: 'outbound', labelKey: 'filterPanel.direction.outbound', color: 'var(--sl-color-rose-600, #e11d48)' },
+  { value: 'internal', labelKey: 'filterPanel.direction.internal', color: 'var(--sl-color-neutral-500, #64748b)' },
 ];
 
 const TOTAL_FILTERS = CONFIDENCE_OPTIONS.length + DIRECTION_OPTIONS.length;
@@ -76,8 +77,8 @@ export class FilterPanel extends LitElement {
   private renderStatus() {
     const count = this.activeCount;
     const label = count === TOTAL_FILTERS
-      ? 'All filters active'
-      : `Filters (${count} active)`;
+      ? t('filterPanel.allActive')
+      : t('filterPanel.nActive', { count });
     return html`<div class="filter-status">${label}</div>`;
   }
 
@@ -85,7 +86,7 @@ export class FilterPanel extends LitElement {
     return html`
       ${this.renderStatus()}
 
-      <div class="section-header">Confidence</div>
+      <div class="section-header">${t('filterPanel.confidence')}</div>
       ${CONFIDENCE_OPTIONS.map(
         (opt) => html`
           <div class="filter-option">
@@ -93,7 +94,7 @@ export class FilterPanel extends LitElement {
               size="small"
               ?checked=${this.confidenceFilter.has(opt.value)}
               @sl-change=${() => store.toggleConfidence(opt.value)}
-            >${opt.label}</sl-checkbox>
+            >${t(opt.labelKey)}</sl-checkbox>
             <span class="dot" style="background:${opt.color}"></span>
           </div>
         `
@@ -101,7 +102,7 @@ export class FilterPanel extends LitElement {
 
       <sl-divider></sl-divider>
 
-      <div class="section-header">Direction</div>
+      <div class="section-header">${t('filterPanel.direction')}</div>
       ${DIRECTION_OPTIONS.map(
         (opt) => html`
           <div class="filter-option">
@@ -109,7 +110,7 @@ export class FilterPanel extends LitElement {
               size="small"
               ?checked=${this.directionFilter.has(opt.value)}
               @sl-change=${() => store.toggleDirection(opt.value)}
-            >${opt.label}</sl-checkbox>
+            >${t(opt.labelKey)}</sl-checkbox>
             <span class="dot" style="background:${opt.color}"></span>
           </div>
         `

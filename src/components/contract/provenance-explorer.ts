@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
@@ -257,14 +258,14 @@ export class ProvenanceExplorer extends LitElement {
 
   override render() {
     if (this.chain.length === 0) {
-      return html`<div class="empty">No provenance chain available</div>`;
+      return html`<div class="empty">${t('provenanceExplorer.empty')}</div>`;
     }
 
     return html`
       ${this.subject
         ? html`
             <div class="subject-heading">
-              <span>Provenance of</span>
+              <span>${t('provenanceExplorer.headingPrefix')}</span>
               <sl-badge variant="neutral">${this.subject}</sl-badge>
             </div>
           `
@@ -273,7 +274,7 @@ export class ProvenanceExplorer extends LitElement {
       <ol
         class="chain"
         role="list"
-        aria-label="${this.subject ? 'Provenance chain for ' + this.subject : 'Provenance chain'}"
+        aria-label="${this.subject ? t('provenanceExplorer.ariaLabel', { subject: this.subject }) : t('provenanceExplorer.ariaLabelDefault')}"
       >
         ${this.chain.map((step, i) => this._renderStep(step, i))}
       </ol>
@@ -286,12 +287,13 @@ export class ProvenanceExplorer extends LitElement {
     const config = STEP_CONFIG[step.kind];
     const isLast = index === this.chain.length - 1;
 
+    const kindLabel = t(`provenanceExplorer.kind.${step.kind}`);
     const stepAriaLabel = [
-      `Step ${index + 1} of ${this.chain.length}:`,
-      config.ariaKindLabel,
+      t('provenanceExplorer.step', { n: index + 1, total: this.chain.length }),
+      kindLabel,
       step.label,
       step.detail ? `— ${step.detail}` : '',
-      step.timestamp ? `at ${step.timestamp}` : '',
+      step.timestamp ? t('provenanceExplorer.at', { timestamp: step.timestamp }) : '',
     ]
       .filter(Boolean)
       .join(' ');
@@ -305,7 +307,7 @@ export class ProvenanceExplorer extends LitElement {
         aria-posinset="${index + 1}"
         aria-current=${isLast ? 'true' : nothing}
       >
-        <sl-tooltip content="${config.ariaKindLabel}">
+        <sl-tooltip content="${kindLabel}">
           <div class="step-node" aria-hidden="true">
             <span>${config.icon}</span>
           </div>
@@ -324,7 +326,7 @@ export class ProvenanceExplorer extends LitElement {
                   : 'neutral'
               }
               pill
-            >${config.ariaKindLabel}</sl-badge>
+            >${kindLabel}</sl-badge>
           </div>
           <div class="step-label">${step.label}</div>
           ${step.detail
@@ -354,13 +356,12 @@ export class ProvenanceExplorer extends LitElement {
     if (relevantKinds.length <= 1) return nothing;
 
     return html`
-      <div class="legend" role="list" aria-label="Legend">
+      <div class="legend" role="list" aria-label="${t('provenanceExplorer.legend')}">
         ${relevantKinds.map((k) => {
-          const config = STEP_CONFIG[k];
           return html`
             <div class="legend-item" role="listitem">
               <span class="legend-node legend-${k}" aria-hidden="true"></span>
-              ${config.ariaKindLabel}
+              ${t(`provenanceExplorer.kind.${k}`)}
             </div>
           `;
         })}

@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
@@ -283,12 +284,12 @@ export class SchemaDisplay extends LitElement {
     const entries = parseSchema(this.schema);
 
     if (entries.length === 0) {
-      return html`<div class="empty">No schema fields defined</div>`;
+      return html`<div class="empty">${t('schemaDisplay.empty')}</div>`;
     }
 
     return html`
       ${this.label ? html`<div class="schema-label">${this.label}</div>` : nothing}
-      <ul class="field-list" role="tree" aria-label="${this.label || 'Schema fields'}">
+      <ul class="field-list" role="tree" aria-label="${this.label || t('schemaDisplay.defaultAriaLabel')}">
         ${entries.map((f) => this._renderField(f, ''))}
       </ul>
     `;
@@ -307,7 +308,7 @@ export class SchemaDisplay extends LitElement {
           tabindex=${hasNested ? '0' : '-1'}
           @click=${hasNested ? () => this._toggleExpand(path) : nothing}
           @keydown=${hasNested ? (e: KeyboardEvent) => this._onKeyDown(e, path) : nothing}
-          aria-label="${field.key}: ${field.type}${field.required ? ' (required)' : ' (optional)'}${field.description ? '. ' + field.description : ''}"
+          aria-label="${field.key}: ${field.type} (${field.required ? t('schemaDisplay.fieldAriaLabel.required') : t('schemaDisplay.fieldAriaLabel.optional')})${field.description ? '. ' + field.description : ''}"
         >
           ${hasNested
             ? html`<span class="expand-btn ${isExpanded ? 'expanded' : ''}" aria-hidden="true">&#9654;</span>`
@@ -320,10 +321,10 @@ export class SchemaDisplay extends LitElement {
             style="color: ${typeColor}; border-color: ${typeColor}22;"
           >${field.type}</span>
 
-          <sl-tooltip content="${field.required ? 'required' : 'optional'}">
+          <sl-tooltip content="${field.required ? t('schemaDisplay.required') : t('schemaDisplay.optional')}">
             <span
               class="required-indicator ${field.required ? 'required' : 'optional'}"
-              aria-label="${field.required ? 'required' : 'optional'}"
+              aria-label="${field.required ? t('schemaDisplay.required') : t('schemaDisplay.optional')}"
             >${field.required ? '*' : '?'}</span>
           </sl-tooltip>
 
@@ -334,7 +335,7 @@ export class SchemaDisplay extends LitElement {
 
         ${hasNested && isExpanded
           ? html`
-              <ul class="nested-list" role="group" aria-label="Fields of ${field.key}">
+              <ul class="nested-list" role="group" aria-label="${t('schemaDisplay.fieldsOfAriaLabel', { key: field.key })}">
                 ${field.nested!.map((f) => this._renderField(f, path))}
               </ul>
             `
