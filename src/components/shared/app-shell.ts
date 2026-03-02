@@ -250,6 +250,69 @@ export class AppShell extends LitElement {
         grid-template-columns: 1fr;
       }
     }
+
+    /* ── Integration ready CTA ── */
+    .integration-cta {
+      margin-top: 1.5rem;
+      border-radius: 12px;
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      border: 2px solid #93c5fd;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      animation: integration-cta-in 400ms ease-out;
+    }
+
+    @keyframes integration-cta-in {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .integration-cta {
+        animation: none;
+      }
+    }
+
+    .integration-cta-icon {
+      flex-shrink: 0;
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      background: #1d4ed8;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .integration-cta-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .integration-cta-heading {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #1e3a8a;
+      margin: 0 0 0.25rem;
+    }
+
+    .integration-cta-description {
+      font-size: 0.9375rem;
+      color: #1e40af;
+      margin: 0;
+    }
   `;
 
   private _storeCtrl = new StoreController(this, (s) => s);
@@ -910,6 +973,11 @@ export class AppShell extends LitElement {
                   this._previousContractBundle = this._lastContractBundle;
                   this._lastContractBundle = data.bundle;
                 }
+                const compliance = this._complianceStatus(files);
+                const showIntegrationCta =
+                  this._workItems.length > 0 &&
+                  compliance.status === 'pass' &&
+                  data.bundle.eventContracts.length > 0;
                 return html`
                   <contract-diff
                     .bundleBefore=${this._previousContractBundle}
@@ -923,6 +991,31 @@ export class AppShell extends LitElement {
                     .chain=${this._provenanceChain(files)}
                     subject=${t('shell.contracts.provenanceSubject')}
                   ></provenance-explorer>
+                  ${showIntegrationCta ? html`
+                    <div
+                      class="integration-cta"
+                      role="status"
+                      aria-label="${t('shell.contracts.integrationCta.heading')}: ${t('shell.contracts.integrationCta.description')}"
+                    >
+                      <div class="integration-cta-icon" aria-hidden="true">&#10003;</div>
+                      <div class="integration-cta-body">
+                        <div class="integration-cta-heading">${t('shell.contracts.integrationCta.heading')}</div>
+                        <p class="integration-cta-description">${t('shell.contracts.integrationCta.description')}</p>
+                      </div>
+                      <sl-button
+                        variant="primary"
+                        size="large"
+                        aria-label="${t('shell.contracts.integrationCta.button')}"
+                        @click=${() => {
+                          this.dispatchEvent(new CustomEvent('integration-check-requested', {
+                            bubbles: true,
+                            composed: true,
+                          }));
+                          this._onIntegrationCheckRequested();
+                        }}
+                      >${t('shell.contracts.integrationCta.button')}</sl-button>
+                    </div>
+                  ` : ''}
                 `;
               })()}
             </sl-tab-panel>
@@ -1405,6 +1498,10 @@ export class AppShell extends LitElement {
 
   private _onFormalizeRequested() {
     store.setView('contracts');
+  }
+
+  private _onIntegrationCheckRequested() {
+    this.renderRoot.querySelector('sl-tab-group')?.show('integration');
   }
 
   private _onDelegationLevelChanged(e: CustomEvent<{ level: string }>) {

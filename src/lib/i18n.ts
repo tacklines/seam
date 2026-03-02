@@ -29,6 +29,9 @@ export const messages: Record<string, string> = {
   'shell.tab.integration': 'Integration',
   'shell.contracts.schemaLabel': 'Event Schemas',
   'shell.contracts.provenanceSubject': 'Contract Lineage',
+  'shell.contracts.integrationCta.heading': 'Ready for Integration Check',
+  'shell.contracts.integrationCta.description': 'All contracts are in place and compliance checks pass. Run an integration check to validate everything works together.',
+  'shell.contracts.integrationCta.button': 'Run Integration Check',
 
   // ---------------------------------------------------------------------------
   // file-drop-zone
