@@ -248,6 +248,14 @@ export const messages: Record<string, string> = {
   'lobby.urlJoinAutoSubtitle': 'Detected session invite link. Joining automatically.',
 
   // ---------------------------------------------------------------------------
+  // error-boundary
+  // ---------------------------------------------------------------------------
+  'errorBoundary.networkError': 'Unable to reach the server. Check your connection and try again.',
+  'errorBoundary.timeoutError': 'Request timed out. Try again.',
+  'errorBoundary.unexpectedError': 'Something unexpected happened.',
+  'errorBoundary.retry': 'Retry',
+
+  // ---------------------------------------------------------------------------
   // app-shell clipboard paste
   // ---------------------------------------------------------------------------
   'shell.pasteSuccess': 'Pasted YAML loaded — {{count}} events from {{role}}',

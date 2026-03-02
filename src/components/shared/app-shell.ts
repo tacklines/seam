@@ -87,6 +87,7 @@ import './onboarding-overlay.js';
 import './milestone-celebration.js';
 import './assumption-list.js';
 import './delegation-toggle.js';
+import './error-boundary.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -567,6 +568,7 @@ export class AppShell extends LitElement {
           ${this._renderPasteToast()}
           ${this._renderShortcutReference()}
           ${this._renderSettingsDialog()}
+          <error-boundary></error-boundary>
         `;
       }
       return html`
@@ -577,10 +579,11 @@ export class AppShell extends LitElement {
         ${this._renderPasteToast()}
         ${this._renderShortcutReference()}
         ${this._renderSettingsDialog()}
+        <error-boundary></error-boundary>
       `;
     }
 
-    return html`${this.renderAppLayout()}${this._renderPasteToast()}${this._renderShortcutReference()}${this._renderSettingsDialog()}${this._renderSectionSettingsDrawer()}`;
+    return html`${this.renderAppLayout()}${this._renderPasteToast()}${this._renderShortcutReference()}${this._renderSettingsDialog()}${this._renderSectionSettingsDrawer()}<error-boundary></error-boundary>`;
   }
 
   private _renderShortcutReference() {
