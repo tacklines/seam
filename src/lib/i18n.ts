@@ -355,6 +355,12 @@ export const messages: Record<string, string> = {
   'comparisonDiff.status.only-b': 'Only in file B',
 
   // ---------------------------------------------------------------------------
+  // suggestion-bar
+  // ---------------------------------------------------------------------------
+  'suggestion-bar.dismiss': 'Dismiss suggestion',
+  'suggestion-bar.aria-label': 'Session suggestion',
+
+  // ---------------------------------------------------------------------------
   // schema-display
   // ---------------------------------------------------------------------------
   'schemaDisplay.empty': 'No schema fields defined',
