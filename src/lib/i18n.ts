@@ -504,6 +504,66 @@ export const messages: Record<string, string> = {
   'suggestionBanner.dismissAriaLabel': 'Dismiss agent suggestion',
 
   // ---------------------------------------------------------------------------
+  // breakdown-editor
+  // ---------------------------------------------------------------------------
+  'breakdownEditor.title': 'Work Item Breakdown',
+  'breakdownEditor.addWorkItem': 'Add work item',
+  'breakdownEditor.addWorkItemAriaLabel': 'Add a new work item (shortcut: N)',
+  'breakdownEditor.empty': 'No work items yet.',
+  'breakdownEditor.emptyHint': 'Press the + button or N to add your first work item.',
+  'breakdownEditor.workItemTitle': 'Title',
+  'breakdownEditor.workItemTitlePlaceholder': 'Short, imperative title...',
+  'breakdownEditor.workItemDescription': 'Description',
+  'breakdownEditor.workItemDescriptionPlaceholder': 'Context and rationale...',
+  'breakdownEditor.acceptanceCriteria': 'Acceptance Criteria',
+  'breakdownEditor.acceptanceCriteriaHint': 'Press Enter to add each criterion',
+  'breakdownEditor.acceptanceCriteriaPlaceholder': 'Add criterion and press Enter...',
+  'breakdownEditor.complexity': 'Complexity',
+  'breakdownEditor.linkedEvents': 'Linked Events',
+  'breakdownEditor.noLinkedEvents': 'No events linked',
+  'breakdownEditor.deleteWorkItem': 'Delete work item',
+  'breakdownEditor.deleteWorkItemAriaLabel': 'Delete work item: {{title}}',
+  'breakdownEditor.ghostCard.label': 'Suggested',
+  'breakdownEditor.ghostCard.accept': 'Accept',
+  'breakdownEditor.ghostCard.dismiss': 'Dismiss',
+  'breakdownEditor.ghostCard.acceptAriaLabel': 'Accept suggestion: {{title}}',
+  'breakdownEditor.ghostCard.dismissAriaLabel': 'Dismiss suggestion: {{title}}',
+  'breakdownEditor.complexity.S': 'S — Small',
+  'breakdownEditor.complexity.M': 'M — Medium',
+  'breakdownEditor.complexity.L': 'L — Large',
+  'breakdownEditor.complexity.XL': 'XL — Extra Large',
+  'breakdownEditor.workItemCard.ariaLabel': 'Work item: {{title}}, complexity {{complexity}}',
+
+  // ---------------------------------------------------------------------------
+  // coverage-matrix
+  // ---------------------------------------------------------------------------
+  'coverageMatrix.title': 'Event Coverage',
+  'coverageMatrix.empty': 'No events or work items to display.',
+  'coverageMatrix.ariaLabel': 'Event coverage matrix — rows are events, columns are work items',
+  'coverageMatrix.col.event': 'Domain Event',
+  'coverageMatrix.covered': 'Covered by {{title}}',
+  'coverageMatrix.uncovered': '{{event}} is not covered by any work item',
+  'coverageMatrix.cell.covered': '{{workItem}} covers {{event}}',
+  'coverageMatrix.cell.notCovered': '{{workItem}} does not cover {{event}}',
+  'coverageMatrix.uncoveredCount': '{{count}} uncovered event(s)',
+  'coverageMatrix.allCovered': 'All events covered',
+
+  // ---------------------------------------------------------------------------
+  // dependency-graph
+  // ---------------------------------------------------------------------------
+  'dependencyGraph.title': 'Dependencies',
+  'dependencyGraph.empty': 'No work items to display.',
+  'dependencyGraph.emptyHint': 'Add work items above to see their dependencies here.',
+  'dependencyGraph.ariaLabel': 'Work item dependency graph',
+  'dependencyGraph.tableCaption': 'Work item dependencies',
+  'dependencyGraph.col.from': 'From',
+  'dependencyGraph.col.to': 'Depends on',
+  'dependencyGraph.noDependencies': 'No dependencies defined',
+  'dependencyGraph.noDependenciesHint': 'Drag from one work item node to another to create a dependency.',
+  'dependencyGraph.dragHint': 'Drag to create a dependency link',
+  'dependencyGraph.dependency': '{{from}} depends on {{to}}',
+
+  // ---------------------------------------------------------------------------
   // schema-display
   // ---------------------------------------------------------------------------
   'schemaDisplay.empty': 'No schema fields defined',
