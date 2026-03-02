@@ -1,4 +1,4 @@
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { registry } from '../../lib/shortcut-registry.js';
 import type { Shortcut } from '../../lib/shortcut-registry.js';
@@ -9,13 +9,9 @@ import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
 import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
-import '@shoelace-style/shoelace/dist/components/select/select.js';
-import '@shoelace-style/shoelace/dist/components/option/option.js';
-import '@shoelace-style/shoelace/dist/components/switch/switch.js';
-import '@shoelace-style/shoelace/dist/components/input/input.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/divider/divider.js';
+import './settings-section.js';
 
 /**
  * `<settings-dialog>` — Full-screen global settings dialog accessible from the app-shell header.
@@ -85,67 +81,6 @@ export class SettingsDialog extends LitElement {
 
     sl-tab-panel::part(base) {
       padding: 0;
-    }
-
-    .settings-list {
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-      padding: 0.25rem 0;
-    }
-
-    .setting-row {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    .setting-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .setting-label {
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--sl-color-neutral-900);
-    }
-
-    /* Blue dot for modified settings */
-    .modified-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #3b82f6;
-      flex-shrink: 0;
-      display: inline-block;
-    }
-
-    .setting-default {
-      font-size: 0.75rem;
-      color: var(--sl-color-neutral-500);
-      margin-top: 0.125rem;
-    }
-
-    .setting-description {
-      font-size: 0.75rem;
-      color: var(--sl-color-neutral-600);
-      line-height: 1.4;
-      margin-top: 0.125rem;
-    }
-
-    .setting-control {
-      margin-top: 0.25rem;
-    }
-
-    sl-switch {
-      --sl-toggle-size-medium: 1.125rem;
-    }
-
-    sl-select,
-    sl-input {
-      --sl-input-font-size-medium: 0.875rem;
     }
 
     /* Shortcuts tab */
@@ -472,39 +407,51 @@ export class SettingsDialog extends LitElement {
             </sl-tab>
 
             <sl-tab-panel name="session">
-              <div class="settings-list">
-                ${this._sessionSettings().map((item) => this._renderSetting(item))}
-              </div>
+              <settings-section
+                .settings=${this._sessionSettings()}
+                idPrefix="dialog-label"
+                @setting-changed=${this._onSettingChanged}
+              ></settings-section>
             </sl-tab-panel>
 
             <sl-tab-panel name="artifacts">
-              <div class="settings-list">
-                ${this._artifactSettings().map((item) => this._renderSetting(item))}
-              </div>
+              <settings-section
+                .settings=${this._artifactSettings()}
+                idPrefix="dialog-label"
+                @setting-changed=${this._onSettingChanged}
+              ></settings-section>
             </sl-tab-panel>
 
             <sl-tab-panel name="comparison">
-              <div class="settings-list">
-                ${this._comparisonSettings().map((item) => this._renderSetting(item))}
-              </div>
+              <settings-section
+                .settings=${this._comparisonSettings()}
+                idPrefix="dialog-label"
+                @setting-changed=${this._onSettingChanged}
+              ></settings-section>
             </sl-tab-panel>
 
             <sl-tab-panel name="contracts">
-              <div class="settings-list">
-                ${this._contractSettings().map((item) => this._renderSetting(item))}
-              </div>
+              <settings-section
+                .settings=${this._contractSettings()}
+                idPrefix="dialog-label"
+                @setting-changed=${this._onSettingChanged}
+              ></settings-section>
             </sl-tab-panel>
 
             <sl-tab-panel name="notifications">
-              <div class="settings-list">
-                ${this._notificationSettings().map((item) => this._renderSetting(item))}
-              </div>
+              <settings-section
+                .settings=${this._notificationSettings()}
+                idPrefix="dialog-label"
+                @setting-changed=${this._onSettingChanged}
+              ></settings-section>
             </sl-tab-panel>
 
             <sl-tab-panel name="delegation">
-              <div class="settings-list">
-                ${this._delegationSettings().map((item) => this._renderSetting(item))}
-              </div>
+              <settings-section
+                .settings=${this._delegationSettings()}
+                idPrefix="dialog-label"
+                @setting-changed=${this._onSettingChanged}
+              ></settings-section>
             </sl-tab-panel>
 
             <sl-tab-panel name="shortcuts">
@@ -591,104 +538,14 @@ export class SettingsDialog extends LitElement {
     return parts.join(' + ');
   }
 
-  private _isModified(item: SettingItem): boolean {
-    return JSON.stringify(item.value) !== JSON.stringify(item.defaultValue);
-  }
-
-  private _formatDefault(item: SettingItem): string {
-    const val = item.defaultValue;
-    if (typeof val === 'boolean') return val ? t('settingsDrawer.defaultTrue') : t('settingsDrawer.defaultFalse');
-    return String(val);
-  }
-
-  private _renderSetting(item: SettingItem) {
-    const modified = this._isModified(item);
-
-    return html`
-      <div class="setting-row">
-        <div class="setting-header">
-          <span class="setting-label" id="dialog-label-${item.key}">${item.label}</span>
-          ${modified ? html`<span class="modified-dot" aria-label=${t('settingsDrawer.modifiedAriaLabel')}></span>` : nothing}
-        </div>
-        ${item.description
-          ? html`<div class="setting-description">${item.description}</div>`
-          : nothing}
-        <div class="setting-control">
-          ${this._renderControl(item)}
-        </div>
-        <div class="setting-default">
-          ${t('settingsDrawer.defaultPrefix')} ${this._formatDefault(item)}
-        </div>
-      </div>
-    `;
-  }
-
-  private _renderControl(item: SettingItem) {
-    switch (item.type) {
-      case 'select':
-        return html`
-          <sl-select
-            value=${String(item.value)}
-            aria-labelledby="dialog-label-${item.key}"
-            @sl-change=${(e: Event) => {
-              const val = (e.target as unknown as { value: string }).value;
-              this._applyChange(item.key, val);
-            }}
-          >
-            ${(item.options ?? []).map(
-              (opt) => html`<sl-option value=${opt.value}>${opt.label}</sl-option>`
-            )}
-          </sl-select>
-        `;
-
-      case 'switch':
-        return html`
-          <sl-switch
-            ?checked=${Boolean(item.value)}
-            aria-labelledby="dialog-label-${item.key}"
-            @sl-change=${(e: Event) => {
-              const checked = (e.target as unknown as { checked: boolean }).checked;
-              this._applyChange(item.key, checked);
-            }}
-          ></sl-switch>
-        `;
-
-      case 'number':
-        return html`
-          <sl-input
-            type="number"
-            value=${String(item.value)}
-            aria-labelledby="dialog-label-${item.key}"
-            @sl-change=${(e: Event) => {
-              const val = Number((e.target as HTMLInputElement).value);
-              this._applyChange(item.key, val);
-            }}
-          ></sl-input>
-        `;
-
-      case 'input':
-      default:
-        return html`
-          <sl-input
-            type="text"
-            value=${String(item.value)}
-            aria-labelledby="dialog-label-${item.key}"
-            @sl-change=${(e: Event) => {
-              const val = (e.target as HTMLInputElement).value;
-              this._applyChange(item.key, val);
-            }}
-          ></sl-input>
-        `;
-    }
-  }
-
-  private _applyChange(key: string, value: unknown): void {
-    // Immutable update to trigger Lit re-render
+  private _onSettingChanged(e: CustomEvent<{ key: string; value: unknown }>): void {
+    // Stop the inner event from escaping the dialog shadow root, then re-dispatch
+    // from the dialog host so the external API emits exactly one event per change.
+    e.stopPropagation();
+    const { key, value } = e.detail;
+    // Immutable update to trigger Lit re-render (drives blue-dot modified state)
     this._settings = new Map(this._settings).set(key, value);
-    this._emitChange(key, value);
-  }
-
-  private _emitChange(key: string, value: unknown): void {
+    // Re-dispatch from this element so the external API is preserved
     this.dispatchEvent(
       new CustomEvent('setting-changed', {
         detail: { key, value },
