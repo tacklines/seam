@@ -53,7 +53,7 @@ describe('Given invalid YAML syntax', () => {
     const err = result as LoadError;
     expect(err.filename).toBe('bad.yaml');
     expect(err.errors.length).toBeGreaterThan(0);
-    expect(err.errors[0]).toMatch(/YAML parse error/);
+    expect(err.errors[0]).toMatch(/could not be read as valid YAML/);
   });
 });
 
@@ -62,7 +62,7 @@ describe('Given YAML that is not an object', () => {
     // Per yaml-loader.ts:39 — checks parsed is object
     const result = parseAndValidate('string.yaml', '"just a string"');
     expect(result.ok).toBe(false);
-    expect((result as LoadError).errors[0]).toMatch(/does not contain a YAML object/);
+    expect((result as LoadError).errors[0]).toMatch(/does not contain the expected structure/);
   });
 
   it('when content is null, returns ok: false', () => {
@@ -112,7 +112,7 @@ boundary_assumptions: []
     const result = parseAndValidate('bad-name.yaml', badEventName);
     expect(result.ok).toBe(false);
     const err = result as LoadError;
-    expect(err.errors.some((e) => e.includes('pattern'))).toBe(true);
+    expect(err.errors.some((e) => e.includes('PascalCase'))).toBe(true);
   });
 
   it('when confidence has invalid value, returns validation error', () => {

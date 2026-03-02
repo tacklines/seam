@@ -3,6 +3,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import rawSchema from '../schema/candidate-events.schema.json';
 import type { CandidateEventsFile, LoadedFile } from '../schema/types.js';
+import { friendlyValidationErrors } from './friendly-errors.js';
 
 // Strip $schema since Ajv default doesn't support draft/2020-12
 const { $schema: _, ...schema } = rawSchema;
@@ -32,7 +33,7 @@ export function parseAndValidate(filename: string, content: string): LoadOutcome
     return {
       ok: false,
       filename,
-      errors: [`YAML parse error: ${(e as Error).message}`],
+      errors: [`This file could not be read as valid YAML. Check for formatting issues like mismatched indentation or stray characters. (${(e as Error).message})`],
     };
   }
 
@@ -40,15 +41,13 @@ export function parseAndValidate(filename: string, content: string): LoadOutcome
     return {
       ok: false,
       filename,
-      errors: ['File does not contain a YAML object'],
+      errors: ['This file does not contain the expected structure. It should be a YAML document starting with metadata, domain_events, and boundary_assumptions sections.'],
     };
   }
 
   const valid = validate(parsed);
   if (!valid) {
-    const errors = (validate.errors ?? []).map(
-      (e) => `${e.instancePath || '/'}: ${e.message}`
-    );
+    const errors = friendlyValidationErrors(validate.errors ?? []);
     return { ok: false, filename, errors };
   }
 
