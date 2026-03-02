@@ -115,6 +115,13 @@ export const messages: Record<string, string> = {
   'comparisonView.nAssumptions': '{{count}} assumptions',
   'comparisonView.progress': '{{resolved}} of {{total}} conflicts resolved',
   'comparisonView.allResolved': 'All conflicts resolved!',
+  'comparisonView.matchedAssumptions': 'Matched Assumptions',
+  'comparisonView.matched': 'Matched',
+  'comparisonView.needsDiscussion': 'Needs Discussion',
+  'comparisonView.assumptionFrom': 'From {{role}}',
+  'comparisonView.matchedBy': 'Matched by {{eventName}} ({{role}})',
+  'comparisonView.matchReason': '{{reason}}',
+  'comparisonView.assumptions': 'Assumptions',
 
   // ---------------------------------------------------------------------------
   // conflict-card

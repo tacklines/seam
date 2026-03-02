@@ -3,6 +3,7 @@ import { customElement, property } from 'lit/decorators.js';
 import type { LoadedFile, ConflictResolution, EventPriority } from '../../schema/types.js';
 import { ComparisonController } from '../controllers/comparison-controller.js';
 import { t } from '../../lib/i18n.js';
+import { matchAssumptions } from '../../lib/assumption-matching.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import './conflict-card.js';
@@ -21,7 +22,7 @@ export class ComparisonView extends LitElement {
     /* ---- Dashboard Header ---- */
     .stats {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 1rem;
       margin-bottom: 2rem;
     }
@@ -53,6 +54,7 @@ export class ComparisonView extends LitElement {
     .stat-card.conflicts .stat-number { color: #e11d48; }
     .stat-card.shared-events .stat-number { color: #f59e0b; }
     .stat-card.shared-aggregates .stat-number { color: #4f46e5; }
+    .stat-card.assumptions .stat-number { color: #16a34a; }
 
     /* ---- Section headings ---- */
     .section {
@@ -70,6 +72,78 @@ export class ComparisonView extends LitElement {
     .section-heading.conflicts { color: #e11d48; }
     .section-heading.shared-events { color: #f59e0b; }
     .section-heading.shared-aggregates { color: #4f46e5; }
+    .section-heading.assumptions { color: #16a34a; }
+
+    /* ---- Assumption match cards ---- */
+    .assumption-match-card {
+      border-radius: 8px;
+      padding: 1rem;
+      border: 1px solid;
+    }
+
+    .assumption-match-card.matched {
+      background: #f0fdf4;
+      border-color: #86efac;
+    }
+
+    .assumption-match-card.unmatched {
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+
+    .assumption-match-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .assumption-match-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+    }
+
+    .assumption-match-badge.matched {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .assumption-match-badge.unmatched {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .assumption-match-role {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
+    .assumption-match-statement {
+      font-size: 0.875rem;
+      color: #374151;
+      margin-bottom: 0.5rem;
+      line-height: 1.4;
+    }
+
+    .assumption-match-events {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-top: 0.5rem;
+    }
+
+    .assumption-match-event {
+      font-size: 0.8125rem;
+      color: #166534;
+      padding: 0.25rem 0.5rem;
+      background: #dcfce7;
+      border-radius: 4px;
+    }
 
     .card-list {
       display: flex;
@@ -196,6 +270,8 @@ export class ComparisonView extends LitElement {
     const conflicts = this._comparisonCtrl.conflicts;
     const sharedEvents = this._comparisonCtrl.sharedEvents;
     const sharedAggregates = this._comparisonCtrl.sharedAggregates;
+    const assumptionMatches = matchAssumptions(this.files);
+    const matchedCount = assumptionMatches.filter((m) => m.matched).length;
 
     // Sort conflicts by priority tier if priorities are available
     const tierOrder: EventPriority['tier'][] = ['must_have', 'should_have', 'could_have'];
@@ -261,6 +337,10 @@ export class ComparisonView extends LitElement {
             <domain-tooltip term="aggregate">${t('comparisonView.sharedAggregates')}</domain-tooltip>
           </div>
         </div>
+        <div class="stat-card assumptions" role="status" aria-label="${matchedCount} ${t('comparisonView.assumptions').toLowerCase()} matched">
+          <div class="stat-number" aria-hidden="true">${matchedCount}</div>
+          <div class="stat-label">${t('comparisonView.assumptions')}</div>
+        </div>
       </div>
 
       <!-- Conflicts Section -->
@@ -301,6 +381,43 @@ export class ComparisonView extends LitElement {
               ${sharedAggregates.map(
                 (o) => html`<conflict-card .overlap=${o} .files=${this.files}></conflict-card>`
               )}
+            </div>`
+          : html`<div class="none-found">${t('comparisonView.noneFound')}</div>`}
+      </div>
+
+      <!-- Matched Assumptions Section -->
+      <div class="section" role="region" aria-label="${t('comparisonView.matchedAssumptions')}" aria-live="polite">
+        <h2 class="section-heading assumptions">${t('comparisonView.matchedAssumptions')}</h2>
+        ${assumptionMatches.length > 0
+          ? html`<div class="card-list">
+              ${assumptionMatches.map((m) => html`
+                <div
+                  class="assumption-match-card ${m.matched ? 'matched' : 'unmatched'}"
+                  role="article"
+                  aria-label="${m.matched ? t('comparisonView.matched') : t('comparisonView.needsDiscussion')}: ${m.assumption.statement}"
+                >
+                  <div class="assumption-match-header">
+                    <span class="assumption-match-badge ${m.matched ? 'matched' : 'unmatched'}">
+                      ${m.matched
+                        ? html`<span aria-hidden="true">&#10003;</span> ${t('comparisonView.matched')}`
+                        : html`<span aria-hidden="true">&#9888;</span> ${t('comparisonView.needsDiscussion')}`
+                      }
+                    </span>
+                    <span class="assumption-match-role">${t('comparisonView.assumptionFrom', { role: m.assumptionRole })}</span>
+                  </div>
+                  <div class="assumption-match-statement">${m.assumption.statement}</div>
+                  ${m.matched && m.matchedEvents.length > 0
+                    ? html`<div class="assumption-match-events" aria-label="Matched events">
+                        ${m.matchedEvents.map((e) => html`
+                          <div class="assumption-match-event">
+                            ${t('comparisonView.matchedBy', { eventName: e.eventName, role: e.role })}
+                          </div>
+                        `)}
+                      </div>`
+                    : ''
+                  }
+                </div>
+              `)}
             </div>`
           : html`<div class="none-found">${t('comparisonView.noneFound')}</div>`}
       </div>
