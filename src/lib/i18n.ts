@@ -407,6 +407,9 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   'suggestion-bar.dismiss': 'Dismiss suggestion',
   'suggestion-bar.aria-label': 'Session suggestion',
+  'suggestion.cta.viewConflicts': 'View Conflicts',
+  'suggestion.cta.viewContracts': 'View Contracts',
+  'suggestion.cta.viewIntegration': 'View Integration',
 
   // ---------------------------------------------------------------------------
   // settings-drawer

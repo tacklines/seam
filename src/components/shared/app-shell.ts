@@ -955,6 +955,7 @@ export class AppShell extends LitElement {
               sessionCode: this.appState.sessionState?.code ?? 'SOLO',
               participantNames: this.appState.sessionState?.session.participants.map(p => p.name) ?? [],
             } as SuggestionContext}
+            @suggestion-navigate=${this._onSuggestionNavigate}
           ></suggestion-bar>
         </div>
       </div>
@@ -1033,6 +1034,11 @@ export class AppShell extends LitElement {
 
   private _onIntegrationCheckRequested() {
     this.renderRoot.querySelector('sl-tab-group')?.show('integration');
+  }
+
+  private _onSuggestionNavigate(e: CustomEvent<{ panel: string }>) {
+    const { panel } = e.detail;
+    this.renderRoot.querySelector('sl-tab-group')?.show(panel);
   }
 
   private _onDelegationLevelChanged(e: CustomEvent<{ level: string }>) {

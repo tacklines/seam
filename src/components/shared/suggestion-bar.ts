@@ -1,8 +1,9 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { formatSuggestion, type SuggestionContext } from '../../lib/format-suggestion.js';
+import { formatSuggestion, type SuggestionContext, type Suggestion } from '../../lib/format-suggestion.js';
 import type { WorkflowStatus } from '../../lib/workflow-engine.js';
 import { t } from '../../lib/i18n.js';
+import '@shoelace-style/shoelace/dist/components/button/button.js';
 
 /**
  * Suggestion Bar — a thin strip at the bottom of the main content area, above
@@ -13,9 +14,12 @@ import { t } from '../../lib/i18n.js';
  * - Accessible: `aria-live="polite"` so screen readers announce suggestion changes
  * - Respects `prefers-reduced-motion` — no animation when reduced motion is enabled
  * - Bold formatting for session codes and counts via renderSuggestionHtml()
+ * - Optional CTA button navigates to the relevant tab panel
  *
  * @fires suggestion-dismissed - Fired when the user dismisses the suggestion.
  *   No detail payload.
+ * @fires suggestion-navigate - Fired when the user clicks the CTA button.
+ *   Detail: `{ panel: string }` — the tab panel to navigate to.
  */
 @customElement('suggestion-bar')
 export class SuggestionBar extends LitElement {
@@ -72,6 +76,18 @@ export class SuggestionBar extends LitElement {
     .suggestion-text strong {
       font-weight: var(--sl-font-weight-semibold, 600);
       color: var(--sl-color-neutral-800, #1f2937);
+    }
+
+    /* CTA button: primary-colored text button */
+    .cta-btn::part(base) {
+      color: var(--sl-color-primary-600, #2563eb);
+      font-size: var(--sl-font-size-small, 0.875rem);
+      font-weight: var(--sl-font-weight-semibold, 600);
+      padding-inline: var(--sl-spacing-x-small, 0.5rem);
+    }
+
+    .cta-btn::part(base):hover {
+      color: var(--sl-color-primary-700, #1d4ed8);
     }
 
     /* Dismiss button: muted until hover */
@@ -137,8 +153,8 @@ export class SuggestionBar extends LitElement {
   private _lastSuggestion = '';
   private _animationTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private get _suggestion(): string {
-    if (!this.status || !this.context) return '';
+  private get _suggestion(): Suggestion | null {
+    if (!this.status || !this.context) return null;
     return formatSuggestion(this.status, this.context);
   }
 
@@ -147,8 +163,8 @@ export class SuggestionBar extends LitElement {
     // Re-trigger the slide-up animation when the suggestion text changes.
     if (changed.has('status') || changed.has('context')) {
       const next = this._suggestion;
-      if (next && next !== this._lastSuggestion) {
-        this._lastSuggestion = next;
+      if (next && next.text !== this._lastSuggestion) {
+        this._lastSuggestion = next.text;
         // Reset dismissed when the suggestion changes
         this._dismissed = false;
         this._triggerAnimation();
@@ -208,6 +224,17 @@ export class SuggestionBar extends LitElement {
     );
   }
 
+  private _handleCtaClick(panel: string | undefined) {
+    if (!panel) return;
+    this.dispatchEvent(
+      new CustomEvent('suggestion-navigate', {
+        bubbles: true,
+        composed: true,
+        detail: { panel },
+      })
+    );
+  }
+
   override render() {
     const suggestion = this._suggestion;
 
@@ -215,6 +242,8 @@ export class SuggestionBar extends LitElement {
     if (!suggestion || this._dismissed) {
       return nothing;
     }
+
+    const { text, action } = suggestion;
 
     return html`
       <div
@@ -227,8 +256,19 @@ export class SuggestionBar extends LitElement {
           class="suggestion-text"
           aria-live="polite"
           aria-atomic="true"
-          title="${suggestion}"
-        >${this._renderSuggestionHtml(suggestion)}</span>
+          title="${text}"
+        >${this._renderSuggestionHtml(text)}</span>
+
+        ${action
+          ? html`
+            <sl-button
+              class="cta-btn"
+              variant="text"
+              size="small"
+              @click=${() => this._handleCtaClick(action.navigateTo)}
+            >${action.label}</sl-button>
+          `
+          : nothing}
 
         <button
           class="dismiss-btn"
