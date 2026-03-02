@@ -573,6 +573,51 @@ export const messages: Record<string, string> = {
   'schemaDisplay.fieldsOfAriaLabel': 'Fields of {{key}}',
   'schemaDisplay.fieldAriaLabel.required': 'required',
   'schemaDisplay.fieldAriaLabel.optional': 'optional',
+
+  // ---------------------------------------------------------------------------
+  // compliance-badge
+  // ---------------------------------------------------------------------------
+  'complianceBadge.status.pass': 'Passing',
+  'complianceBadge.status.warn': 'Warning',
+  'complianceBadge.status.fail': 'Failing',
+  'complianceBadge.ariaLabel': 'Contract compliance: {{status}}. Click for details.',
+  'complianceBadge.tooltip.pass': 'All {{count}} contracts passing',
+  'complianceBadge.tooltip.warn': '{{count}} drift warning(s) detected',
+  'complianceBadge.tooltip.fail': '{{count}} contract violation(s) detected',
+  'complianceBadge.severity.error': 'Error',
+  'complianceBadge.severity.warning': 'Warning',
+  'complianceBadge.detail.owner': 'Owner: {{owner}}',
+  'complianceBadge.detail.errorAriaLabel': 'Error: {{event}} — owned by {{owner}}',
+  'complianceBadge.detail.warningAriaLabel': 'Warning: {{event}} — owned by {{owner}}',
+  'complianceBadge.dialog.title': 'Contract Compliance Details',
+  'complianceBadge.dialog.summary': '{{total}} issue(s) detected',
+  'complianceBadge.dialog.errors': '{{count}} error(s)',
+  'complianceBadge.dialog.warnings': '{{count}} warning(s)',
+  'complianceBadge.dialog.listAriaLabel': 'Compliance issues',
+  'complianceBadge.dialog.allPassing': 'All contracts are passing — no drift detected.',
+
+  // ---------------------------------------------------------------------------
+  // drift-notification
+  // ---------------------------------------------------------------------------
+  'driftNotification.title': 'Contract Drift Detected',
+  'driftNotification.message': '{{participant}}\u2019s latest submission changes the {{event}} payload.',
+  'driftNotification.ariaLabel': 'Drift alert: {{participant}} changed {{event}}',
+  'driftNotification.closeAriaLabel': 'Dismiss drift notification for {{event}}',
+  'driftNotification.queue': '{{count}} more drift notification(s) queued',
+
+  // ---------------------------------------------------------------------------
+  // contract-sidebar
+  // ---------------------------------------------------------------------------
+  'contractSidebar.heading': 'Contracts',
+  'contractSidebar.empty.title': 'No contracts loaded yet',
+  'contractSidebar.empty.hint': 'Contracts appear here once the session reaches the Build phase.',
+  'contractSidebar.status.pass': 'Pass',
+  'contractSidebar.status.warn': 'Warning',
+  'contractSidebar.status.fail': 'Fail',
+  'contractSidebar.consumers': '{{count}} consumer(s)',
+  'contractSidebar.row.ariaLabel': '{{event}}: {{status}}, {{consumers}} consumer(s). Click to select.',
+  'contractSidebar.ownerGroupAriaLabel': 'Contracts owned by {{owner}}: {{count}} total',
+  'contractSidebar.contractListAriaLabel': 'Contracts owned by {{owner}}',
 };
 
 /**
