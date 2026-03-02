@@ -7,6 +7,23 @@ import { computePrepStatus, computeSessionStatus } from '../lib/prep-completenes
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
 import { serializeSession } from '../lib/session-store.js';
 import { compareFiles } from '../lib/comparison.js';
+import {
+  suggestResolutionHeuristic,
+  runIntegrationChecks,
+  deriveOverallStatus,
+} from '../lib/integration-heuristics.js';
+
+// ---------------------------------------------------------------------------
+// Module-level progress store for report_progress (Phase VI — Build)
+// Key: `${code}:${participantId}` → Map<workItemId, progress record>
+// ---------------------------------------------------------------------------
+interface ProgressRecord {
+  workItemId: string;
+  percentComplete: number;
+  notes?: string;
+  updatedAt: string;
+}
+const progressStore = new Map<string, Map<string, ProgressRecord>>();
 
 // ---------------------------------------------------------------------------
 // CLI arg parsing for scoped mode: --session=CODE --user=NAME
@@ -919,6 +936,308 @@ async function main(): Promise<void> {
         content: [{
           type: 'text' as const,
           text: JSON.stringify({ messages, count: messages.length, lastChecked }),
+        }],
+      };
+    }
+  );
+
+  // -------------------------------------------------------------------------
+  // Phase V: Agree — suggest_resolution
+  // -------------------------------------------------------------------------
+
+  // Tool: suggest_resolution
+  server.registerTool(
+    'suggest_resolution',
+    {
+      description:
+        'Get a heuristic suggestion for resolving an overlap identified during comparison. ' +
+        'Returns an approach (merge/pick-left/split/custom), a human-readable resolution, ' +
+        'a confidence score (0–1), and the reasoning behind the suggestion.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        overlapLabel: z.string().describe('Label of the overlap to get a suggestion for (from compare_artifacts)'),
+      },
+    },
+    ({ code, overlapLabel }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      // Determine the overlap kind by looking in comparison results
+      const files = sessionStore.getSessionFiles(code);
+      const overlaps = files.length > 0 ? compareFiles(files) : [];
+      const match = overlaps.find((o) => o.label === overlapLabel);
+      const overlapKind = match?.kind ?? 'unknown';
+
+      const suggestion = suggestResolutionHeuristic(overlapKind, overlapLabel);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ suggestion }) }],
+      };
+    }
+  );
+
+  // -------------------------------------------------------------------------
+  // Phase VI: Build — validate_against_contract, report_progress
+  // -------------------------------------------------------------------------
+
+  // Tool: validate_against_contract
+  server.registerTool(
+    'validate_against_contract',
+    {
+      description:
+        'Validate an artifact against a specific event contract loaded in the session. ' +
+        'Returns compliant (boolean) and a list of field-level violations.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        artifactContent: z.record(z.string(), z.unknown()).describe('The artifact object to validate'),
+        contractEventName: z.string().describe('Name of the event contract to validate against'),
+      },
+    },
+    ({ code, artifactContent, contractEventName }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      const contracts = sessionStore.getContracts(code);
+      if (!contracts) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              compliant: false,
+              violations: [{ field: 'contract', expected: contractEventName, actual: 'no contracts loaded' }],
+            }),
+          }],
+        };
+      }
+
+      const contract = contracts.eventContracts.find(
+        (ec) => ec.eventName === contractEventName
+      );
+
+      if (!contract) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              compliant: false,
+              violations: [{ field: 'contract', expected: contractEventName, actual: 'not found' }],
+            }),
+          }],
+        };
+      }
+
+      // Compare artifact fields against contract schema
+      const violations: Array<{ field: string; expected: string; actual: string }> = [];
+      const schema = contract.schema as Record<string, { type?: string }>;
+
+      for (const [field, fieldSpec] of Object.entries(schema)) {
+        const artifactValue = artifactContent[field];
+        if (artifactValue === undefined) {
+          violations.push({
+            field,
+            expected: fieldSpec.type ?? 'present',
+            actual: 'missing',
+          });
+        } else if (fieldSpec.type) {
+          const actualType = Array.isArray(artifactValue) ? 'array' : typeof artifactValue;
+          if (actualType !== fieldSpec.type) {
+            violations.push({
+              field,
+              expected: fieldSpec.type,
+              actual: actualType,
+            });
+          }
+        }
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ compliant: violations.length === 0, violations }),
+        }],
+      };
+    }
+  );
+
+  // Tool: report_progress
+  server.registerTool(
+    'report_progress',
+    {
+      description:
+        'Report progress on a work item (Phase VI — Build). ' +
+        'Stores the progress update and returns confirmation.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        participantId: z.string().describe('Participant reporting progress'),
+        workItemId: z.string().describe('ID of the work item being updated'),
+        percentComplete: z.number().min(0).max(100).describe('Completion percentage (0–100)'),
+        notes: z.string().optional().describe('Optional progress notes'),
+      },
+    },
+    ({ code, participantId, workItemId, percentComplete, notes }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      const storeKey = `${code}:${participantId}`;
+      if (!progressStore.has(storeKey)) {
+        progressStore.set(storeKey, new Map());
+      }
+      const participantProgress = progressStore.get(storeKey)!;
+
+      const record: ProgressRecord = {
+        workItemId,
+        percentComplete,
+        updatedAt: new Date().toISOString(),
+        ...(notes !== undefined ? { notes } : {}),
+      };
+      participantProgress.set(workItemId, record);
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ updated: true, record }) }],
+      };
+    }
+  );
+
+  // -------------------------------------------------------------------------
+  // Phase VII: Ship — run_integration_check, get_go_no_go
+  // -------------------------------------------------------------------------
+
+  // Tool: run_integration_check
+  server.registerTool(
+    'run_integration_check',
+    {
+      description:
+        'Run heuristic integration checks on the current session state and return a report. ' +
+        'Checks: aggregate ownership, conflict resolution, contract coverage, and work item existence.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      const files = sessionStore.getSessionFiles(code);
+      const allAggregates = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.aggregate))),
+      ];
+      const allEventNames = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.name))),
+      ];
+
+      const checks = runIntegrationChecks({
+        jam: session.jam,
+        contracts: session.contracts,
+        workItems: session.workItems,
+        allAggregates,
+        allEventNames,
+      });
+
+      const overallStatus = deriveOverallStatus(checks);
+      const failCount = checks.filter((c) => c.status === 'fail').length;
+      const warnCount = checks.filter((c) => c.status === 'warn').length;
+      const summary =
+        failCount > 0
+          ? `Integration check failed: ${failCount} failure(s), ${warnCount} warning(s)`
+          : warnCount > 0
+          ? `Integration check passed with ${warnCount} warning(s)`
+          : `All ${checks.length} integration check(s) passed`;
+
+      const report = {
+        generatedAt: new Date().toISOString(),
+        sourceContracts: session.contracts ? [session.contracts.sourceJamCode ?? code] : [],
+        checks,
+        overallStatus,
+        summary,
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(report) }],
+      };
+    }
+  );
+
+  // Tool: get_go_no_go
+  server.registerTool(
+    'get_go_no_go',
+    {
+      description:
+        'Get a simplified go/no-go verdict for shipping. ' +
+        'Runs the same checks as run_integration_check but returns a verdict: ' +
+        '"go" (all pass), "no_go" (any error-severity failure), or "caution" (warnings only).',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      const files = sessionStore.getSessionFiles(code);
+      const allAggregates = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.aggregate))),
+      ];
+      const allEventNames = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.name))),
+      ];
+
+      const checks = runIntegrationChecks({
+        jam: session.jam,
+        contracts: session.contracts,
+        workItems: session.workItems,
+        allAggregates,
+        allEventNames,
+      });
+
+      const checkResults = checks.map((c) => ({
+        name: c.name,
+        passed: c.status === 'pass',
+        severity: c.severity,
+        message: c.message,
+      }));
+
+      const hasErrors = checks.some((c) => c.status === 'fail' && c.severity === 'error');
+      const hasWarns = checks.some((c) => c.status === 'warn' || (c.status === 'fail' && c.severity === 'warn'));
+      const verdict: 'go' | 'no_go' | 'caution' = hasErrors ? 'no_go' : hasWarns ? 'caution' : 'go';
+
+      const passCount = checks.filter((c) => c.status === 'pass').length;
+      const failCount = checks.filter((c) => c.status === 'fail').length;
+      const warnCount = checks.filter((c) => c.status === 'warn').length;
+      const summary =
+        verdict === 'go'
+          ? `GO: All ${passCount} check(s) passed — session is ready to ship`
+          : verdict === 'no_go'
+          ? `NO-GO: ${failCount} check(s) failed — resolve issues before shipping`
+          : `CAUTION: ${warnCount} warning(s) present — review before shipping`;
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ verdict, summary, checkResults }),
         }],
       };
     }
