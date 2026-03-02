@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "multi-human-workflows": {
+    "seam": {
       "command": "npx",
       "args": ["tsx", "src/server/mcp.ts"]
     }

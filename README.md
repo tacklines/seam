@@ -1,6 +1,8 @@
-# Multi-Human Workflows Visualizer
+# Seam
 
-A web app for visualizing [storm-prep](https://github.com/tacklines/tackline) YAML files produced by multi-human Event Storming sessions. Load candidate-event YAML from multiple participants, compare domain events across roles, and explore relationships in an interactive flow diagram.
+**Your systems will meet. Make sure they agree.**
+
+Seam is the boundary negotiation platform where teams and AI agents turn integration assumptions into verified contracts. Participants create or join sessions via join codes, contribute storm-prep YAML files, and visualize combined domain event flows in real time.
 
 ## Features
 

@@ -1,5 +1,5 @@
 /**
- * Keyboard shortcut registry for multi-human workflows visualizer.
+ * Keyboard shortcut registry for Seam.
  *
  * Framework-agnostic: takes KeyboardEvents and calls registered handlers.
  * Customizations are stored in localStorage under `mhw-keyboard-shortcuts`.

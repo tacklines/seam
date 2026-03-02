@@ -1,5 +1,5 @@
-team: multi-human-workflows
-description: "Web app for visualizing storm-prep YAML files from multi-human Event Storming workflows. Lit + Vite + Tailwind CSS v4 + D3 + Shoelace."
+team: seam
+description: "The boundary negotiation platform where teams and AI agents turn integration assumptions into verified contracts. Lit + Vite + Tailwind CSS v4 + D3 + Shoelace."
 
 defaults:
   model: sonnet

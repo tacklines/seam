@@ -1,4 +1,4 @@
-# Multi-Human Workflows
+# Seam
 
 # Start frontend + backend for development
 dev:

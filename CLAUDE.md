@@ -1,6 +1,6 @@
-# Multi-Human Workflows Visualizer
+# Seam
 
-Collaborative web app for multi-human Event Storming. Participants create/join sessions via join codes, submit storm-prep YAML files, and visualize combined domain event flows in real time. Built with Lit web components, Vite, and Tailwind CSS v4.
+The boundary negotiation platform where teams and AI agents turn integration assumptions into verified contracts. Participants create/join sessions via join codes, submit storm-prep YAML files, and visualize combined domain event flows in real time. Built with Lit web components, Vite, and Tailwind CSS v4.
 
 ## Operating Mode: Orchestrator
 
