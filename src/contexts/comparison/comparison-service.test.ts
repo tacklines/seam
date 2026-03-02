@@ -79,6 +79,11 @@ function makeSession(
     contracts: null,
     integrationReport: null,
     config: DEFAULT_SESSION_CONFIG,
+    priorities: [],
+    votes: [],
+    workItems: [],
+    workItemDependencies: [],
+    drafts: [],
   };
 }
 
