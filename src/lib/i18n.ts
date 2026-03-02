@@ -564,6 +564,90 @@ export const messages: Record<string, string> = {
   'dependencyGraph.dependency': '{{from}} depends on {{to}}',
 
   // ---------------------------------------------------------------------------
+  // settings-drawer (global)
+  // ---------------------------------------------------------------------------
+  'settingsDrawer.defaultLabel': 'Settings',
+  'settingsDrawer.empty': 'No settings available for this section.',
+  'settingsDrawer.defaultPrefix': 'Default:',
+  'settingsDrawer.defaultTrue': 'On',
+  'settingsDrawer.defaultFalse': 'Off',
+  'settingsDrawer.modifiedAriaLabel': 'Modified from default',
+
+  // ---------------------------------------------------------------------------
+  // settings-gear
+  // ---------------------------------------------------------------------------
+  'settingsGear.ariaLabel': 'Open {{sectionName}} settings',
+  'settingsGear.modifiedAriaLabel': 'This section has modified settings',
+
+  // ---------------------------------------------------------------------------
+  // global-settings
+  // ---------------------------------------------------------------------------
+  'globalSettings.title': 'Settings',
+  'globalSettings.modifiedAriaLabel': 'This section has modified settings',
+  'globalSettings.tab.session': 'Session',
+  'globalSettings.tab.artifacts': 'Artifacts',
+  'globalSettings.tab.comparison': 'Comparison',
+  'globalSettings.tab.contracts': 'Contracts',
+  'globalSettings.tab.notifications': 'Notifications',
+  'globalSettings.tab.delegation': 'Delegation',
+  'globalSettings.tab.shortcuts': 'Shortcuts',
+  // Session tab
+  'globalSettings.session.name': 'Session Name',
+  'globalSettings.session.nameDescription': 'A friendly name shown in the session lobby.',
+  'globalSettings.session.participantLimit': 'Participant Limit',
+  'globalSettings.session.participantLimitDescription': 'Maximum number of participants allowed to join.',
+  // Artifacts tab
+  'globalSettings.artifacts.autoValidate': 'Auto-validate on Submit',
+  'globalSettings.artifacts.autoValidateDescription': 'Automatically validate YAML files when submitted.',
+  'globalSettings.artifacts.validationStrictness': 'Validation Strictness',
+  'globalSettings.artifacts.validationStrictnessDescription': 'How strictly uploaded artifacts are validated against the schema.',
+  'globalSettings.artifacts.strictnessStrict': 'Strict — block on any error',
+  'globalSettings.artifacts.strictnessWarn': 'Warn — show warnings, allow through',
+  'globalSettings.artifacts.strictnessRelaxed': 'Relaxed — log only',
+  // Comparison tab
+  'globalSettings.comparison.sensitivity': 'Comparison Sensitivity',
+  'globalSettings.comparison.sensitivityDescription': 'How strictly event names and field names are compared.',
+  'globalSettings.comparison.sensitivitySemantic': 'Semantic — treat camelCase and snake_case as equal',
+  'globalSettings.comparison.sensitivityExact': 'Exact — require byte-for-byte equality',
+  'globalSettings.comparison.autoDetectConflicts': 'Auto-detect Conflicts',
+  'globalSettings.comparison.autoDetectConflictsDescription': 'Detect overlaps and conflicts automatically as artifacts arrive.',
+  'globalSettings.comparison.suggestResolutions': 'Suggest Resolutions',
+  'globalSettings.comparison.suggestResolutionsDescription': 'Generate resolution suggestions for detected conflicts.',
+  // Contracts tab
+  'globalSettings.contracts.strictness': 'Contract Strictness',
+  'globalSettings.contracts.strictnessDescription': 'How non-compliant artifacts are handled.',
+  'globalSettings.contracts.strictnessStrict': 'Strict — block submission',
+  'globalSettings.contracts.strictnessWarn': 'Warn — surface warnings',
+  'globalSettings.contracts.strictnessRelaxed': 'Relaxed — log only',
+  'globalSettings.contracts.driftNotifications': 'Drift Notifications',
+  'globalSettings.contracts.driftNotificationsDescription': 'When and how participants are notified of contract drift.',
+  'globalSettings.contracts.driftImmediate': 'Immediate — toast on every drift event',
+  'globalSettings.contracts.driftBatched': 'Batched — digest at end of session',
+  'globalSettings.contracts.driftSilent': 'Silent — visible in Contract tab only',
+  // Notifications tab
+  'globalSettings.notifications.toastDuration': 'Toast Duration (ms)',
+  'globalSettings.notifications.toastDurationDescription': 'How long toast notifications remain visible before auto-dismissing.',
+  // Delegation tab
+  'globalSettings.delegation.level': 'Autonomy Level',
+  'globalSettings.delegation.levelDescription': 'How much autonomy agents have when proposing actions.',
+  'globalSettings.delegation.levelAssisted': 'Assisted — agent proposes, human approves',
+  'globalSettings.delegation.levelSemiAutonomous': 'Semi-autonomous — agent acts, human can undo',
+  'globalSettings.delegation.levelAutonomous': 'Autonomous — agent acts without approval',
+  'globalSettings.delegation.approvalExpiry': 'Approval Request Expiry (seconds)',
+  'globalSettings.delegation.approvalExpiryDescription': 'How long a pending approval request remains active before it expires.',
+  // Shortcuts tab
+  'globalSettings.shortcuts.tableAriaLabel': 'Keyboard shortcuts reference',
+  'globalSettings.shortcuts.keyColumn': 'Key',
+  'globalSettings.shortcuts.actionColumn': 'Action',
+  'globalSettings.shortcuts.openHelp': 'Open keyboard shortcuts',
+  'globalSettings.shortcuts.closeDialog': 'Close dialog or drawer',
+  'globalSettings.shortcuts.focusSearch': 'Focus search',
+  'globalSettings.shortcuts.nextControl': 'Move to next control',
+  'globalSettings.shortcuts.prevControl': 'Move to previous control',
+  'globalSettings.shortcuts.activate': 'Activate focused element',
+  'globalSettings.shortcuts.navigateTabs': 'Navigate between tabs',
+
+  // ---------------------------------------------------------------------------
   // schema-display
   // ---------------------------------------------------------------------------
   'schemaDisplay.empty': 'No schema fields defined',

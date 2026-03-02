@@ -1,223 +1,147 @@
-import type { Meta, StoryObj } from '@storybook/web-components';
+import type { Args, Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
-import type { SessionConfig } from '../schema/types.js';
-import { DEFAULT_SESSION_CONFIG } from '../schema/types.js';
+import type { SettingItem } from '../components/shared/settings-drawer.js';
 
-// Register the components
+// Register the component
 import '../components/shared/settings-drawer.js';
 
 const meta: Meta = {
   title: 'Shared/SettingsDrawer',
   tags: ['autodocs'],
-  argTypes: {
-    section: {
-      control: 'select',
-      options: ['comparison', 'contracts', 'ranking', 'delegation', 'notifications'],
-    },
-    open: { control: 'boolean' },
-  },
-  render: (args) => html`
-    <div style="min-height: 400px; position: relative;">
+  render: (args: Args) => html`
+    <div style="height: 400px; position: relative;">
+      <p style="font-family: sans-serif; color: #6b7280; font-size: 0.875rem;">
+        The drawer renders using Shoelace's sl-drawer. Set <strong>open</strong> to true to see it.
+      </p>
       <settings-drawer
-        section=${args.section as string}
-        .config=${args.config as SessionConfig}
+        sectionName=${args.sectionName as string}
+        .settings=${args.settings as SettingItem[]}
         ?open=${args.open as boolean}
-        @settings-changed=${(e: CustomEvent) => console.log('settings-changed', e.detail)}
-        @drawer-closed=${() => console.log('drawer-closed')}
+        @setting-changed=${(e: CustomEvent) => console.log('setting-changed', e.detail)}
       ></settings-drawer>
     </div>
   `,
+  argTypes: {
+    open: { control: 'boolean' },
+    sectionName: { control: 'text' },
+  },
 };
 
 export default meta;
 type Story = StoryObj;
 
-// ---------------------------------------------------------------------------
-// Section: Comparison
-// ---------------------------------------------------------------------------
+const comparisonSettings: SettingItem[] = [
+  {
+    key: 'comparison.sensitivity',
+    label: 'Comparison Sensitivity',
+    type: 'select',
+    value: 'semantic',
+    defaultValue: 'semantic',
+    options: [
+      { label: 'Semantic — treat camelCase and snake_case as equal', value: 'semantic' },
+      { label: 'Exact — require byte-for-byte equality', value: 'exact' },
+    ],
+    description: 'How strictly event names and field names are compared.',
+  },
+  {
+    key: 'comparison.autoDetectConflicts',
+    label: 'Auto-detect Conflicts',
+    type: 'switch',
+    value: true,
+    defaultValue: true,
+    description: 'Detect overlaps and conflicts automatically as artifacts arrive.',
+  },
+  {
+    key: 'comparison.suggestResolutions',
+    label: 'Suggest Resolutions',
+    type: 'switch',
+    value: true,
+    defaultValue: true,
+    description: 'Generate resolution suggestions for detected conflicts.',
+  },
+];
 
-/** Comparison settings — all at defaults. No blue dots visible. */
-export const ComparisonDefaults: Story = {
-  name: 'Comparison — Defaults',
+const contractsSettings: SettingItem[] = [
+  {
+    key: 'contracts.strictness',
+    label: 'Contract Strictness',
+    type: 'select',
+    value: 'warn',
+    defaultValue: 'warn',
+    options: [
+      { label: 'Strict — block submission', value: 'strict' },
+      { label: 'Warn — surface warnings', value: 'warn' },
+      { label: 'Relaxed — log only', value: 'relaxed' },
+    ],
+    description: 'How non-compliant artifacts are handled.',
+  },
+  {
+    key: 'contracts.driftNotifications',
+    label: 'Drift Notifications',
+    type: 'select',
+    value: 'immediate',
+    defaultValue: 'immediate',
+    options: [
+      { label: 'Immediate — toast on every drift event', value: 'immediate' },
+      { label: 'Batched — digest at end of session', value: 'batched' },
+      { label: 'Silent — visible in Contract tab only', value: 'silent' },
+    ],
+    description: 'When and how participants are notified of contract drift.',
+  },
+];
+
+const modifiedSettings: SettingItem[] = [
+  {
+    key: 'comparison.sensitivity',
+    label: 'Comparison Sensitivity',
+    type: 'select',
+    value: 'exact',
+    defaultValue: 'semantic',
+    options: [
+      { label: 'Semantic — treat camelCase and snake_case as equal', value: 'semantic' },
+      { label: 'Exact — require byte-for-byte equality', value: 'exact' },
+    ],
+    description: 'How strictly event names and field names are compared.',
+  },
+  {
+    key: 'comparison.autoDetectConflicts',
+    label: 'Auto-detect Conflicts',
+    type: 'switch',
+    value: false,
+    defaultValue: true,
+    description: 'Detect overlaps and conflicts automatically as artifacts arrive.',
+  },
+  {
+    key: 'comparison.suggestResolutions',
+    label: 'Suggest Resolutions',
+    type: 'switch',
+    value: true,
+    defaultValue: true,
+    description: 'Generate resolution suggestions for detected conflicts.',
+  },
+];
+
+export const ComparisonSettings: Story = {
   args: {
-    section: 'comparison',
+    sectionName: 'Comparison Settings',
+    settings: comparisonSettings,
     open: true,
-    config: DEFAULT_SESSION_CONFIG,
   },
 };
 
-/** Comparison settings — sensitivity changed to exact. Blue dot shows on that field. */
-export const ComparisonModified: Story = {
-  name: 'Comparison — Modified (blue dot visible)',
+export const ContractsSettings: Story = {
   args: {
-    section: 'comparison',
+    sectionName: 'Contracts Settings',
+    settings: contractsSettings,
     open: true,
-    config: {
-      ...DEFAULT_SESSION_CONFIG,
-      comparison: {
-        ...DEFAULT_SESSION_CONFIG.comparison,
-        sensitivity: 'exact',
-        suggestResolutions: false,
-      },
-    } satisfies SessionConfig,
   },
 };
 
-// ---------------------------------------------------------------------------
-// Section: Contracts
-// ---------------------------------------------------------------------------
-
-/** Contract settings — all at defaults. */
-export const ContractsDefaults: Story = {
-  name: 'Contracts — Defaults',
+export const WithModified: Story = {
+  name: 'With Modified Settings',
   args: {
-    section: 'contracts',
+    sectionName: 'Comparison Settings',
+    settings: modifiedSettings,
     open: true,
-    config: DEFAULT_SESSION_CONFIG,
   },
-};
-
-/** Contract settings — strictness changed to strict, notifications to silent. */
-export const ContractsModified: Story = {
-  name: 'Contracts — Modified (blue dots visible)',
-  args: {
-    section: 'contracts',
-    open: true,
-    config: {
-      ...DEFAULT_SESSION_CONFIG,
-      contracts: {
-        strictness: 'strict',
-        driftNotifications: 'silent',
-      },
-    } satisfies SessionConfig,
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Section: Ranking (Priority)
-// ---------------------------------------------------------------------------
-
-/** Priority/ranking settings — all at defaults. */
-export const RankingDefaults: Story = {
-  name: 'Ranking — Defaults',
-  args: {
-    section: 'ranking',
-    open: true,
-    config: DEFAULT_SESSION_CONFIG,
-  },
-};
-
-/** Priority/ranking settings — weights adjusted. Blue dots on all modified weights. */
-export const RankingModified: Story = {
-  name: 'Ranking — Modified weights (blue dots visible)',
-  args: {
-    section: 'ranking',
-    open: true,
-    config: {
-      ...DEFAULT_SESSION_CONFIG,
-      ranking: {
-        defaultTier: 'Must Have',
-        weights: {
-          confidence: 2,
-          complexity: 0.5,
-          references: 1,
-        },
-      },
-    } satisfies SessionConfig,
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Section: Delegation
-// ---------------------------------------------------------------------------
-
-/** Delegation settings — all at defaults. */
-export const DelegationDefaults: Story = {
-  name: 'Delegation — Defaults',
-  args: {
-    section: 'delegation',
-    open: true,
-    config: DEFAULT_SESSION_CONFIG,
-  },
-};
-
-/** Delegation settings — level raised to autonomous. Blue dot shows on level field. */
-export const DelegationModified: Story = {
-  name: 'Delegation — Modified (blue dot visible)',
-  args: {
-    section: 'delegation',
-    open: true,
-    config: {
-      ...DEFAULT_SESSION_CONFIG,
-      delegation: {
-        level: 'autonomous',
-        approvalExpiry: 3600,
-      },
-    } satisfies SessionConfig,
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Section: Notifications
-// ---------------------------------------------------------------------------
-
-/** Notification settings — all at defaults. */
-export const NotificationsDefaults: Story = {
-  name: 'Notifications — Defaults',
-  args: {
-    section: 'notifications',
-    open: true,
-    config: DEFAULT_SESSION_CONFIG,
-  },
-};
-
-/** Notification settings — toast duration shortened, some events silenced. */
-export const NotificationsModified: Story = {
-  name: 'Notifications — Modified (blue dots visible)',
-  args: {
-    section: 'notifications',
-    open: true,
-    config: {
-      ...DEFAULT_SESSION_CONFIG,
-      notifications: {
-        toastDuration: 3000,
-        silentEvents: ['ParticipantJoined', 'ArtifactLoaded'],
-      },
-    } satisfies SessionConfig,
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Closed state
-// ---------------------------------------------------------------------------
-
-/** Drawer closed — nothing visible in the page. */
-export const DrawerClosed: Story = {
-  name: 'Drawer — Closed state',
-  args: {
-    section: 'comparison',
-    open: false,
-    config: DEFAULT_SESSION_CONFIG,
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Gear Button
-// ---------------------------------------------------------------------------
-
-/** Gear icon button that triggers the drawer — shown with all five section labels. */
-export const GearButtons: Story = {
-  name: 'Gear Icon Buttons (all sections)',
-  render: () => html`
-    <div style="display: flex; gap: 1rem; align-items: center; padding: 1rem; background: #f9fafb; border-radius: 4px;">
-      ${(['comparison', 'contracts', 'ranking', 'delegation', 'notifications'] as const).map(
-        (section) => html`
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
-            <settings-gear-button section=${section}></settings-gear-button>
-            <span style="font-size: 0.75rem; color: #6b7280;">${section}</span>
-          </div>
-        `
-      )}
-    </div>
-  `,
 };
