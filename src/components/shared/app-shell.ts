@@ -7,6 +7,7 @@ import { StoreController } from '../controllers/store-controller.js';
 import { ComparisonController } from '../controllers/comparison-controller.js';
 import { t } from '../../lib/i18n.js';
 import { parseAndValidate } from '../../lib/yaml-loader.js';
+import { registry } from '../../lib/shortcut-registry.js';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../visualization/flow-minimap.js';
 import type { FlowDiagram } from '../visualization/flow-diagram.js';
 import type { DetailNodeData } from '../visualization/detail-panel.js';
@@ -31,6 +32,7 @@ import '../comparison/comparison-view.js';
 import './aggregate-nav.js';
 import './filter-panel.js';
 import '../visualization/detail-panel.js';
+import './shortcut-reference.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -185,9 +187,11 @@ export class AppShell extends LitElement {
   @state() private _detailNodeData: DetailNodeData | null = null;
   @state() private _soloMode = false;
   @state() private _pasteToast: { count: number; role: string } | null = null;
+  @state() private _shortcutReferenceOpen = false;
 
   private _pasteToastTimer: ReturnType<typeof setTimeout> | null = null;
   private _boundPasteHandler: ((e: ClipboardEvent) => void) | null = null;
+  private _boundKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   private get appState(): AppState {
     return this._storeCtrl.value;
@@ -197,6 +201,21 @@ export class AppShell extends LitElement {
     super.connectedCallback();
     this._boundPasteHandler = (e: ClipboardEvent) => this._onGlobalPaste(e);
     document.addEventListener('paste', this._boundPasteHandler);
+
+    // Load any stored shortcut customizations before registering
+    registry.loadFromStorage();
+    this._registerShortcuts();
+
+    this._boundKeydownHandler = (e: KeyboardEvent) => {
+      if (registry.handleKeydown(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener('keydown', this._boundKeydownHandler);
+
+    // Re-register defaults after a reset (e.g. from shortcut-reference "Reset" button)
+    window.addEventListener('shortcut-registry-reset', this._onRegistryReset);
   }
 
   disconnectedCallback() {
@@ -205,10 +224,82 @@ export class AppShell extends LitElement {
       document.removeEventListener('paste', this._boundPasteHandler);
       this._boundPasteHandler = null;
     }
+    if (this._boundKeydownHandler) {
+      document.removeEventListener('keydown', this._boundKeydownHandler);
+      this._boundKeydownHandler = null;
+    }
+    window.removeEventListener('shortcut-registry-reset', this._onRegistryReset);
     if (this._pasteToastTimer !== null) {
       clearTimeout(this._pasteToastTimer);
       this._pasteToastTimer = null;
     }
+  }
+
+  private _onRegistryReset = () => {
+    this._registerShortcuts();
+  };
+
+  private _registerShortcuts() {
+    const PHASES = ['spark', 'explore', 'rank', 'slice', 'agree', 'build', 'ship'] as const;
+
+    // Phase navigation: Ctrl+Shift+1 through Ctrl+Shift+7
+    PHASES.forEach((phase, index) => {
+      registry.register(
+        {
+          id: `phase.${phase}`,
+          key: String(index + 1),
+          ctrl: true,
+          shift: true,
+          description: t(`shortcuts.phase.${phase}`),
+          category: t('shortcuts.category.phases'),
+        },
+        () => {
+          this.dispatchEvent(
+            new CustomEvent('phase-navigate', {
+              detail: { phase },
+              bubbles: true,
+              composed: true,
+            })
+          );
+        }
+      );
+    });
+
+    // Actions
+    registry.register(
+      { id: 'action.newEvent', key: 'n', description: t('shortcuts.action.newEvent'), category: t('shortcuts.category.actions') },
+      () => {
+        this.dispatchEvent(new CustomEvent('shortcut-new-event', { bubbles: true, composed: true }));
+      }
+    );
+
+    registry.register(
+      { id: 'action.resolve', key: 'r', description: t('shortcuts.action.resolve'), category: t('shortcuts.category.actions') },
+      () => {
+        this.dispatchEvent(new CustomEvent('shortcut-resolve', { bubbles: true, composed: true }));
+      }
+    );
+
+    registry.register(
+      { id: 'action.confirm', key: 'Enter', description: t('shortcuts.action.confirm'), category: t('shortcuts.category.actions') },
+      () => {
+        this.dispatchEvent(new CustomEvent('shortcut-confirm', { bubbles: true, composed: true }));
+      }
+    );
+
+    registry.register(
+      { id: 'action.cancel', key: 'Escape', description: t('shortcuts.action.cancel'), category: t('shortcuts.category.actions') },
+      () => {
+        this.dispatchEvent(new CustomEvent('shortcut-cancel', { bubbles: true, composed: true }));
+      }
+    );
+
+    registry.register(
+      { id: 'action.openHelp', key: '?', description: t('shortcuts.action.openHelp'), category: t('shortcuts.category.actions') },
+      () => {
+        this._shortcutReferenceOpen = true;
+      }
+    );
   }
 
   private _onGlobalPaste(e: ClipboardEvent) {
@@ -245,6 +336,7 @@ export class AppShell extends LitElement {
         return html`
           <file-drop-zone mode="hero"></file-drop-zone>
           ${this._renderPasteToast()}
+          ${this._renderShortcutReference()}
         `;
       }
       return html`
@@ -253,10 +345,20 @@ export class AppShell extends LitElement {
           @solo-mode=${this._onSoloMode}
         ></session-lobby>
         ${this._renderPasteToast()}
+        ${this._renderShortcutReference()}
       `;
     }
 
-    return html`${this.renderAppLayout()}${this._renderPasteToast()}`;
+    return html`${this.renderAppLayout()}${this._renderPasteToast()}${this._renderShortcutReference()}`;
+  }
+
+  private _renderShortcutReference() {
+    return html`
+      <shortcut-reference
+        ?open=${this._shortcutReferenceOpen}
+        @shortcut-reference-close=${() => { this._shortcutReferenceOpen = false; }}
+      ></shortcut-reference>
+    `;
   }
 
   private _renderPasteToast() {
