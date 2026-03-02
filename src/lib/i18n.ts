@@ -802,6 +802,33 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   'emptyState.defaultTitle': 'Nothing here yet',
   'emptyState.defaultDescription': 'There is no content to display.',
+
+  // ---------------------------------------------------------------------------
+  // shortcut-reference component
+  // ---------------------------------------------------------------------------
+  'shortcuts.dialogTitle': 'Keyboard Shortcuts',
+  'shortcuts.noShortcuts': 'No shortcuts registered.',
+  'shortcuts.footerNote': 'Press ? anywhere to open this panel',
+  'shortcuts.resetDefaults': 'Reset to Defaults',
+
+  // Shortcut categories
+  'shortcuts.category.phases': 'Phases',
+  'shortcuts.category.actions': 'Actions',
+  'shortcuts.category.navigation': 'Navigation',
+
+  // Shortcut descriptions — used in registry.register() calls
+  'shortcuts.phase.spark': 'Go to Spark phase',
+  'shortcuts.phase.explore': 'Go to Explore phase',
+  'shortcuts.phase.rank': 'Go to Rank phase',
+  'shortcuts.phase.slice': 'Go to Slice phase',
+  'shortcuts.phase.agree': 'Go to Agree phase',
+  'shortcuts.phase.build': 'Go to Build phase',
+  'shortcuts.phase.ship': 'Go to Ship phase',
+  'shortcuts.action.newEvent': 'New event',
+  'shortcuts.action.resolve': 'Open resolve dialog',
+  'shortcuts.action.confirm': 'Confirm current action',
+  'shortcuts.action.cancel': 'Cancel / close dialog',
+  'shortcuts.action.openHelp': 'Open keyboard shortcuts',
 };
 
 /**
