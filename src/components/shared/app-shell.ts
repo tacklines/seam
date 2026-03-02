@@ -84,6 +84,7 @@ import './assumption-list.js';
 import './delegation-toggle.js';
 import './error-boundary.js';
 import './empty-state.js';
+import './participant-presence.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -653,6 +654,16 @@ export class AppShell extends LitElement {
         <div class="header">
           <div class="header-left">
             <span class="header-title">${t('shell.title')}</span>
+            ${this.appState.sessionState
+              ? html`
+                  <participant-presence
+                    .participants=${this.appState.sessionState.session.participants}
+                    .submittedParticipantIds=${this.appState.sessionState.session.submissions.map((s) => s.participantId)}
+                    currentView=${activeView}
+                    currentParticipantId=${this.appState.sessionState.participantId}
+                  ></participant-presence>
+                `
+              : nothing}
           </div>
           <div class="header-right">
             <div class="file-pills">

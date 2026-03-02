@@ -1001,6 +1001,12 @@ export const messages: Record<string, string> = {
   'settingsDialog.shortcutBinding': 'Binding',
 
   // ---------------------------------------------------------------------------
+  // participant-presence
+  // ---------------------------------------------------------------------------
+  'presence.viewing': '{{name}} is viewing {{view}}',
+  'presence.viewingMultiple': '{{names}} are viewing',
+
+  // ---------------------------------------------------------------------------
   // glossary — plain-language definitions for DDD / Event Storming terms
   // ---------------------------------------------------------------------------
   'glossary.aggregate': 'A cluster of related things that change together. Think of it as a "unit of work" — like an Order with its line items.',
