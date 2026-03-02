@@ -124,4 +124,4 @@ Together: MCP handles "what can I do in this session?" and A2A handles "how do I
 
 ---
 
-For the practical walkthrough with concrete steps, see [Collaborative Sessions How-To](multi-human-howto.md). For the full product vision, see [Vision](vision.md).
+For the practical walkthrough with concrete steps, see [Collaborative Sessions How-To](seam-howto.md). For the full product vision, see [Vision](vision.md).

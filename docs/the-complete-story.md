@@ -287,7 +287,7 @@ Every participant — human in a browser, AI agent via MCP, remote agent via A2A
 ## See Also
 
 - [Vision](vision.md) — design principles and protocol architecture
-- [Introduction](multi-human-intro.md) — core concepts and primitives
-- [How-To](multi-human-howto.md) — practical walkthrough of Acts V-VII
+- [Introduction](seam-intro.md) — core concepts and primitives
+- [How-To](seam-howto.md) — practical walkthrough of Acts V-VII
 - [From Idea to Execution](from-idea-to-execution.docx) — detailed treatment of Acts I-IV
 - [Open Collaborative Sessions](open-collaborative-sessions.docx) — domain analysis and architecture for Acts V-VII

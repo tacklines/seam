@@ -162,5 +162,5 @@ Together: MCP handles "what can I do in this session?" and A2A handles "how do I
 - [Vision](vision.md) — design principles and protocol architecture
 - [The Complete Story](the-complete-story.md) — the seven-act narrative from idea to production
 - [Experience Design](experience-design.md) — detailed UX specification for every phase
-- [Introduction](multi-human-intro.md) — core concepts and how the primitives work together
-- [How-To](multi-human-howto.md) — practical walkthrough with a concrete scenario
+- [Introduction](seam-intro.md) — core concepts and how the primitives work together
+- [How-To](seam-howto.md) — practical walkthrough with a concrete scenario

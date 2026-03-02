@@ -790,5 +790,5 @@ interface SessionConfig {
 
 - [The Complete Story](the-complete-story.md) — the seven-act narrative arc
 - [Vision](vision.md) — design principles and protocol architecture
-- [Introduction](multi-human-intro.md) — core concepts and primitives
-- [How-To](multi-human-howto.md) — practical walkthrough of the Agree → Build → Ship pipeline
+- [Introduction](seam-intro.md) — core concepts and primitives
+- [How-To](seam-howto.md) — practical walkthrough of the Agree → Build → Ship pipeline

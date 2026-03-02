@@ -1,8 +1,8 @@
-# Multi-Human Workflows: Idea to Production
+# Seam: Idea to Production
 
 How two (or more) people go from "we need to build this" to shipped code — without discovering at merge time that nothing fits together.
 
-Read [Multi-Human Intro](multi-human-intro.md) for the conceptual model. This guide is the practical walkthrough.
+Read [Seam Intro](seam-intro.md) for the conceptual model. This guide is the practical walkthrough.
 
 ---
 
@@ -329,6 +329,6 @@ Anywhere two people's code has to agree on a shape, the workflow applies.
 
 ## See Also
 
-- [Multi-Human Intro](multi-human-intro.md) — the conceptual model and why this works
+- [Seam Intro](seam-intro.md) — the conceptual model and why this works
 - [Workflow Pipelines](pipelines.md) — how single-person workflows work
 - [Team System Guide](team-system-guide.md) — persistent teams and agent coordination
