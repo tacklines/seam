@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { t } from '../../lib/i18n.js';
 import type { CandidateEventsFile, DomainEvent } from '../../schema/types.js';
+import { suggestEventsHeuristic } from '../../lib/event-suggestions.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/select/select.js';
@@ -10,6 +11,9 @@ import '@shoelace-style/shoelace/dist/components/switch/switch.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
+import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
+import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
+import '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
 
 /** A single row in the spark canvas representing one domain event candidate. */
 export interface SparkRow {
@@ -17,6 +21,9 @@ export interface SparkRow {
   aggregate: string;
   trigger: string;
 }
+
+/** A suggested event from the AI Assist dialog with selection state. */
+type AiSuggestion = DomainEvent & { selected: boolean };
 
 const TEMPLATES: Record<string, SparkRow[]> = {
   ecommerce: [
@@ -347,6 +354,107 @@ export class SparkCanvas extends LitElement {
     sl-select::part(combobox) {
       min-height: 2rem;
     }
+
+    /* ── AI Assist dialog content ── */
+    .ai-dialog-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .ai-generate-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.75rem;
+    }
+
+    .ai-generate-row sl-textarea {
+      flex: 1;
+    }
+
+    .ai-suggestions-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .ai-suggestions-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 0.25rem;
+      border-bottom: 1px solid var(--sl-color-neutral-200);
+    }
+
+    .ai-suggestions-count {
+      font-size: var(--sl-font-size-small);
+      color: var(--sl-color-neutral-600);
+      font-weight: var(--sl-font-weight-semibold);
+    }
+
+    .ai-suggestions-controls {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .ai-suggestions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .ai-suggestion-row {
+      display: flex;
+      align-items: flex-start;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--sl-color-neutral-200);
+      border-radius: var(--sl-border-radius-medium);
+      background: var(--sl-color-neutral-0);
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .ai-suggestion-row:hover {
+      background: var(--sl-color-neutral-50);
+      border-color: var(--sl-color-neutral-300);
+    }
+
+    .ai-suggestion-row.selected {
+      background: var(--sl-color-primary-50);
+      border-color: var(--sl-color-primary-300);
+    }
+
+    .ai-suggestion-label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .ai-suggestion-name {
+      font-size: var(--sl-font-size-small);
+      font-weight: var(--sl-font-weight-semibold);
+      color: var(--sl-color-neutral-800);
+    }
+
+    .ai-suggestion-trigger {
+      font-size: var(--sl-font-size-x-small);
+      color: var(--sl-color-neutral-600);
+    }
+
+    .ai-suggestion-aggregate {
+      font-size: var(--sl-font-size-x-small);
+      color: var(--sl-color-neutral-500);
+    }
+
+    .ai-no-results {
+      padding: 1rem;
+      text-align: center;
+      font-size: var(--sl-font-size-small);
+      color: var(--sl-color-neutral-500);
+      border: 1px dashed var(--sl-color-neutral-300);
+      border-radius: var(--sl-border-radius-medium);
+    }
   `;
 
   /** Current session code (empty for solo mode). */
@@ -360,6 +468,11 @@ export class SparkCanvas extends LitElement {
   @state() private _viewMode: 'canvas' | 'yaml' = 'canvas';
   @state() private _yamlText = '';
   @state() private _yamlError = '';
+
+  // AI Assist dialog state
+  @state() private _aiDialogOpen = false;
+  @state() private _aiDescription = '';
+  @state() private _aiSuggestions: AiSuggestion[] = [];
 
   private _rowsToYaml(rows: SparkRow[]): string {
     const nonEmpty = rows.filter((r) => r.eventName.trim());
@@ -532,11 +645,61 @@ export class SparkCanvas extends LitElement {
     );
   }
 
+  // ── AI Assist methods ──────────────────────────────────────────────────────
+
+  private _openAiDialog() {
+    this._aiDialogOpen = true;
+    this._aiDescription = '';
+    this._aiSuggestions = [];
+  }
+
+  private _generateSuggestions() {
+    const existingEventNames = this._rows
+      .map((r) => r.eventName.trim())
+      .filter((n) => n.length > 0);
+
+    const suggestions = suggestEventsHeuristic(this._aiDescription, existingEventNames);
+    // Start with all suggestions selected
+    this._aiSuggestions = suggestions.map((s) => ({ ...s, selected: true }));
+  }
+
+  private _toggleSuggestion(index: number) {
+    this._aiSuggestions = this._aiSuggestions.map((s, i) =>
+      i === index ? { ...s, selected: !s.selected } : s
+    );
+  }
+
+  private _selectAll() {
+    this._aiSuggestions = this._aiSuggestions.map((s) => ({ ...s, selected: true }));
+  }
+
+  private _deselectAll() {
+    this._aiSuggestions = this._aiSuggestions.map((s) => ({ ...s, selected: false }));
+  }
+
+  private _acceptSuggestions() {
+    const accepted = this._aiSuggestions.filter((s) => s.selected);
+    if (accepted.length === 0) return;
+
+    // Remove the trailing placeholder row, append accepted events, re-add placeholder
+    const filledRows = this._rows.filter((r) => r.eventName.trim());
+    const newRows: SparkRow[] = accepted.map((s) => ({
+      eventName: s.name,
+      aggregate: s.aggregate,
+      trigger: s.trigger,
+    }));
+    this._rows = [...filledRows, ...newRows, makeEmptyRow()];
+
+    this._aiDialogOpen = false;
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   override render() {
     if (this.collapsed) {
       return this._renderCollapsed();
     }
-    return this._renderCanvas();
+    return html`${this._renderCanvas()}${this._renderAiDialog()}`;
   }
 
   private _renderCollapsed() {
@@ -604,9 +767,9 @@ export class SparkCanvas extends LitElement {
               >${t('spark-canvas.view-yaml')}</button>
             </div>
 
-            <!-- AI Assist placeholder -->
-            <sl-tooltip content="${t('spark-canvas.ai-assist')} (coming soon)">
-              <sl-button size="small" variant="neutral" disabled>
+            <!-- AI Assist button -->
+            <sl-tooltip content="${t('spark-canvas.ai-assist')}">
+              <sl-button size="small" variant="neutral" @click=${this._openAiDialog}>
                 <sl-icon slot="prefix" name="stars" aria-hidden="true"></sl-icon>
                 ${t('spark-canvas.ai-assist')}
               </sl-button>
@@ -750,6 +913,105 @@ export class SparkCanvas extends LitElement {
           ? html`<p id="yaml-status" class="yaml-status valid">Valid YAML format</p>`
           : nothing}
       </div>
+    `;
+  }
+
+  private _renderAiDialog() {
+    const selectedCount = this._aiSuggestions.filter((s) => s.selected).length;
+    const hasGenerated = this._aiSuggestions.length > 0;
+    const allSelected = this._aiSuggestions.length > 0 && this._aiSuggestions.every((s) => s.selected);
+
+    return html`
+      <sl-dialog
+        label="${t('spark-canvas.ai-dialog.title')}"
+        ?open=${this._aiDialogOpen}
+        @sl-after-hide=${() => { this._aiDialogOpen = false; }}
+        style="--width: 560px;"
+      >
+        <div class="ai-dialog-body">
+          <!-- Step 1: Description input + Generate button -->
+          <div class="ai-generate-row">
+            <sl-textarea
+              label="${t('spark-canvas.ai-dialog.describe')}"
+              placeholder="${t('spark-canvas.ai-dialog.placeholder')}"
+              rows="2"
+              .value=${this._aiDescription}
+              @sl-input=${(e: Event) => {
+                this._aiDescription = (e.target as unknown as { value: string }).value;
+              }}
+            ></sl-textarea>
+            <sl-button
+              variant="primary"
+              ?disabled=${!this._aiDescription.trim()}
+              @click=${this._generateSuggestions}
+            >
+              ${t('spark-canvas.ai-dialog.generate')}
+            </sl-button>
+          </div>
+
+          <!-- Step 2: Review suggestions (shown after generation attempt) -->
+          ${hasGenerated ? html`
+            <div class="ai-suggestions-section">
+              <div class="ai-suggestions-header">
+                <span class="ai-suggestions-count">
+                  ${this._aiSuggestions.length} event${this._aiSuggestions.length !== 1 ? 's' : ''} suggested
+                </span>
+                <div class="ai-suggestions-controls">
+                  ${allSelected
+                    ? html`
+                      <sl-button size="small" variant="text" @click=${this._deselectAll}>
+                        ${t('spark-canvas.ai-dialog.deselectAll')}
+                      </sl-button>
+                    `
+                    : html`
+                      <sl-button size="small" variant="text" @click=${this._selectAll}>
+                        ${t('spark-canvas.ai-dialog.selectAll')}
+                      </sl-button>
+                    `}
+                </div>
+              </div>
+              <div class="ai-suggestions-list" role="list" aria-label="Suggested events">
+                ${this._aiSuggestions.map((s, i) => html`
+                  <div
+                    class="ai-suggestion-row ${s.selected ? 'selected' : ''}"
+                    role="listitem"
+                  >
+                    <sl-checkbox
+                      ?checked=${s.selected}
+                      aria-label="${s.name}: ${s.trigger}"
+                      @sl-change=${() => this._toggleSuggestion(i)}
+                    >
+                      <div class="ai-suggestion-label">
+                        <span class="ai-suggestion-name">${s.name}</span>
+                        <span class="ai-suggestion-trigger">${s.trigger}</span>
+                        <span class="ai-suggestion-aggregate">Aggregate: ${s.aggregate}</span>
+                      </div>
+                    </sl-checkbox>
+                  </div>
+                `)}
+              </div>
+            </div>
+          ` : nothing}
+
+          <!-- Generated but no results -->
+          ${this._aiDescription.trim() && hasGenerated && this._aiSuggestions.length === 0 ? html`
+            <p class="ai-no-results" role="status">${t('spark-canvas.ai-dialog.noResults')}</p>
+          ` : nothing}
+        </div>
+
+        <!-- Footer: Accept button -->
+        <sl-button
+          slot="footer"
+          variant="primary"
+          ?disabled=${selectedCount === 0}
+          @click=${this._acceptSuggestions}
+        >
+          ${t('spark-canvas.ai-dialog.accept', { count: String(selectedCount) })}
+        </sl-button>
+        <sl-button slot="footer" variant="neutral" @click=${() => { this._aiDialogOpen = false; }}>
+          Cancel
+        </sl-button>
+      </sl-dialog>
     `;
   }
 }
