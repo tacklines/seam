@@ -236,8 +236,8 @@ async function main(): Promise<void> {
   }
 
   const serverName = scoped
-    ? `multi-human-workflows (${scoped.participantName}@${scoped.sessionCode})`
-    : 'multi-human-workflows';
+    ? `seam (${scoped.participantName}@${scoped.sessionCode})`
+    : 'seam';
 
   const server = new McpServer({
     name: serverName,
@@ -2124,7 +2124,7 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
 
   const modeLabel = scoped ? `scoped to ${scoped.participantName}@${scoped.sessionCode}` : 'unscoped';
-  console.error(`[mcp] starting multi-human-workflows MCP server (${modeLabel})`);
+  console.error(`[mcp] starting seam MCP server (${modeLabel})`);
 
   await server.connect(transport);
 

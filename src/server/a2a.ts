@@ -176,13 +176,14 @@ export interface AgentCard {
 export function buildAgentCard(baseUrl: string): AgentCard {
   return {
     protocolVersion: '0.2.5',
-    name: 'Multi-Human Workflows',
+    name: 'Seam',
     description:
-      'Collaborative Event Storming platform. Supports multi-participant session management, ' +
-      'YAML artifact submission, cross-role comparison, conflict resolution, and contract formalization.',
+      'The boundary negotiation platform where teams and AI agents turn integration assumptions ' +
+      'into verified contracts. Supports session management, perspective submission, cross-role ' +
+      'comparison, conflict resolution, and contract formalization.',
     url: `${baseUrl}/a2a`,
     provider: {
-      organization: 'Multi-Human Workflows',
+      organization: 'Seam',
       url: baseUrl,
     },
     version: '0.1.0',
@@ -206,9 +207,9 @@ export function buildAgentCard(baseUrl: string): AgentCard {
       {
         id: 'create_session',
         name: 'Create Session',
-        description: 'Create a new collaborative Event Storming session. Returns a join code and creator participant ID.',
+        description: 'Create a new collaborative boundary negotiation session. Returns a join code and creator participant ID.',
         tags: ['session', 'workflow'],
-        examples: ['Start a new Event Storming workshop with team members'],
+        examples: ['Start a new Seam session with team members'],
         inputModes: ['application/json'],
         outputModes: ['application/json'],
       },

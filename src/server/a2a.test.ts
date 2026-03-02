@@ -51,7 +51,7 @@ describe('buildAgentCard', () => {
     const card = buildAgentCard('https://api.example.com');
     expect(card.protocolVersion).toBe('0.2.5');
     expect(card.url).toBe('https://api.example.com/a2a');
-    expect(card.name).toMatch(/Multi-Human/);
+    expect(card.name).toMatch(/Seam/);
   });
 
   it('includes all platform skills', () => {
