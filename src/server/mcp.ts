@@ -7,6 +7,7 @@ import { computePrepStatus, computeSessionStatus } from '../lib/prep-completenes
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
 import { serializeSession } from '../lib/session-store.js';
 import { compareFiles } from '../lib/comparison.js';
+import { PrioritizationService } from '../contexts/prioritization/prioritization-service.js';
 
 // ---------------------------------------------------------------------------
 // CLI arg parsing for scoped mode: --session=CODE --user=NAME
@@ -29,6 +30,70 @@ interface ScopedContext {
   sessionCode: string;
   participantId: string;
   participantName: string;
+}
+
+// ---------------------------------------------------------------------------
+// Priority suggestion heuristics (Phase III — Rank)
+// ---------------------------------------------------------------------------
+
+interface PrioritySuggestion {
+  eventName: string;
+  suggestedTier: 'must_have' | 'should_have' | 'could_have';
+  reasoning: string;
+}
+
+function suggestPrioritiesHeuristic(
+  allEvents: import('../schema/types.js').DomainEvent[],
+  refCount: Record<string, number>
+): PrioritySuggestion[] {
+  // Deduplicate by name (use first occurrence)
+  const seen = new Set<string>();
+  const uniqueEvents: import('../schema/types.js').DomainEvent[] = [];
+  for (const event of allEvents) {
+    if (!seen.has(event.name)) {
+      seen.add(event.name);
+      uniqueEvents.push(event);
+    }
+  }
+
+  return uniqueEvents.map((event): PrioritySuggestion => {
+    const reasons: string[] = [];
+    let tier: 'must_have' | 'should_have' | 'could_have' = 'could_have';
+
+    // Signal 1: confidence level
+    if (event.confidence === 'CONFIRMED') {
+      tier = 'must_have';
+      reasons.push('confidence is CONFIRMED');
+    } else if (event.confidence === 'LIKELY') {
+      tier = 'should_have';
+      reasons.push('confidence is LIKELY');
+    } else {
+      reasons.push('confidence is POSSIBLE');
+    }
+
+    // Signal 2: outbound events are integration points — escalate one tier
+    if (event.integration?.direction === 'outbound') {
+      if (tier === 'could_have') {
+        tier = 'should_have';
+      } else if (tier === 'should_have') {
+        tier = 'must_have';
+      }
+      reasons.push('outbound integration point (cross-context dependency)');
+    }
+
+    // Signal 3: appears in multiple submissions — high agreement signals must_have
+    const count = refCount[event.name] ?? 1;
+    if (count >= 2) {
+      tier = 'must_have';
+      reasons.push(`referenced in ${count} participant submissions (high agreement)`);
+    }
+
+    return {
+      eventName: event.name,
+      suggestedTier: tier,
+      reasoning: reasons.join('; '),
+    };
+  });
 }
 
 async function main(): Promise<void> {
@@ -925,6 +990,161 @@ async function main(): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
+  // Phase III — Rank tools (PrioritizationService)
+  // -------------------------------------------------------------------------
+
+  // Tool: set_priority
+  server.registerTool(
+    'set_priority',
+    {
+      description:
+        'Set a priority tier for a domain event in the session. Idempotent — calling again for the same event updates the tier.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        eventName: z.string().describe('Name of the domain event to prioritize'),
+        tier: z.enum(['must_have', 'should_have', 'could_have']).describe('Priority tier for the event'),
+      },
+    },
+    ({ sessionCode, eventName, tier }) => {
+      const service = new PrioritizationService((code) => sessionStore.getSession(code));
+      const result = service.setPriority(sessionCode, {
+        eventName,
+        participantId: 'mcp-agent',
+        tier,
+      });
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ updated: true }) }],
+      };
+    }
+  );
+
+  // Tool: cast_vote
+  server.registerTool(
+    'cast_vote',
+    {
+      description:
+        'Cast a vote (up or down) on a domain event. Idempotent — casting again for the same participant+event updates the direction. Returns the net vote count for the event after casting.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        participantId: z.string().describe('Participant ID casting the vote'),
+        eventName: z.string().describe('Name of the domain event to vote on'),
+        direction: z.enum(['up', 'down']).describe('Vote direction'),
+      },
+    },
+    ({ sessionCode, participantId, eventName, direction }) => {
+      const service = new PrioritizationService((code) => sessionStore.getSession(code));
+      const result = service.castVote(sessionCode, { eventName, participantId, direction });
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      // Compute net vote count for this event
+      const session = sessionStore.getSession(sessionCode);
+      const votes = session?.votes.filter((v) => v.eventName === eventName) ?? [];
+      const upvotes = votes.filter((v) => v.direction === 'up').length;
+      const downvotes = votes.filter((v) => v.direction === 'down').length;
+      const newCount = upvotes - downvotes;
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ newCount }) }],
+      };
+    }
+  );
+
+  // Tool: get_priorities
+  server.registerTool(
+    'get_priorities',
+    {
+      description:
+        'Get prioritized domain events for a session — returns composite scores sorted highest first, with tier and net vote count.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+      },
+    },
+    ({ sessionCode }) => {
+      const service = new PrioritizationService((code) => sessionStore.getSession(code));
+      const scores = service.computeCompositeScores(sessionCode);
+      if (!scores) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const events = scores.map((s) => {
+        const upvotes = s.votes.filter((v) => v.direction === 'up').length;
+        const downvotes = s.votes.filter((v) => v.direction === 'down').length;
+        // Use the most-recent priority tier for display (last set wins per participant;
+        // fall back to 'could_have' when no priorities exist)
+        const tierCounts: Record<string, number> = {};
+        for (const p of s.priorities) {
+          tierCounts[p.tier] = (tierCounts[p.tier] ?? 0) + 1;
+        }
+        const topTier =
+          Object.entries(tierCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'could_have';
+        return {
+          name: s.eventName,
+          tier: topTier,
+          score: s.compositeScore,
+          votes: upvotes - downvotes,
+        };
+      });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ events }) }],
+      };
+    }
+  );
+
+  // Tool: suggest_priorities
+  server.registerTool(
+    'suggest_priorities',
+    {
+      description:
+        'Analyze session artifacts and suggest priority tiers for domain events based on cross-references, confidence levels, and integration direction. Heuristic-based — no LLM.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+      },
+    },
+    ({ sessionCode }) => {
+      const session = sessionStore.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      // Collect all domain events across all submissions
+      const allEvents = session.submissions.flatMap((s) => s.data.domain_events);
+      if (allEvents.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ suggestions: [] }) }],
+        };
+      }
+
+      // Build a cross-reference count map: how many times does each event name appear
+      // across submissions (appearing in multiple files = higher priority signal)
+      const refCount: Record<string, number> = {};
+      for (const submission of session.submissions) {
+        for (const event of submission.data.domain_events) {
+          refCount[event.name] = (refCount[event.name] ?? 0) + 1;
+        }
+      }
+
+      const suggestions = suggestPrioritiesHeuristic(allEvents, refCount);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ suggestions }) }],
+      };
+    }
+  );
+
+  // -------------------------------------------------------------------------
   // Scoped tools — only registered when --session/--user are provided
   // -------------------------------------------------------------------------
 
@@ -1088,6 +1308,36 @@ async function main(): Promise<void> {
               lastChecked,
             }),
           }],
+        };
+      }
+    );
+
+    // Tool: my_set_priority — set a priority without needing the session code
+    server.registerTool(
+      'my_set_priority',
+      {
+        description:
+          'Set a priority tier for a domain event in your session. Idempotent — calling again updates the tier.',
+        inputSchema: {
+          eventName: z.string().describe('Name of the domain event to prioritize'),
+          tier: z.enum(['must_have', 'should_have', 'could_have']).describe('Priority tier for the event'),
+        },
+      },
+      ({ eventName, tier }) => {
+        const service = new PrioritizationService((code) => sessionStore.getSession(code));
+        const result = service.setPriority(ctx.sessionCode, {
+          eventName,
+          participantId: ctx.participantId,
+          tier,
+        });
+        if (!result) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ updated: true }) }],
         };
       }
     );
