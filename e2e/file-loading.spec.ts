@@ -78,7 +78,8 @@ test.describe('Navigation', () => {
   });
 
   test('Conflicts tab is disabled with only one file', async ({ page }) => {
-    const conflictsTab = page.locator('sl-tab[panel="comparison"]');
+    // Scope to .main to avoid the settings-dialog's comparison tab
+    const conflictsTab = page.locator('.main sl-tab[panel="comparison"]');
     await expect(conflictsTab).toHaveAttribute('disabled', '');
   });
 });
