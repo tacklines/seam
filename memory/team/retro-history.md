@@ -34,3 +34,11 @@
 - Pruned/archived: 8 entries (architect: 5, component: 3)
 - Tests: 728 → 798 (+70)
 - Key insight: Worktree agents that need events from a just-merged bead will re-create them, causing predictable merge conflicts — include exact field names in agent prompts to minimize post-merge fixes
+
+## Retro: 2026-03-02 (UX Unification epic htre)
+- Tasks completed: 3 this session (htre.4 tab panel extraction, htre.5 comparison-diff audit, test fix) + 3 in prior session (htre.1-3, htre.6)
+- Epic htre fully closed: app-shell.ts 2504 → 1758 lines (-30%)
+- New learnings: 0 new (pruning session — component 93→58, architect 74→58)
+- Pruned/archived: 9 component entries + 6 architect entries archived
+- Tests: 798 → 1293 (+495 across multiple sprints)
+- Key insight: Orchestrator can handle trivial audit tasks (htre.5) directly without agent dispatch — saves tokens and time for obvious-answer investigations

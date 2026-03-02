@@ -1,21 +1,22 @@
 ## Pre-Compact Snapshot
-**Time**: 2026-03-02T09:54:12Z
+**Time**: 2026-03-02T20:31:49Z
 
 ### In-Progress Tasks
-◐ multi-human-workflows-sof [● P2] [feature] - Enhance exploration-guide with completeness check, heuristic prompts, and pattern suggestions
 
 ### Recent Commits
-080e994 Merge branch 'worktree-agent-a38c8233'
-89861f1 feat: wire spark-canvas into app-shell for Phase I onboarding
-4af2e1d feat: wire suggestion-bar into app-shell layout
-e78e739 Merge branch 'worktree-agent-a57a2f30'
-9276393 fix: accessibility improvements across phase components
+fa9fbb6 refactor: extract 4 tab panels from app-shell into standalone components
+16b5373 fix: update comparison-service test mock to match extended Session type
+5faf1ae Merge branch 'worktree-agent-acd82bd5'
+ea4c210 refactor: simplify settings-dialog to delegate to settings-section
+b276437 refactor: simplify settings-drawer to delegate to settings-section
 
 ### Working Tree
  M memory/agents/architect/learnings.md
- M memory/agents/tester/learnings.md
+ M memory/agents/component/archive.md
+ M memory/agents/component/learnings.md
  M memory/sessions/pre-compact.md
-?? .claire/worktrees/agent-a2d261cd/
+?? memory/epics/htre/
+?? memory/sessions/2026-03-02T16-58-22Z.md
 
 ### Open Questions
 (fill in before context is lost)
