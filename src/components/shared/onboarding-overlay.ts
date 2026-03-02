@@ -241,7 +241,7 @@ export class OnboardingOverlay extends LitElement {
       if (focusableArr.length === 0) return;
       const first = focusableArr[0];
       const last = focusableArr[focusableArr.length - 1];
-      const active = this.renderRoot.activeElement ?? document.activeElement;
+      const active = ('activeElement' in this.renderRoot ? this.renderRoot.activeElement : null) ?? document.activeElement;
       if (e.shiftKey) {
         if (active === first) {
           e.preventDefault();
