@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import { ref, createRef } from 'lit/directives/ref.js';
 import { t } from '../../lib/i18n.js';
 
@@ -61,12 +61,22 @@ export class DetailPanel extends LitElement {
       flex-direction: column;
       z-index: 50;
       transform: translateX(100%);
-      transition: transform 200ms ease;
+      transition: transform 200ms ease, width 350ms ease-in-out;
       overflow: hidden;
     }
 
     .panel.open {
       transform: translateX(0);
+    }
+
+    .panel.expanded {
+      width: 50vw;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .panel {
+        transition: transform 200ms ease;
+      }
     }
 
     .panel-header {
@@ -125,6 +135,41 @@ export class DetailPanel extends LitElement {
     }
 
     .close-btn:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 1px;
+    }
+
+    .panel-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .breakdown-btn {
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--sl-color-primary-300, #a5b4fc);
+      background: var(--sl-color-primary-50, #eef2ff);
+      color: var(--sl-color-primary-700, #4338ca);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .breakdown-btn:hover {
+      background: var(--sl-color-primary-100, #e0e7ff);
+      border-color: var(--sl-color-primary-400, #818cf8);
+    }
+
+    .breakdown-btn:focus-visible {
       outline: 2px solid #6366f1;
       outline-offset: 1px;
     }
@@ -258,6 +303,9 @@ export class DetailPanel extends LitElement {
   /** The node data to display. Set to null to close the panel. */
   @property({ attribute: false }) nodeData: DetailNodeData | null = null;
 
+  /** Whether the panel is expanded to 50% viewport width. */
+  @state() private _expanded = false;
+
   override updated(changed: Map<string, unknown>) {
     if (changed.has('nodeData')) {
       const wasOpen = changed.get('nodeData') !== undefined && changed.get('nodeData') !== null;
@@ -269,11 +317,16 @@ export class DetailPanel extends LitElement {
           this._closeBtnRef.value?.focus();
         });
       } else if (!isNowOpen && wasOpen) {
-        // Panel just closed — restore focus
+        // Panel just closed — restore focus and reset expansion
+        this._expanded = false;
         this._previouslyFocusedElement?.focus();
         this._previouslyFocusedElement = null;
       }
     }
+  }
+
+  private _onToggleExpand() {
+    this._expanded = !this._expanded;
   }
 
   private _onKeyDown(e: KeyboardEvent) {
@@ -403,7 +456,7 @@ export class DetailPanel extends LitElement {
 
     return html`
       <div
-        class="panel ${isOpen ? 'open' : ''}"
+        class="panel ${isOpen ? 'open' : ''} ${this._expanded ? 'expanded' : ''}"
         role="dialog"
         aria-modal="false"
         aria-label=${data ? `${data.kind === 'aggregate' ? t('detailPanel.kind.aggregate') : t('detailPanel.kind.externalSystem')}: ${data.label}` : t('detailPanel.defaultAriaLabel')}
@@ -419,15 +472,32 @@ export class DetailPanel extends LitElement {
                 </div>
                 <div class="panel-title">${data.label}</div>
               </div>
-              <button
-                class="close-btn"
-                ${ref(this._closeBtnRef)}
-                @click=${this._onClose}
-                title="${t('detailPanel.closeTitle')}"
-                aria-label="${t('detailPanel.closeAriaLabel', { name: data.label })}"
-              >
-                &times;
-              </button>
+              <div class="panel-header-actions">
+                ${data.kind === 'aggregate'
+                  ? html`
+                    <button
+                      class="breakdown-btn"
+                      @click=${this._onToggleExpand}
+                      title=${this._expanded ? t('detailPanel.collapseButton') : t('detailPanel.breakDownButton')}
+                      aria-label=${this._expanded
+                        ? t('detailPanel.collapseAriaLabel', { name: data.label })
+                        : t('detailPanel.breakDownAriaLabel', { name: data.label })}
+                      aria-expanded=${this._expanded ? 'true' : 'false'}
+                    >
+                      ${this._expanded ? t('detailPanel.collapseButton') : t('detailPanel.breakDownButton')}
+                    </button>
+                  `
+                  : nothing}
+                <button
+                  class="close-btn"
+                  ${ref(this._closeBtnRef)}
+                  @click=${this._onClose}
+                  title="${t('detailPanel.closeTitle')}"
+                  aria-label="${t('detailPanel.closeAriaLabel', { name: data.label })}"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
             <div class="panel-body">
               ${data.kind === 'aggregate'

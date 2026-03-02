@@ -183,6 +183,10 @@ export const messages: Record<string, string> = {
   'detailPanel.closeTitle': 'Close panel',
   'detailPanel.closeAriaLabel': 'Close detail panel for {{name}}',
   'detailPanel.defaultAriaLabel': 'Detail panel',
+  'detailPanel.breakDownButton': 'Break down',
+  'detailPanel.breakDownAriaLabel': 'Break down {{name}} into work items',
+  'detailPanel.collapseButton': 'Collapse',
+  'detailPanel.collapseAriaLabel': 'Collapse breakdown panel for {{name}}',
 
   // ---------------------------------------------------------------------------
   // flow-search
