@@ -769,6 +769,98 @@ async function main(): Promise<void> {
     }
   );
 
+  // Tool: configure_session
+  server.registerTool(
+    'configure_session',
+    {
+      description:
+        'Update session configuration settings. Accepts a partial config delta — only specified keys are changed. ' +
+        'Emits a SessionConfigured domain event and returns the full updated config.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        config: z
+          .object({
+            comparison: z
+              .object({
+                sensitivity: z.enum(['semantic', 'exact']).optional(),
+                autoDetectConflicts: z.boolean().optional(),
+                suggestResolutions: z.boolean().optional(),
+              })
+              .optional(),
+            contracts: z
+              .object({
+                strictness: z.enum(['strict', 'warn', 'relaxed']).optional(),
+                driftNotifications: z.enum(['immediate', 'batched', 'silent']).optional(),
+              })
+              .optional(),
+            ranking: z
+              .object({
+                weights: z
+                  .object({
+                    confidence: z.number().optional(),
+                    complexity: z.number().optional(),
+                    references: z.number().optional(),
+                  })
+                  .optional(),
+                defaultTier: z.string().optional(),
+              })
+              .optional(),
+            delegation: z
+              .object({
+                level: z.enum(['assisted', 'semi_autonomous', 'autonomous']).optional(),
+                approvalExpiry: z.number().optional(),
+              })
+              .optional(),
+            notifications: z
+              .object({
+                toastDuration: z.number().optional(),
+                silentEvents: z.array(z.string()).optional(),
+              })
+              .optional(),
+          })
+          .describe('Partial session config delta — only specified sections/keys are updated'),
+        changedBy: z.string().optional().describe('Name of the participant making the change (for audit trail)'),
+      },
+    },
+    ({ code, config, changedBy }) => {
+      try {
+        const updatedConfig = sessionStore.updateSessionConfig(code, config as import('../schema/types.js').SessionConfig, changedBy);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ config: updatedConfig }) }],
+        };
+      } catch {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Session not found: ${code}` }) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool: get_session_config
+  server.registerTool(
+    'get_session_config',
+    {
+      description: 'Get the current session configuration. Returns the full config including all sections and their current values.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      try {
+        const config = sessionStore.getSessionConfig(code);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ config }) }],
+        };
+      } catch {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Session not found: ${code}` }) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
   // Tool: send_message
   server.registerTool(
     'send_message',
