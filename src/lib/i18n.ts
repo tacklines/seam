@@ -361,6 +361,61 @@ export const messages: Record<string, string> = {
   'suggestion-bar.aria-label': 'Session suggestion',
 
   // ---------------------------------------------------------------------------
+  // settings-drawer
+  // ---------------------------------------------------------------------------
+  'settings-drawer.title.comparison': 'Comparison Settings',
+  'settings-drawer.title.contracts': 'Contract Settings',
+  'settings-drawer.title.ranking': 'Priority Settings',
+  'settings-drawer.title.delegation': 'Delegation Settings',
+  'settings-drawer.title.notifications': 'Notification Settings',
+
+  'settings-drawer.default': 'Default',
+  'settings-drawer.on': 'On',
+  'settings-drawer.off': 'Off',
+  'settings-drawer.modified-indicator': 'Modified from default',
+  'settings-drawer.gear-button.aria-label': 'Open {{section}}',
+
+  // Comparison section
+  'settings-drawer.comparison.sensitivity': 'Match Sensitivity',
+  'settings-drawer.comparison.sensitivity.semantic': 'Semantic (flexible naming)',
+  'settings-drawer.comparison.sensitivity.exact': 'Exact (byte-for-byte)',
+  'settings-drawer.comparison.autoDetectConflicts': 'Auto-detect Conflicts',
+  'settings-drawer.comparison.suggestResolutions': 'Suggest Resolutions',
+
+  // Contracts section
+  'settings-drawer.contracts.strictness': 'Enforcement Strictness',
+  'settings-drawer.contracts.strictness.strict': 'Strict (block non-compliant)',
+  'settings-drawer.contracts.strictness.warn': 'Warn (surface warnings)',
+  'settings-drawer.contracts.strictness.relaxed': 'Relaxed (log only)',
+  'settings-drawer.contracts.driftNotifications': 'Drift Notifications',
+  'settings-drawer.contracts.driftNotifications.immediate': 'Immediate (toast on each drift)',
+  'settings-drawer.contracts.driftNotifications.batched': 'Batched (end-of-session digest)',
+  'settings-drawer.contracts.driftNotifications.silent': 'Silent (visible in Contract tab only)',
+
+  // Ranking section
+  'settings-drawer.ranking.defaultTier': 'Default Tier',
+  'settings-drawer.ranking.tier.mustHave': 'Must Have',
+  'settings-drawer.ranking.tier.shouldHave': 'Should Have',
+  'settings-drawer.ranking.tier.couldHave': 'Could Have',
+  'settings-drawer.ranking.weight.confidence': 'Confidence Weight',
+  'settings-drawer.ranking.weight.complexity': 'Complexity Weight',
+  'settings-drawer.ranking.weight.references': 'References Weight',
+
+  // Delegation section
+  'settings-drawer.delegation.level': 'Autonomy Level',
+  'settings-drawer.delegation.level.assisted': 'Assisted (agent proposes, human approves)',
+  'settings-drawer.delegation.level.semi-autonomous': 'Semi-autonomous (agent acts, human can undo)',
+  'settings-drawer.delegation.level.autonomous': 'Autonomous (agent acts without approval)',
+  'settings-drawer.delegation.approvalExpiry': 'Approval Expiry (seconds)',
+  'settings-drawer.delegation.approvalExpiry.hint': '24 hours default',
+
+  // Notifications section
+  'settings-drawer.notifications.toastDuration': 'Toast Duration (ms)',
+  'settings-drawer.notifications.silentEvents': 'Silent Events',
+  'settings-drawer.notifications.silentEvents.placeholder': 'EventA, EventB, ...',
+  'settings-drawer.notifications.silentEvents.hint': 'Comma-separated event names that will never trigger a toast. Default: none.',
+
+  // ---------------------------------------------------------------------------
   // schema-display
   // ---------------------------------------------------------------------------
   'schemaDisplay.empty': 'No schema fields defined',
