@@ -122,6 +122,9 @@ export const messages: Record<string, string> = {
   'comparisonView.matchedBy': 'Matched by {{eventName}} ({{role}})',
   'comparisonView.matchReason': '{{reason}}',
   'comparisonView.assumptions': 'Assumptions',
+  'comparisonView.formalizeCta.heading': 'All Conflicts Resolved',
+  'comparisonView.formalizeCta.description': 'Ready to formalize agreements into contracts',
+  'comparisonView.formalizeCta.button': 'Formalize Agreements',
 
   // ---------------------------------------------------------------------------
   // conflict-card

@@ -777,6 +777,7 @@ export class AppShell extends LitElement {
                   .files=${files}
                   .resolutions=${this._resolutions}
                   .priorities=${this._comparisonPriorities(files)}
+                  @formalize-requested=${this._onFormalizeRequested}
                 ></comparison-view>
                 <comparison-diff .files=${files}></comparison-diff>
               </help-tip>
@@ -1355,6 +1356,10 @@ export class AppShell extends LitElement {
   }
 
   private _onContractSelected(_e: CustomEvent<{ eventName: string; owner: string }>) {
+    store.setView('contracts');
+  }
+
+  private _onFormalizeRequested() {
     store.setView('contracts');
   }
 

@@ -4,6 +4,7 @@ import type { LoadedFile, ConflictResolution, EventPriority } from '../../schema
 import { ComparisonController } from '../controllers/comparison-controller.js';
 import { t } from '../../lib/i18n.js';
 import { matchAssumptions } from '../../lib/assumption-matching.js';
+import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import './conflict-card.js';
@@ -246,6 +247,69 @@ export class ComparisonView extends LitElement {
         transition: none;
       }
     }
+
+    /* ---- Formalize CTA ---- */
+    .formalize-cta {
+      margin-bottom: 2rem;
+      border-radius: 12px;
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+      border: 2px solid #86efac;
+      box-shadow: 0 4px 12px rgba(22, 163, 74, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      animation: formalize-cta-in 400ms ease-out;
+    }
+
+    @keyframes formalize-cta-in {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .formalize-cta {
+        animation: none;
+      }
+    }
+
+    .formalize-cta-icon {
+      flex-shrink: 0;
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      background: #16a34a;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .formalize-cta-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .formalize-cta-heading {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #14532d;
+      margin: 0 0 0.25rem;
+    }
+
+    .formalize-cta-description {
+      font-size: 0.9375rem;
+      color: #166534;
+      margin: 0;
+    }
   `;
 
   @property({ attribute: false }) files: LoadedFile[] = [];
@@ -314,6 +378,32 @@ export class ComparisonView extends LitElement {
               style="width: ${progressPct}%"
             ></div>
           </div>
+        </div>
+      ` : ''}
+
+      <!-- Formalize CTA (shown when all conflicts resolved) -->
+      ${allResolved ? html`
+        <div
+          class="formalize-cta"
+          role="status"
+          aria-label="${t('comparisonView.formalizeCta.heading')}: ${t('comparisonView.formalizeCta.description')}"
+        >
+          <div class="formalize-cta-icon" aria-hidden="true">&#10003;</div>
+          <div class="formalize-cta-body">
+            <div class="formalize-cta-heading">${t('comparisonView.formalizeCta.heading')}</div>
+            <p class="formalize-cta-description">${t('comparisonView.formalizeCta.description')}</p>
+          </div>
+          <sl-button
+            variant="success"
+            size="large"
+            aria-label="${t('comparisonView.formalizeCta.button')}"
+            @click=${() => {
+              this.dispatchEvent(new CustomEvent('formalize-requested', {
+                bubbles: true,
+                composed: true,
+              }));
+            }}
+          >${t('comparisonView.formalizeCta.button')}</sl-button>
         </div>
       ` : ''}
 
