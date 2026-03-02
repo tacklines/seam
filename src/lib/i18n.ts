@@ -829,6 +829,43 @@ export const messages: Record<string, string> = {
   'shortcuts.action.confirm': 'Confirm current action',
   'shortcuts.action.cancel': 'Cancel / close dialog',
   'shortcuts.action.openHelp': 'Open keyboard shortcuts',
+
+  // ---------------------------------------------------------------------------
+  // approval-queue
+  // ---------------------------------------------------------------------------
+  'approvalQueue.bellAriaLabel': 'Open approval queue',
+  'approvalQueue.bellAriaLabelWithCount': 'Open approval queue, {{count}} pending',
+  'approvalQueue.drawerLabel': 'Approval Queue',
+  'approvalQueue.drawerSubtitle': 'Review and approve or reject agent-proposed actions',
+  'approvalQueue.listAriaLabel': 'Pending approval items',
+  'approvalQueue.empty': 'All caught up!',
+  'approvalQueue.emptyHint': 'Agent-proposed actions will appear here for your review.',
+  'approvalQueue.itemAriaLabel': 'Pending approval: {{action}}',
+  'approvalQueue.agentLabel': 'Agent: {{id}}',
+  'approvalQueue.viewDetails': 'View reasoning',
+  'approvalQueue.accept': 'Accept',
+  'approvalQueue.reject': 'Reject',
+  'approvalQueue.expired': 'Expired',
+  'approvalQueue.expiresInHours': 'Expires in {{hours}} hour(s)',
+  'approvalQueue.expiresInMinutes': 'Expires in {{minutes}} minute(s)',
+
+  // ---------------------------------------------------------------------------
+  // delegation-toggle
+  // ---------------------------------------------------------------------------
+  'delegationToggle.label': 'Agent autonomy',
+  'delegationToggle.level.assisted': 'Assisted',
+  'delegationToggle.level.semi_autonomous': 'Semi-autonomous',
+  'delegationToggle.level.autonomous': 'Autonomous',
+  'delegationToggle.description.assisted': 'Agents suggest, humans approve',
+  'delegationToggle.description.semi_autonomous': 'Agents handle routine tasks',
+  'delegationToggle.description.autonomous': 'Agents act as full participants',
+  'delegationToggle.confirmTitle': 'Increase agent autonomy?',
+  'delegationToggle.confirmMessage': 'Agents will be able to {{action}} without your approval. You can review and undo any action from the session history.',
+  'delegationToggle.confirmUndo': 'You can review and undo any action from the session history.',
+  'delegationToggle.confirmAction.semiAutonomous': 'handle routine tasks',
+  'delegationToggle.confirmAction.autonomous': 'act as full participants',
+  'delegationToggle.confirm': 'Confirm',
+  'delegationToggle.cancel': 'Cancel',
 };
 
 /**
