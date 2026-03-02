@@ -3,6 +3,7 @@ import { serializeSession } from '../lib/session-store.js';
 import { sessionStore as store, eventStore } from './store.js';
 import { createWebSocketServer } from './websocket.js';
 import { A2ATaskStore, createA2AHandlers, isA2ARoute, parseA2ABody, buildAgentCard } from './a2a.js';
+import { presenceTracker } from './presence.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
 
@@ -281,6 +282,42 @@ const server = http.createServer(async (req, res) => {
       }
       const messages = store.getMessages(code, participantId, since);
       sendJson(res, 200, { messages, count: messages.length });
+      return;
+    }
+
+    // POST /api/sessions/:code/presence/heartbeat — Update participant heartbeat
+    const presenceHeartbeatMatch = url.match(/^\/api\/sessions\/([^/]+)\/presence\/heartbeat$/);
+    if (method === 'POST' && presenceHeartbeatMatch) {
+      const code = presenceHeartbeatMatch[1];
+      const body = await parseBody(req) as { participantId?: string; participantName?: string };
+      if (!body.participantId) {
+        sendJson(res, 400, { error: 'participantId is required' });
+        return;
+      }
+      presenceTracker.heartbeat(code, body.participantId, body.participantName ?? '');
+      sendJson(res, 200, { presence: presenceTracker.getPresence(code) });
+      return;
+    }
+
+    // POST /api/sessions/:code/presence/view — Set current view for participant
+    const presenceViewMatch = url.match(/^\/api\/sessions\/([^/]+)\/presence\/view$/);
+    if (method === 'POST' && presenceViewMatch) {
+      const code = presenceViewMatch[1];
+      const body = await parseBody(req) as { participantId?: string; view?: string };
+      if (!body.participantId || !body.view) {
+        sendJson(res, 400, { error: 'participantId and view are required' });
+        return;
+      }
+      presenceTracker.setView(code, body.participantId, body.view);
+      sendJson(res, 200, { presence: presenceTracker.getPresence(code) });
+      return;
+    }
+
+    // GET /api/sessions/:code/presence — Get presence info for session
+    const presenceGetMatch = url.match(/^\/api\/sessions\/([^/]+)\/presence$/);
+    if (method === 'GET' && presenceGetMatch) {
+      const code = presenceGetMatch[1];
+      sendJson(res, 200, { presence: presenceTracker.getPresence(code) });
       return;
     }
 

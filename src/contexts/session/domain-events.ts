@@ -321,7 +321,19 @@ export const ApprovalDecidedSchema = baseEventSchema.extend({
 export type ApprovalDecided = z.infer<typeof ApprovalDecidedSchema>;
 
 // ---------------------------------------------------------------------------
-// Discriminated union — all 27 domain events
+// Presence / activity events (real-time collaboration awareness)
+// ---------------------------------------------------------------------------
+
+export const ActivityPulsedSchema = baseEventSchema.extend({
+  type: z.literal("ActivityPulsed"),
+  participantId: z.string(),
+  participantName: z.string(),
+  action: z.enum(["submitted", "resolved", "voted", "commented"]),
+});
+export type ActivityPulsed = z.infer<typeof ActivityPulsedSchema>;
+
+// ---------------------------------------------------------------------------
+// Discriminated union — all 28 domain events
 // ---------------------------------------------------------------------------
 
 export const DomainEventSchema = z.discriminatedUnion("type", [
@@ -352,6 +364,7 @@ export const DomainEventSchema = z.discriminatedUnion("type", [
   SessionConfiguredSchema,
   ApprovalRequestedSchema,
   ApprovalDecidedSchema,
+  ActivityPulsedSchema,
 ]);
 
 export type DomainEvent = z.infer<typeof DomainEventSchema>;
@@ -390,4 +403,5 @@ export const DOMAIN_EVENT_TYPES: readonly DomainEventType[] = [
   "SessionConfigured",
   "ApprovalRequested",
   "ApprovalDecided",
+  "ActivityPulsed",
 ] as const;

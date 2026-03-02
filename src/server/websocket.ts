@@ -10,6 +10,7 @@
  *   Server → Client: { type: "connected" }
  *   Server → Client: { type: "joined", sessionCode: string }
  *   Server → Client: { type: "event", event: DomainEvent }
+ *   Server → Client: { type: "presence_update", sessionCode: string, presence: PresenceInfo[] }
  *   Server → Client: { type: "error", message: string }
  *   Server → Client: { type: "pong" } (heartbeat response)
  */
@@ -18,6 +19,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type http from 'node:http';
 import type { EventStore } from '../contexts/session/event-store.js';
 import type { DomainEvent } from '../contexts/session/domain-events.js';
+import type { PresenceInfo } from './presence.js';
+import { presenceTracker } from './presence.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,9 +32,10 @@ export interface ClientMessage {
 }
 
 export interface ServerMessage {
-  type: 'connected' | 'joined' | 'event' | 'error' | 'pong';
+  type: 'connected' | 'joined' | 'event' | 'presence_update' | 'error' | 'pong';
   sessionCode?: string;
   event?: DomainEvent;
+  presence?: PresenceInfo[];
   message?: string;
 }
 
@@ -75,6 +79,23 @@ export function createWebSocketServer(
       }
     }
   });
+
+  // Subscribe to presence changes; broadcast presence_update to affected session
+  const unsubscribeFromPresence = presenceTracker.onChange(
+    (sessionCode: string, presence: PresenceInfo[]) => {
+      const msg: ServerMessage = { type: 'presence_update', sessionCode, presence };
+      const serialized = JSON.stringify(msg);
+
+      for (const [ws, state] of clients) {
+        if (
+          state.sessionCode === sessionCode &&
+          ws.readyState === WebSocket.OPEN
+        ) {
+          ws.send(serialized);
+        }
+      }
+    }
+  );
 
   // ---------------------------------------------------------------------------
   // Heartbeat — terminate connections that have gone silent
@@ -138,6 +159,7 @@ export function createWebSocketServer(
   wss.on('close', () => {
     clearInterval(heartbeatTimer);
     unsubscribeFromStore();
+    unsubscribeFromPresence();
   });
 
   return wss;
