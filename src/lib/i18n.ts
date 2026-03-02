@@ -364,6 +364,22 @@ export const messages: Record<string, string> = {
   'schemaDisplay.fieldsOfAriaLabel': 'Fields of {{key}}',
   'schemaDisplay.fieldAriaLabel.required': 'required',
   'schemaDisplay.fieldAriaLabel.optional': 'optional',
+
+  // ---------------------------------------------------------------------------
+  // activity-pulse
+  // ---------------------------------------------------------------------------
+  'activityPulse.artifact': '{{name}} submitted an artifact',
+  'activityPulse.resolution': '{{name}} resolved a conflict',
+  'activityPulse.assignment': '{{name}} assigned ownership',
+
+  // ---------------------------------------------------------------------------
+  // milestone-celebration
+  // ---------------------------------------------------------------------------
+  'milestone.firstArtifact': 'First perspective submitted! Waiting for others...',
+  'milestone.allSubmitted': "Everyone's in! Ready to explore overlaps.",
+  'milestone.allResolved': 'All conflicts resolved! Ready for contracts.',
+  'milestone.integrationGo': 'All systems go. Ship it!',
+  'milestone.dismiss': 'Dismiss',
 };
 
 /**

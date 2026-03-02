@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { store } from '../../state/app-state.js';
 import { t } from '../../lib/i18n.js';
+import { onActivity } from '../../lib/activity-pulse.js';
 import type { AppStateEvent, SessionParticipant, SessionState } from '../../state/app-state.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -200,6 +201,23 @@ export class ParticipantRegistry extends LitElement {
       color: var(--sl-color-primary-700);
     }
 
+    /* ── Activity pulse animation ── */
+
+    @media (prefers-reduced-motion: no-preference) {
+      @keyframes avatar-pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+        }
+        100% {
+          box-shadow: 0 0 0 8px transparent;
+        }
+      }
+
+      .status-indicator.pulsing {
+        animation: avatar-pulse 300ms ease-out;
+      }
+    }
+
     /* ── Mobile collapsible ── */
 
     @media (max-width: 640px) {
@@ -219,8 +237,11 @@ export class ParticipantRegistry extends LitElement {
   `;
 
   @state() private _sessionState: SessionState | null = null;
+  /** Set of participantIds that are currently showing the pulse animation */
+  @state() private _pulsingIds: Set<string> = new Set();
 
   private _unsubscribe: (() => void) | null = null;
+  private _unsubscribeActivity: (() => void) | null = null;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -234,12 +255,25 @@ export class ParticipantRegistry extends LitElement {
         this._sessionState = store.get().sessionState;
       }
     });
+
+    this._unsubscribeActivity = onActivity((participantId: string) => {
+      // Add participantId to pulsing set and trigger re-render
+      this._pulsingIds = new Set(this._pulsingIds).add(participantId);
+      // Remove after 300ms (animation duration)
+      setTimeout(() => {
+        const next = new Set(this._pulsingIds);
+        next.delete(participantId);
+        this._pulsingIds = next;
+      }, 300);
+    });
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this._unsubscribe?.();
     this._unsubscribe = null;
+    this._unsubscribeActivity?.();
+    this._unsubscribeActivity = null;
   }
 
   render() {
@@ -313,10 +347,13 @@ export class ParticipantRegistry extends LitElement {
     const submitted = submissions.some((s) => s.participantId === participant.id);
     const isMe = participant.id === myId;
     const submittedFile = submissions.find((s) => s.participantId === participant.id)?.fileName;
+    const isPulsing = this._pulsingIds.has(participant.id);
 
     const statusLabel = submitted ? t('participantRegistry.status.submitted') : t('participantRegistry.status.waiting');
     const statusIcon = submitted ? 'check-circle-fill' : 'hourglass-split';
-    const statusClass = submitted ? 'submitted' : 'waiting';
+    const statusClass = ['status-indicator', submitted ? 'submitted' : 'waiting', isPulsing ? 'pulsing' : '']
+      .filter(Boolean)
+      .join(' ');
 
     return html`
       <li
@@ -327,7 +364,7 @@ export class ParticipantRegistry extends LitElement {
       >
         <!-- Status indicator: color + icon shape (accessibility rule) -->
         <sl-tooltip content="${statusLabel}">
-          <div class="status-indicator ${statusClass}" aria-hidden="true">
+          <div class="${statusClass}" aria-hidden="true">
             <sl-icon name="${statusIcon}"></sl-icon>
           </div>
         </sl-tooltip>
