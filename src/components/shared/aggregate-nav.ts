@@ -6,6 +6,7 @@ import { getAggregateColor, getAggregateBg } from '../../lib/aggregate-colors.js
 import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
+import './domain-tooltip.js';
 
 interface AggregateEntry {
   name: string;
@@ -194,7 +195,9 @@ export class AggregateNav extends LitElement {
     const grouped = this.groupedByRole;
 
     return html`
-      <div class="section-header">${t('aggregateNav.heading')}</div>
+      <div class="section-header">
+        <domain-tooltip term="aggregate">${t('aggregateNav.heading')}</domain-tooltip>
+      </div>
       ${this.renderShowAll()}
       ${[...grouped.entries()].map(
         ([role, entries]) => html`

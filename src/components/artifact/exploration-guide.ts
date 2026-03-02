@@ -5,6 +5,7 @@ import { t } from '../../lib/i18n.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
+import '../shared/domain-tooltip.js';
 
 export interface ExplorationGap {
   message: string;
@@ -446,7 +447,7 @@ export class ExplorationGuide extends LitElement {
                   outline
                   @click=${() => this._onPromptAction({ ...currentPrompt, type: 'event' })}
                 >
-                  ${t('explorationGuide.addEvent')}
+                  <domain-tooltip term="domain-event">${t('explorationGuide.addEvent')}</domain-tooltip>
                 </sl-button>
                 <sl-button
                   size="small"
@@ -454,7 +455,7 @@ export class ExplorationGuide extends LitElement {
                   outline
                   @click=${() => this._onPromptAction({ ...currentPrompt, type: 'assumption' })}
                 >
-                  ${t('explorationGuide.addAssumption')}
+                  <domain-tooltip term="assumption">${t('explorationGuide.addAssumption')}</domain-tooltip>
                 </sl-button>
               </div>
             </div>

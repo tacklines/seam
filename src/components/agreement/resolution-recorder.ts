@@ -13,6 +13,7 @@ import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 
 import '../shared/empty-state.js';
+import '../shared/domain-tooltip.js';
 
 /**
  * Quick-resolve approach options with labels and icons.
@@ -193,7 +194,8 @@ export class ResolutionRecorder extends LitElement {
         <sl-icon name="check-circle-fill" aria-hidden="true"></sl-icon>
         <div>
           <div>
-            <strong>${r.chosenApproach}</strong> — ${r.resolution}
+            <domain-tooltip term="conflict"><strong>${r.chosenApproach}</strong></domain-tooltip>
+            — ${r.resolution}
           </div>
           <div class="resolved-meta">
             ${t('resolutionRecorder.resolvedBy', { names: r.resolvedBy.join(', ') })}

@@ -963,6 +963,20 @@ export const messages: Record<string, string> = {
   'settingsDialog.resetAllShortcuts': 'Reset All to Defaults',
   'settingsDialog.shortcutAction': 'Action',
   'settingsDialog.shortcutBinding': 'Binding',
+
+  // ---------------------------------------------------------------------------
+  // glossary — plain-language definitions for DDD / Event Storming terms
+  // ---------------------------------------------------------------------------
+  'glossary.aggregate': 'A cluster of related things that change together. Think of it as a "unit of work" — like an Order with its line items.',
+  'glossary.domain-event': 'Something important that happened in your system. Written in past tense, like "OrderPlaced" or "PaymentReceived".',
+  'glossary.bounded-context': "A team's area of responsibility. Each context has its own vocabulary — \"Account\" means different things to Sales vs. Billing.",
+  'glossary.command': 'An action someone or something requests. Like "Place Order" or "Cancel Subscription". Commands can succeed or fail.',
+  'glossary.policy': 'An automatic reaction to an event. "When payment fails, notify the customer." Policies connect events to commands.',
+  'glossary.read-model': 'A view built from events to answer a specific question. Like a dashboard showing "Orders this month".',
+  'glossary.assumption': "Something you believe is true but haven't proven. Surfacing assumptions early prevents expensive surprises later.",
+  'glossary.overlap': 'When two people describe the same event differently. Overlaps are opportunities for alignment, not errors.',
+  'glossary.conflict': 'A disagreement about how something should work. Conflicts are valuable — they reveal hidden complexity.',
+  'glossary.contract': "A formal agreement about an event's shape and meaning. Contracts prevent miscommunication between teams.",
 };
 
 /**

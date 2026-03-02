@@ -9,6 +9,7 @@ import './conflict-card.js';
 import '../shared/event-card.js';
 import '../shared/assumption-list.js';
 import '../shared/empty-state.js';
+import '../shared/domain-tooltip.js';
 
 @customElement('comparison-view')
 export class ComparisonView extends LitElement {
@@ -150,21 +151,29 @@ export class ComparisonView extends LitElement {
       <div class="stats" role="region" aria-label="Comparison summary">
         <div class="stat-card conflicts" role="status" aria-label="${conflicts.length} ${t('comparisonView.conflicts').toLowerCase()} found">
           <div class="stat-number" aria-hidden="true">${conflicts.length}</div>
-          <div class="stat-label">${t('comparisonView.conflicts')}</div>
+          <div class="stat-label">
+            <domain-tooltip term="conflict">${t('comparisonView.conflicts')}</domain-tooltip>
+          </div>
         </div>
         <div class="stat-card shared-events" role="status" aria-label="${sharedEvents.length} ${t('comparisonView.sharedEvents').toLowerCase()}">
           <div class="stat-number" aria-hidden="true">${sharedEvents.length}</div>
-          <div class="stat-label">${t('comparisonView.sharedEvents')}</div>
+          <div class="stat-label">
+            <domain-tooltip term="overlap">${t('comparisonView.sharedEvents')}</domain-tooltip>
+          </div>
         </div>
         <div class="stat-card shared-aggregates" role="status" aria-label="${sharedAggregates.length} ${t('comparisonView.sharedAggregates').toLowerCase()}">
           <div class="stat-number" aria-hidden="true">${sharedAggregates.length}</div>
-          <div class="stat-label">${t('comparisonView.sharedAggregates')}</div>
+          <div class="stat-label">
+            <domain-tooltip term="aggregate">${t('comparisonView.sharedAggregates')}</domain-tooltip>
+          </div>
         </div>
       </div>
 
       <!-- Conflicts Section -->
       <div class="section" role="region" aria-label="${t('comparisonView.conflicts')}" aria-live="polite">
-        <h2 class="section-heading conflicts">${t('comparisonView.conflicts')}</h2>
+        <h2 class="section-heading conflicts">
+          <domain-tooltip term="conflict">${t('comparisonView.conflicts')}</domain-tooltip>
+        </h2>
         ${conflicts.length > 0
           ? html`<div class="card-list">
               ${conflicts.map(
@@ -176,7 +185,9 @@ export class ComparisonView extends LitElement {
 
       <!-- Shared Events Section -->
       <div class="section" role="region" aria-label="${t('comparisonView.sharedEvents')}">
-        <h2 class="section-heading shared-events">${t('comparisonView.sharedEvents')}</h2>
+        <h2 class="section-heading shared-events">
+          <domain-tooltip term="overlap">${t('comparisonView.sharedEvents')}</domain-tooltip>
+        </h2>
         ${sharedEvents.length > 0
           ? html`<div class="card-list">
               ${sharedEvents.map(
@@ -188,7 +199,9 @@ export class ComparisonView extends LitElement {
 
       <!-- Shared Aggregates Section -->
       <div class="section" role="region" aria-label="${t('comparisonView.sharedAggregates')}">
-        <h2 class="section-heading shared-aggregates">${t('comparisonView.sharedAggregates')}</h2>
+        <h2 class="section-heading shared-aggregates">
+          <domain-tooltip term="aggregate">${t('comparisonView.sharedAggregates')}</domain-tooltip>
+        </h2>
         ${sharedAggregates.length > 0
           ? html`<div class="card-list">
               ${sharedAggregates.map(

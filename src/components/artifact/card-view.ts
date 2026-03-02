@@ -11,6 +11,7 @@ import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '../shared/event-card.js';
 import '../shared/assumption-list.js';
+import '../shared/domain-tooltip.js';
 
 @customElement('card-view')
 export class CardView extends LitElement {
@@ -211,7 +212,9 @@ export class CardView extends LitElement {
                       style="--aggregate-border-color: ${color}"
                     >
                       <div class="aggregate-summary" slot="summary">
-                        <span class="aggregate-name">${agg}</span>
+                        <domain-tooltip term="aggregate">
+                          <span class="aggregate-name">${agg}</span>
+                        </domain-tooltip>
                         <sl-badge variant="neutral" pill>${events.length}</sl-badge>
                       </div>
                       <div class="events-grid">
