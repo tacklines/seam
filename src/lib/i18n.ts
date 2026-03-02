@@ -880,6 +880,9 @@ export const messages: Record<string, string> = {
   'helpTip.priorityView': 'Drag events between priority tiers or vote to help the team decide what matters most.',
   'helpTip.breakdownEditor': 'Break prioritized events into work items. Link events to tasks and track coverage.',
   'helpTip.integrationDashboard': 'Review integration checks across all boundaries. Green means ready to ship.',
+  'helpTip.sparkCanvas': 'Start by adding domain events here. Type event names, aggregates, and triggers — or drop a YAML file.',
+  'helpTip.agreementsTab': 'Review overlapping domain events between roles. Resolve conflicts by choosing how your team handles each overlap.',
+  'helpTip.contractsTab': 'Formalized event contracts appear here. Review schemas, check provenance, and verify compliance before integration.',
 
   // ---------------------------------------------------------------------------
   // onboarding-overlay

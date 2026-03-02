@@ -781,11 +781,13 @@ export class AppShell extends LitElement {
 
         <!-- Main content -->
         <div class="main">
-          <spark-canvas
-            ?collapsed=${this._sparkCollapsed}
-            session-code="${this.appState.sessionState?.code ?? ''}"
-            @spark-submit=${this._onSparkSubmit}
-          ></spark-canvas>
+          <help-tip tip-key="spark-canvas" message=${t('helpTip.sparkCanvas')} ?active=${files.length === 0}>
+            <spark-canvas
+              ?collapsed=${this._sparkCollapsed}
+              session-code="${this.appState.sessionState?.code ?? ''}"
+              @spark-submit=${this._onSparkSubmit}
+            ></spark-canvas>
+          </help-tip>
           <sl-tab-group @sl-tab-show=${this.onTabChange} @open-settings=${this._onOpenSectionSettings}>
             <sl-tab slot="nav" panel="cards" ?active=${activeView === 'cards'}>
               ${t('shell.tab.events')}
@@ -927,107 +929,111 @@ export class AppShell extends LitElement {
               </help-tip>
             </sl-tab-panel>
             <sl-tab-panel name="agreements">
-              ${(() => {
-                const data = this._agreementsData(files);
-                const sessionCode = this.appState.sessionState?.code ?? '';
-                const participantName = this.appState.sessionState
-                  ? (this.appState.sessionState.session.participants.find(
-                      (p) => p.id === this.appState.sessionState!.participantId
-                    )?.name ?? '')
-                  : '';
-                return html`
-                  ${data.overlaps.length > 0
-                    ? data.overlaps.map((overlap) => html`
-                        <resolution-recorder
-                          .overlap=${overlap}
-                          sessionCode=${sessionCode}
-                          participantName=${participantName}
-                          .suggestion=${this._suggestions.get(overlap.label) ?? null}
-                          ?suggestionLoading=${this._suggestionLoadingLabels.has(overlap.label)}
-                          .existingResolution=${this._resolutions.find((r) => r.overlapLabel === overlap.label) ?? null}
-                          @resolution-recorded=${this._onResolutionRecorded}
-                          @suggestion-requested=${this._onSuggestionRequested}
-                        ></resolution-recorder>
-                      `)
-                    : html`<empty-state
-                    icon="people"
-                    heading="${t('emptyState.agreements.heading')}"
-                    description="${t('emptyState.agreements.description')}"
-                  ></empty-state>`
-                  }
-                  <ownership-grid
-                    .aggregates=${data.aggregates}
-                    .roles=${data.roles}
-                    sessionCode=${sessionCode}
-                    participantName=${participantName}
-                  ></ownership-grid>
-                  <flag-manager
-                    .items=${this._flaggedItems}
-                    sessionCode=${sessionCode}
-                    participantName=${participantName}
-                    .overlapLabels=${data.overlaps.map((o) => o.label)}
-                    @item-flagged=${(e: CustomEvent<{ item: UnresolvedItem }>) => {
-                      this._flaggedItems = [...this._flaggedItems, e.detail.item];
-                    }}
-                  ></flag-manager>
-                `;
-              })()}
+              <help-tip tip-key="agreements-tab" message=${t('helpTip.agreementsTab')} ?active=${files.length >= 2}>
+                ${(() => {
+                  const data = this._agreementsData(files);
+                  const sessionCode = this.appState.sessionState?.code ?? '';
+                  const participantName = this.appState.sessionState
+                    ? (this.appState.sessionState.session.participants.find(
+                        (p) => p.id === this.appState.sessionState!.participantId
+                      )?.name ?? '')
+                    : '';
+                  return html`
+                    ${data.overlaps.length > 0
+                      ? data.overlaps.map((overlap) => html`
+                          <resolution-recorder
+                            .overlap=${overlap}
+                            sessionCode=${sessionCode}
+                            participantName=${participantName}
+                            .suggestion=${this._suggestions.get(overlap.label) ?? null}
+                            ?suggestionLoading=${this._suggestionLoadingLabels.has(overlap.label)}
+                            .existingResolution=${this._resolutions.find((r) => r.overlapLabel === overlap.label) ?? null}
+                            @resolution-recorded=${this._onResolutionRecorded}
+                            @suggestion-requested=${this._onSuggestionRequested}
+                          ></resolution-recorder>
+                        `)
+                      : html`<empty-state
+                      icon="people"
+                      heading="${t('emptyState.agreements.heading')}"
+                      description="${t('emptyState.agreements.description')}"
+                    ></empty-state>`
+                    }
+                    <ownership-grid
+                      .aggregates=${data.aggregates}
+                      .roles=${data.roles}
+                      sessionCode=${sessionCode}
+                      participantName=${participantName}
+                    ></ownership-grid>
+                    <flag-manager
+                      .items=${this._flaggedItems}
+                      sessionCode=${sessionCode}
+                      participantName=${participantName}
+                      .overlapLabels=${data.overlaps.map((o) => o.label)}
+                      @item-flagged=${(e: CustomEvent<{ item: UnresolvedItem }>) => {
+                        this._flaggedItems = [...this._flaggedItems, e.detail.item];
+                      }}
+                    ></flag-manager>
+                  `;
+                })()}
+              </help-tip>
             </sl-tab-panel>
             <sl-tab-panel name="contracts">
-              ${(() => {
-                const data = this._contractsData(files);
-                // Track bundle changes for diff: when contract count changes, rotate bundles
-                const currentCount = data.bundle.eventContracts.length;
-                const lastCount = this._lastContractBundle?.eventContracts.length ?? 0;
-                if (currentCount > 0 && currentCount !== lastCount) {
-                  this._previousContractBundle = this._lastContractBundle;
-                  this._lastContractBundle = data.bundle;
-                }
-                const compliance = this._complianceStatus(files);
-                const showIntegrationCta =
-                  this._workItems.length > 0 &&
-                  compliance.status === 'pass' &&
-                  data.bundle.eventContracts.length > 0;
-                return html`
-                  <contract-diff
-                    .bundleBefore=${this._previousContractBundle}
-                    .bundleAfter=${data.bundle}
-                  ></contract-diff>
-                  <schema-display
-                    .schema=${data.schemas}
-                    label=${t('shell.contracts.schemaLabel')}
-                  ></schema-display>
-                  <provenance-explorer
-                    .chain=${this._provenanceChain(files)}
-                    subject=${t('shell.contracts.provenanceSubject')}
-                  ></provenance-explorer>
-                  ${showIntegrationCta ? html`
-                    <div
-                      class="integration-cta"
-                      role="status"
-                      aria-label="${t('shell.contracts.integrationCta.heading')}: ${t('shell.contracts.integrationCta.description')}"
-                    >
-                      <div class="integration-cta-icon" aria-hidden="true">&#10003;</div>
-                      <div class="integration-cta-body">
-                        <div class="integration-cta-heading">${t('shell.contracts.integrationCta.heading')}</div>
-                        <p class="integration-cta-description">${t('shell.contracts.integrationCta.description')}</p>
+              <help-tip tip-key="contracts-tab" message=${t('helpTip.contractsTab')} ?active=${files.length >= 2}>
+                ${(() => {
+                  const data = this._contractsData(files);
+                  // Track bundle changes for diff: when contract count changes, rotate bundles
+                  const currentCount = data.bundle.eventContracts.length;
+                  const lastCount = this._lastContractBundle?.eventContracts.length ?? 0;
+                  if (currentCount > 0 && currentCount !== lastCount) {
+                    this._previousContractBundle = this._lastContractBundle;
+                    this._lastContractBundle = data.bundle;
+                  }
+                  const compliance = this._complianceStatus(files);
+                  const showIntegrationCta =
+                    this._workItems.length > 0 &&
+                    compliance.status === 'pass' &&
+                    data.bundle.eventContracts.length > 0;
+                  return html`
+                    <contract-diff
+                      .bundleBefore=${this._previousContractBundle}
+                      .bundleAfter=${data.bundle}
+                    ></contract-diff>
+                    <schema-display
+                      .schema=${data.schemas}
+                      label=${t('shell.contracts.schemaLabel')}
+                    ></schema-display>
+                    <provenance-explorer
+                      .chain=${this._provenanceChain(files)}
+                      subject=${t('shell.contracts.provenanceSubject')}
+                    ></provenance-explorer>
+                    ${showIntegrationCta ? html`
+                      <div
+                        class="integration-cta"
+                        role="status"
+                        aria-label="${t('shell.contracts.integrationCta.heading')}: ${t('shell.contracts.integrationCta.description')}"
+                      >
+                        <div class="integration-cta-icon" aria-hidden="true">&#10003;</div>
+                        <div class="integration-cta-body">
+                          <div class="integration-cta-heading">${t('shell.contracts.integrationCta.heading')}</div>
+                          <p class="integration-cta-description">${t('shell.contracts.integrationCta.description')}</p>
+                        </div>
+                        <sl-button
+                          variant="primary"
+                          size="large"
+                          aria-label="${t('shell.contracts.integrationCta.button')}"
+                          @click=${() => {
+                            this.dispatchEvent(new CustomEvent('integration-check-requested', {
+                              bubbles: true,
+                              composed: true,
+                            }));
+                            this._onIntegrationCheckRequested();
+                          }}
+                        >${t('shell.contracts.integrationCta.button')}</sl-button>
                       </div>
-                      <sl-button
-                        variant="primary"
-                        size="large"
-                        aria-label="${t('shell.contracts.integrationCta.button')}"
-                        @click=${() => {
-                          this.dispatchEvent(new CustomEvent('integration-check-requested', {
-                            bubbles: true,
-                            composed: true,
-                          }));
-                          this._onIntegrationCheckRequested();
-                        }}
-                      >${t('shell.contracts.integrationCta.button')}</sl-button>
-                    </div>
-                  ` : ''}
-                `;
-              })()}
+                    ` : ''}
+                  `;
+                })()}
+              </help-tip>
             </sl-tab-panel>
             <sl-tab-panel name="integration">
               <help-tip tip-key="integration-dashboard" message=${t('helpTip.integrationDashboard')} ?active=${files.length >= 2}>
