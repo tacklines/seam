@@ -6,6 +6,8 @@ import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
+import '@shoelace-style/shoelace/dist/components/details/details.js';
+import '@shoelace-style/shoelace/dist/components/button/button.js';
 
 @customElement('file-drop-zone')
 export class FileDropZone extends LitElement {
@@ -96,6 +98,80 @@ export class FileDropZone extends LitElement {
       color: var(--sl-color-neutral-400, #94a3b8);
     }
 
+    .format-help {
+      max-width: 28rem;
+      text-align: center;
+      margin-top: 1.5rem;
+    }
+
+    .template-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-size: var(--sl-font-size-small, 0.875rem);
+      color: var(--sl-color-primary-600, #4f46e5);
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .template-link:hover {
+      color: var(--sl-color-primary-700, #4338ca);
+      text-decoration: underline;
+    }
+
+    .template-link sl-icon {
+      font-size: 1rem;
+    }
+
+    .format-help sl-details {
+      margin-top: 1rem;
+      text-align: left;
+    }
+
+    .format-help sl-details::part(base) {
+      border: 1px solid var(--sl-color-neutral-200, #e2e8f0);
+      border-radius: var(--sl-border-radius-medium, 0.375rem);
+    }
+
+    .format-help sl-details::part(summary) {
+      font-size: var(--sl-font-size-small, 0.875rem);
+      color: var(--sl-color-neutral-500, #64748b);
+    }
+
+    .format-help sl-details::part(content) {
+      font-size: var(--sl-font-size-small, 0.875rem);
+      color: var(--sl-color-neutral-700, #334155);
+    }
+
+    .format-help-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .format-help-body p {
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .spark-canvas-link {
+      color: var(--sl-color-primary-600, #4f46e5);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+      font-family: inherit;
+      text-decoration: underline;
+    }
+
+    .spark-canvas-link:hover {
+      color: var(--sl-color-primary-700, #4338ca);
+    }
+
     /* ── Compact mode ── */
 
     :host([mode="compact"]) .drop-zone {
@@ -155,8 +231,58 @@ export class FileDropZone extends LitElement {
         <p class="subtitle">${t('dropZone.heroSubtitle')}</p>
         ${this.renderDropZone()}
         <p class="hero-hint">${t('dropZone.hint')}</p>
+        ${this.renderFormatHelp()}
       </div>
     `;
+  }
+
+  private renderFormatHelp() {
+    return html`
+      <div class="format-help">
+        <button class="template-link" @click=${this._downloadTemplate}>
+          <sl-icon name="download" aria-hidden="true"></sl-icon>
+          ${t('dropZone.downloadTemplate')}
+        </button>
+        <sl-details summary=${t('dropZone.formatHelpSummary')}>
+          <div class="format-help-body">
+            <p>${t('dropZone.formatHelpStructure')}</p>
+            <p>${t('dropZone.formatHelpFields')}</p>
+            <p>${t('dropZone.formatHelpOptional')}</p>
+            <p>
+              ${t('dropZone.sparkCanvasAlt')}
+              <button
+                class="spark-canvas-link"
+                @click=${this._navigateToSpark}
+              >${t('dropZone.sparkCanvasLink')}</button>
+            </p>
+          </div>
+        </sl-details>
+      </div>
+    `;
+  }
+
+  private _downloadTemplate() {
+    const template = `metadata:
+  role: "your-role"
+  scope: "what you're responsible for"
+
+domain_events:
+  - name: "SomethingHappened"
+    aggregate: "YourAggregate"
+    trigger: "What causes this event"
+    confidence: "LIKELY"
+`;
+    const blob = new Blob([template], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'storm-prep-template.yaml';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private _navigateToSpark() {
+    this.dispatchEvent(new CustomEvent('navigate-to-spark', { bubbles: true, composed: true }));
   }
 
   private renderCompact() {
