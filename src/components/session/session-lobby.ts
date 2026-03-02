@@ -377,17 +377,27 @@ export class SessionLobby extends LitElement {
   }
 
   private _checkUrlParams() {
+    // Don't act on URL params if already in a session
+    if (this._sessionState) return;
+
     const params = new URLSearchParams(window.location.search);
     const sessionCode = params.get('session');
     const name = params.get('name');
-    if (sessionCode && name) {
-      this._joinCode = sessionCode.toUpperCase();
+
+    if (!sessionCode) return;
+
+    // Clean the URL so refreshes don't re-trigger
+    history.replaceState(null, '', window.location.pathname);
+
+    this._joinCode = sessionCode.toUpperCase();
+
+    if (name) {
+      // Both session and name provided: auto-join immediately
       this._name = name;
-      // Clean the URL so refreshes don't re-trigger
-      const cleanUrl = window.location.pathname;
-      history.replaceState(null, '', cleanUrl);
-      // Auto-trigger join
       void this._joinSession();
+    } else {
+      // Only session provided: pre-fill join code and show the join form
+      this._lobbyState = 'joining';
     }
   }
 
