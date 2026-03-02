@@ -311,24 +311,18 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
 export type PriorityTier = 'must_have' | 'should_have' | 'could_have';
 
 /**
- * Composite priority record for a single domain event.
- * The compositeScore is computed from confidence, integration complexity,
- * and cross-references across participants.
+ * Per-participant priority record for a single domain event.
+ * Stored in the session and used to compute composite scores.
  */
 export interface EventPriority {
   /** Name of the domain event being prioritized */
   eventName: string;
+  /** Participant who set this priority */
+  participantId: string;
   /** MoSCoW classification tier */
   tier: PriorityTier;
-  /**
-   * Computed score from three weighted signals:
-   * - Confidence level (CONFIRMED=3, LIKELY=2, POSSIBLE=1)
-   * - Integration complexity (inbound/outbound=2, internal=1)
-   * - Cross-references (count of participants whose artifacts mention the event or aggregate)
-   */
-  compositeScore: number;
-  /** Votes cast on this event by participants */
-  votes: Vote[];
+  /** ISO timestamp when this priority was set */
+  setAt: string;
 }
 
 /** A single upvote or downvote cast by a participant on a domain event */
@@ -339,6 +333,27 @@ export interface Vote {
   eventName: string;
   /** Direction of the vote */
   direction: 'up' | 'down';
+  /** ISO timestamp when this vote was cast */
+  castAt: string;
+}
+
+/**
+ * Computed composite score for a domain event, aggregated across all
+ * participant priorities and votes.
+ */
+export interface CompositeScore {
+  /** Name of the domain event */
+  eventName: string;
+  /**
+   * Score computed from tier weights and vote balance:
+   * - Tier weights: must_have=3, should_have=2, could_have=1
+   * - Averaged across participants then adjusted by net vote (upvotes - downvotes)
+   */
+  compositeScore: number;
+  /** All priorities set for this event */
+  priorities: EventPriority[];
+  /** All votes cast for this event */
+  votes: Vote[];
 }
 
 /** Complexity estimate using T-shirt sizing */

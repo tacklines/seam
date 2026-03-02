@@ -28,6 +28,8 @@ function sessionToJson(session: Session): SerializedSession {
     integrationReport: session.integrationReport,
     messages: session.messages,
     config: session.config,
+    priorities: session.priorities,
+    votes: session.votes,
   };
 }
 
@@ -46,6 +48,8 @@ function sessionFromJson(json: SerializedSession): Session {
     integrationReport: json.integrationReport,
     messages: json.messages ?? [],
     config: json.config ?? DEFAULT_SESSION_CONFIG,
+    priorities: json.priorities ?? [],
+    votes: json.votes ?? [],
   };
 }
 

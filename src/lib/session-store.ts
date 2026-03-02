@@ -12,6 +12,8 @@ import {
   ParticipantType,
   SessionConfig,
   DEFAULT_SESSION_CONFIG,
+  EventPriority,
+  Vote,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -58,6 +60,8 @@ export interface Session {
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
   config: SessionConfig;
+  priorities: EventPriority[];
+  votes: Vote[];
 }
 
 export interface SerializedSession {
@@ -71,6 +75,8 @@ export interface SerializedSession {
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
   config: SessionConfig;
+  priorities: EventPriority[];
+  votes: Vote[];
 }
 
 function generateCode(): string {
@@ -98,6 +104,8 @@ export function serializeSession(session: Session): SerializedSession {
     contracts: session.contracts,
     integrationReport: session.integrationReport,
     config: session.config,
+    priorities: session.priorities,
+    votes: session.votes,
   };
 }
 
@@ -113,6 +121,8 @@ export function deserializeSession(serialized: SerializedSession): Session {
     contracts: serialized.contracts,
     integrationReport: serialized.integrationReport,
     config: serialized.config ?? DEFAULT_SESSION_CONFIG,
+    priorities: serialized.priorities ?? [],
+    votes: serialized.votes ?? [],
   };
 }
 
@@ -151,6 +161,8 @@ export class SessionStore {
       contracts: null,
       integrationReport: null,
       config: { ...DEFAULT_SESSION_CONFIG },
+      priorities: [],
+      votes: [],
     };
 
     this.sessions.set(code, session);

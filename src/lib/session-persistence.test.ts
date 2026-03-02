@@ -73,6 +73,8 @@ function makeSession(overrides: Partial<Omit<Session, 'participants'>> & { parti
     contracts: null,
     integrationReport: null,
     config: DEFAULT_SESSION_CONFIG,
+    priorities: [],
+    votes: [],
     ...overrides,
   };
 }

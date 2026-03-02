@@ -21,6 +21,8 @@ function makeSession(code = 'ABCDEF', jam: JamArtifacts | null = null): Session 
     contracts: null,
     integrationReport: null,
     config: DEFAULT_SESSION_CONFIG,
+    priorities: [],
+    votes: [],
   };
 }
 
