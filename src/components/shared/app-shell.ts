@@ -21,7 +21,7 @@ import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
-import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport } from '../../schema/types.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
@@ -255,6 +255,8 @@ export class AppShell extends LitElement {
   @state() private _settingsOpen = false;
   @state() private _workItems: WorkItem[] = [];
   @state() private _flaggedItems: UnresolvedItem[] = [];
+  @state() private _previousContractBundle: ContractBundle | null = null;
+  @state() private _lastContractBundle: ContractBundle | null = null;
   @state() private _tierOverrides = new Map<string, 'must_have' | 'should_have' | 'could_have'>();
   @state() private _votes: Record<string, { up: string[]; down: string[] }> = {};
   @state() private _pendingApprovals: PendingApproval[] = [];
@@ -786,9 +788,16 @@ export class AppShell extends LitElement {
             <sl-tab-panel name="contracts">
               ${(() => {
                 const data = this._contractsData(files);
+                // Track bundle changes for diff: when contract count changes, rotate bundles
+                const currentCount = data.bundle.eventContracts.length;
+                const lastCount = this._lastContractBundle?.eventContracts.length ?? 0;
+                if (currentCount > 0 && currentCount !== lastCount) {
+                  this._previousContractBundle = this._lastContractBundle;
+                  this._lastContractBundle = data.bundle;
+                }
                 return html`
                   <contract-diff
-                    .bundleBefore=${null}
+                    .bundleBefore=${this._previousContractBundle}
                     .bundleAfter=${data.bundle}
                   ></contract-diff>
                   <schema-display
@@ -961,17 +970,64 @@ export class AppShell extends LitElement {
   }
 
   /**
-   * Derive a minimal WorkflowStatus from the loaded files for the Phase Ribbon.
-   * In standalone (non-session) mode we only know submission count; jam, contracts,
-   * and integration artifacts are absent.
+   * Derive a WorkflowStatus from the loaded files and available artifacts.
+   * Jam, contracts, and integration report are derived from existing state
+   * so the phase ribbon and suggestion bar can progress past early phases.
    */
   private _workflowStatus(files: AppState['files']) {
+    // Derive jam artifacts from overlaps and flagged items
+    const overlaps = this._comparisonCtrl.overlaps;
+    const jam: JamArtifacts | null = overlaps.length > 0
+      ? {
+          startedAt: new Date().toISOString(),
+          ownershipMap: [],
+          resolutions: overlaps
+            .filter(o => o.roles.length >= 2)
+            .map(o => ({
+              overlapLabel: o.label,
+              resolution: `Shared by ${o.roles.join(', ')}`,
+              chosenApproach: 'merge' as const,
+              resolvedBy: o.roles,
+              resolvedAt: new Date().toISOString(),
+            })),
+          unresolved: this._flaggedItems,
+        }
+      : null;
+
+    // Derive contracts from the current bundle
+    const contractsData = this._contractsData(files);
+    const contracts: ContractBundle | null =
+      contractsData.bundle.eventContracts.length > 0 ? contractsData.bundle : null;
+
+    // Derive integration report from integration data
+    // Map dashboard IntegrationCheck (label/description) to schema IntegrationCheck (name/message)
+    const integrationData = this._integrationData(files);
+    const integrationReport: IntegrationReport | null =
+      integrationData.checks.length > 0
+        ? {
+            generatedAt: new Date().toISOString(),
+            sourceContracts: contractsData.bundle.eventContracts.map(ec => ec.eventName),
+            checks: integrationData.checks.map(c => ({
+              name: c.label,
+              status: c.status,
+              message: c.description,
+              details: c.details,
+            })),
+            overallStatus: integrationData.checks.every(c => c.status === 'pass')
+              ? 'pass'
+              : integrationData.checks.some(c => c.status === 'fail')
+                ? 'fail'
+                : 'warn',
+            summary: integrationData.verdictSummary,
+          }
+        : null;
+
     return computeWorkflowStatus({
       participantCount: files.length,
       submissionCount: files.length,
-      jam: null,
-      contracts: null,
-      integrationReport: null,
+      jam,
+      contracts,
+      integrationReport,
     });
   }
 
