@@ -1,0 +1,230 @@
+metadata:
+  role: "product-manager"
+  scope: "Feature prioritization for Q3 launch"
+  goal: "Rank and prioritize features for the upcoming Q3 release given team capacity and market constraints"
+  generated_at: "2026-03-02T08:00:00Z"
+  event_count: 9
+  assumption_count: 4
+
+domain_events:
+
+  - name: "FeatureProposed"
+    aggregate: "Feature"
+    trigger: "Product manager submits feature request with business justification"
+    payload:
+      - field: "feature_id"
+        type: "str"
+      - field: "title"
+        type: "str"
+      - field: "description"
+        type: "str"
+      - field: "business_value"
+        type: "str"
+      - field: "proposed_by"
+        type: "str"
+      - field: "estimated_effort_points"
+        type: "int"
+    state_change: "(new) -> PROPOSED"
+    integration:
+      direction: internal
+    confidence: CONFIRMED
+
+  - name: "FeatureApproved"
+    aggregate: "Feature"
+    trigger: "Stakeholder vote reaches approval threshold"
+    payload:
+      - field: "feature_id"
+        type: "str"
+      - field: "approved_by"
+        type: "list[str]"
+      - field: "vote_count"
+        type: "int"
+      - field: "scheduled_release"
+        type: "str"
+      - field: "priority_score"
+        type: "int"
+    state_change: "PROPOSED -> APPROVED"
+    integration:
+      direction: outbound
+      channel: "release-planning-bus"
+    confidence: CONFIRMED
+
+  - name: "FeatureRejected"
+    aggregate: "Feature"
+    trigger: "Stakeholder vote falls below approval threshold"
+    payload:
+      - field: "feature_id"
+        type: "str"
+      - field: "rejected_by"
+        type: "list[str]"
+      - field: "rejection_reason"
+        type: "str"
+      - field: "can_resubmit"
+        type: "bool"
+    state_change: "PROPOSED -> REJECTED"
+    integration:
+      direction: internal
+    confidence: CONFIRMED
+
+  - name: "FeatureDeferred"
+    aggregate: "Feature"
+    trigger: "Team decides to defer feature to future release due to capacity"
+    payload:
+      - field: "feature_id"
+        type: "str"
+      - field: "deferred_to_release"
+        type: "str"
+      - field: "deferral_reason"
+        type: "str"
+      - field: "revisit_date"
+        type: "str"
+    state_change: "APPROVED -> DEFERRED"
+    integration:
+      direction: internal
+    confidence: LIKELY
+    notes: "Commonly triggered when SprintPlanned reveals insufficient capacity"
+
+  - name: "ReleaseScheduled"
+    aggregate: "Release"
+    trigger: "Product manager creates release milestone with target date"
+    payload:
+      - field: "release_id"
+        type: "str"
+      - field: "version"
+        type: "str"
+      - field: "target_date"
+        type: "str"
+      - field: "capacity_points"
+        type: "int"
+      - field: "feature_ids"
+        type: "list[str]"
+    state_change: "(new) -> SCHEDULED"
+    integration:
+      direction: outbound
+      channel: "release-planning-bus"
+    confidence: CONFIRMED
+
+  - name: "ReleaseDateMoved"
+    aggregate: "Release"
+    trigger: "External dependency slip or scope increase forces target date change"
+    payload:
+      - field: "release_id"
+        type: "str"
+      - field: "old_target_date"
+        type: "str"
+      - field: "new_target_date"
+        type: "str"
+      - field: "reason"
+        type: "str"
+      - field: "affected_feature_ids"
+        type: "list[str]"
+    state_change: "SCHEDULED -> SCHEDULED"
+    integration:
+      direction: outbound
+      channel: "release-planning-bus"
+    confidence: LIKELY
+    notes: "State unchanged but triggers re-prioritization of all affected features"
+
+  - name: "TeamCapacityChanged"
+    aggregate: "Team"
+    trigger: "Team lead updates available capacity for the sprint due to PTO or hiring"
+    payload:
+      - field: "team_id"
+        type: "str"
+      - field: "sprint_id"
+        type: "str"
+      - field: "previous_capacity_points"
+        type: "int"
+      - field: "new_capacity_points"
+        type: "int"
+      - field: "change_reason"
+        type: "str"
+      - field: "effective_date"
+        type: "str"
+    integration:
+      direction: outbound
+      channel: "release-planning-bus"
+    confidence: CONFIRMED
+
+  - name: "SprintPlanned"
+    aggregate: "Team"
+    trigger: "Team commits to sprint backlog during planning ceremony"
+    payload:
+      - field: "sprint_id"
+        type: "str"
+      - field: "team_id"
+        type: "str"
+      - field: "committed_feature_ids"
+        type: "list[str]"
+      - field: "total_points_committed"
+        type: "int"
+      - field: "start_date"
+        type: "str"
+      - field: "end_date"
+        type: "str"
+    state_change: "PLANNING -> ACTIVE"
+    integration:
+      direction: outbound
+      channel: "project-management-bus"
+    confidence: CONFIRMED
+
+  - name: "PriorityScoreRecalculated"
+    aggregate: "Feature"
+    trigger: "Automated scoring engine recalculates priority after capacity or date change"
+    payload:
+      - field: "feature_id"
+        type: "str"
+      - field: "old_score"
+        type: "int"
+      - field: "new_score"
+        type: "int"
+      - field: "scoring_factors"
+        type: "dict"
+      - field: "recalculation_trigger"
+        type: "str"
+    integration:
+      direction: internal
+    confidence: POSSIBLE
+    notes: "May belong to a separate prioritization service rather than Feature aggregate"
+
+boundary_assumptions:
+
+  - id: "BA-1"
+    type: ownership
+    statement: "The Feature aggregate owns its own priority score; the Release aggregate does not directly modify Feature state — it only references feature IDs"
+    affects_events:
+      - "FeatureApproved"
+      - "FeatureDeferred"
+      - "PriorityScoreRecalculated"
+    confidence: LIKELY
+    verify_with: "architecture review — determine if prioritization belongs in Feature or a dedicated Prioritization BC"
+
+  - id: "BA-2"
+    type: contract
+    statement: "TeamCapacityChanged must be consumed by the release planning process before SprintPlanned is emitted; ordering is guaranteed by the release-planning-bus"
+    affects_events:
+      - "TeamCapacityChanged"
+      - "SprintPlanned"
+      - "FeatureDeferred"
+    confidence: LIKELY
+    verify_with: "engineering team — confirm message ordering guarantees on release-planning-bus"
+
+  - id: "BA-3"
+    type: existence
+    statement: "A feature can only be Approved or Rejected once per proposal cycle; re-submission creates a new FeatureProposed event rather than reusing the existing feature ID"
+    affects_events:
+      - "FeatureProposed"
+      - "FeatureRejected"
+      - "FeatureApproved"
+    confidence: POSSIBLE
+    verify_with: "product team — confirm re-submission policy and whether historical votes should be preserved"
+
+  - id: "BA-4"
+    type: ordering
+    statement: "ReleaseDateMoved triggers PriorityScoreRecalculated for all features in the affected release; this must complete before the next SprintPlanned event"
+    affects_events:
+      - "ReleaseDateMoved"
+      - "PriorityScoreRecalculated"
+      - "SprintPlanned"
+    confidence: POSSIBLE
+    verify_with: "product manager — confirm whether reprioritzation is synchronous or can happen asynchronously before next sprint planning"

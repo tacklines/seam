@@ -1,0 +1,290 @@
+metadata:
+  role: "devops-engineer"
+  scope: "Production deployment pipeline verification"
+  goal: "Verify end-to-end deployment pipeline readiness for go/no-go decision on production release"
+  generated_at: "2026-03-02T08:45:00Z"
+  event_count: 11
+  assumption_count: 4
+
+domain_events:
+
+  - name: "PipelineTriggered"
+    aggregate: "Pipeline"
+    trigger: "Git tag pushed to main branch matching semver release pattern"
+    payload:
+      - field: "pipeline_id"
+        type: "str"
+      - field: "git_tag"
+        type: "str"
+      - field: "commit_sha"
+        type: "str"
+      - field: "triggered_by"
+        type: "str"
+      - field: "target_environment"
+        type: "str"
+    state_change: "(new) -> RUNNING"
+    integration:
+      direction: inbound
+      channel: "vcs-webhook"
+    sources:
+      - ".github/workflows/release.yml:12-25"
+    confidence: CONFIRMED
+
+  - name: "BuildCompleted"
+    aggregate: "Pipeline"
+    trigger: "Docker image build step finishes and image is pushed to registry"
+    payload:
+      - field: "pipeline_id"
+        type: "str"
+      - field: "image_digest"
+        type: "str"
+      - field: "image_tags"
+        type: "list[str]"
+      - field: "build_duration_seconds"
+        type: "int"
+      - field: "image_size_mb"
+        type: "int"
+    state_change: "RUNNING -> BUILD_COMPLETE"
+    integration:
+      direction: outbound
+      channel: "artifact-registry-events"
+    sources:
+      - ".github/workflows/release.yml:28-55"
+    confidence: CONFIRMED
+
+  - name: "TestsPassed"
+    aggregate: "Pipeline"
+    trigger: "All test suites (unit, integration, contract) complete with zero failures"
+    payload:
+      - field: "pipeline_id"
+        type: "str"
+      - field: "unit_test_count"
+        type: "int"
+      - field: "integration_test_count"
+        type: "int"
+      - field: "contract_test_count"
+        type: "int"
+      - field: "coverage_percentage"
+        type: "int"
+      - field: "test_duration_seconds"
+        type: "int"
+    state_change: "BUILD_COMPLETE -> TESTS_PASSED"
+    integration:
+      direction: internal
+    sources:
+      - ".github/workflows/release.yml:58-92"
+    confidence: CONFIRMED
+
+  - name: "ArtifactPublished"
+    aggregate: "Pipeline"
+    trigger: "Versioned release artifacts (binaries, helm charts, SBOMs) published to release store"
+    payload:
+      - field: "pipeline_id"
+        type: "str"
+      - field: "artifact_version"
+        type: "str"
+      - field: "artifact_urls"
+        type: "list[str]"
+      - field: "sbom_url"
+        type: "str"
+      - field: "signature_verified"
+        type: "bool"
+    state_change: "TESTS_PASSED -> ARTIFACTS_READY"
+    integration:
+      direction: outbound
+      channel: "release-registry"
+    confidence: CONFIRMED
+
+  - name: "EnvironmentProvisioned"
+    aggregate: "Environment"
+    trigger: "Terraform apply completes and all infrastructure resources are ready"
+    payload:
+      - field: "environment_id"
+        type: "str"
+      - field: "environment_name"
+        type: "str"
+      - field: "region"
+        type: "str"
+      - field: "node_count"
+        type: "int"
+      - field: "provisioned_at"
+        type: "str"
+      - field: "terraform_state_url"
+        type: "str"
+    state_change: "(new) -> READY"
+    integration:
+      direction: outbound
+      channel: "infra-events"
+    confidence: CONFIRMED
+
+  - name: "DeploymentStarted"
+    aggregate: "Environment"
+    trigger: "Helm upgrade initiated against the target Kubernetes cluster"
+    payload:
+      - field: "environment_id"
+        type: "str"
+      - field: "deployment_id"
+        type: "str"
+      - field: "artifact_version"
+        type: "str"
+      - field: "canary_percentage"
+        type: "int"
+      - field: "max_surge"
+        type: "int"
+      - field: "max_unavailable"
+        type: "int"
+    state_change: "READY -> DEPLOYING"
+    integration:
+      direction: outbound
+      channel: "deployment-events"
+    confidence: CONFIRMED
+
+  - name: "DeploymentCompleted"
+    aggregate: "Environment"
+    trigger: "All pods reach Running state and readiness probes pass"
+    payload:
+      - field: "environment_id"
+        type: "str"
+      - field: "deployment_id"
+        type: "str"
+      - field: "pods_running"
+        type: "int"
+      - field: "deployment_duration_seconds"
+        type: "int"
+      - field: "rollout_strategy"
+        type: "str"
+    state_change: "DEPLOYING -> DEPLOYED"
+    integration:
+      direction: outbound
+      channel: "deployment-events"
+    confidence: CONFIRMED
+
+  - name: "HealthCheckPassed"
+    aggregate: "HealthCheck"
+    trigger: "Synthetic monitoring confirms all critical endpoints respond within SLA thresholds"
+    payload:
+      - field: "environment_id"
+        type: "str"
+      - field: "check_id"
+        type: "str"
+      - field: "endpoints_checked"
+        type: "int"
+      - field: "p50_latency_ms"
+        type: "int"
+      - field: "p99_latency_ms"
+        type: "int"
+      - field: "error_rate_percent"
+        type: "int"
+    state_change: "(new) -> PASSED"
+    integration:
+      direction: outbound
+      channel: "observability-events"
+    confidence: CONFIRMED
+
+  - name: "HealthCheckFailed"
+    aggregate: "HealthCheck"
+    trigger: "Synthetic monitoring detects endpoint latency or error rate breach"
+    payload:
+      - field: "environment_id"
+        type: "str"
+      - field: "check_id"
+        type: "str"
+      - field: "failed_endpoints"
+        type: "list[str]"
+      - field: "failure_reason"
+        type: "str"
+      - field: "p99_latency_ms"
+        type: "int"
+      - field: "error_rate_percent"
+        type: "int"
+    state_change: "(new) -> FAILED"
+    integration:
+      direction: outbound
+      channel: "alerting-bus"
+    confidence: CONFIRMED
+    notes: "Triggers automatic RollbackInitiated if canary window has not closed"
+
+  - name: "RollbackInitiated"
+    aggregate: "Environment"
+    trigger: "Automated rollback triggered by HealthCheckFailed or manual operator decision"
+    payload:
+      - field: "environment_id"
+        type: "str"
+      - field: "deployment_id"
+        type: "str"
+      - field: "rollback_to_version"
+        type: "str"
+      - field: "rollback_reason"
+        type: "str"
+      - field: "initiated_by"
+        type: "str"
+      - field: "max_rollback_duration_seconds"
+        type: "int"
+    state_change: "DEPLOYED -> ROLLING_BACK"
+    integration:
+      direction: outbound
+      channel: "deployment-events"
+    confidence: LIKELY
+    notes: "max_rollback_duration_seconds enforces SLA on rollback completion time"
+
+  - name: "CanaryPromoted"
+    aggregate: "Environment"
+    trigger: "Canary phase passes all health checks and traffic ramps to 100 percent"
+    payload:
+      - field: "environment_id"
+        type: "str"
+      - field: "deployment_id"
+        type: "str"
+      - field: "canary_duration_minutes"
+        type: "int"
+      - field: "final_traffic_percentage"
+        type: "int"
+      - field: "promoted_at"
+        type: "str"
+    state_change: "DEPLOYED -> STABLE"
+    integration:
+      direction: outbound
+      channel: "deployment-events"
+    confidence: LIKELY
+    notes: "Only emitted when canary_percentage < 100 at DeploymentStarted; skipped for full rollouts"
+
+boundary_assumptions:
+
+  - id: "BA-1"
+    type: ordering
+    statement: "TestsPassed must always precede ArtifactPublished; artifacts from builds with test failures must never reach the release registry"
+    affects_events:
+      - "TestsPassed"
+      - "ArtifactPublished"
+      - "DeploymentStarted"
+    confidence: CONFIRMED
+    verify_with: "already enforced by pipeline gate — confirmed in release.yml job dependency graph"
+
+  - id: "BA-2"
+    type: contract
+    statement: "HealthCheckFailed with error_rate_percent above the configured SLA threshold (default: 1%) automatically triggers RollbackInitiated within 60 seconds during the canary window; after canary promotion rollback is manual-only"
+    affects_events:
+      - "HealthCheckFailed"
+      - "RollbackInitiated"
+      - "CanaryPromoted"
+    confidence: LIKELY
+    verify_with: "platform SRE team — confirm automatic rollback trigger threshold and whether it applies post-canary-promotion"
+
+  - id: "BA-3"
+    type: existence
+    statement: "EnvironmentProvisioned is idempotent; re-running Terraform on an already-provisioned environment emits a second EnvironmentProvisioned only if resources changed, otherwise no event is emitted"
+    affects_events:
+      - "EnvironmentProvisioned"
+      - "DeploymentStarted"
+    confidence: POSSIBLE
+    verify_with: "infrastructure team — clarify Terraform idempotency semantics and whether a no-op apply suppresses the event"
+
+  - id: "BA-4"
+    type: contract
+    statement: "Canary percentage in DeploymentStarted must be between 5 and 50; values below 5 percent produce insufficient signal for health checks and values above 50 percent defeat the purpose of canary validation"
+    affects_events:
+      - "DeploymentStarted"
+      - "CanaryPromoted"
+      - "RollbackInitiated"
+    confidence: POSSIBLE
+    verify_with: "SRE team and product team — agree on canary percentage range policy and document in deployment runbook"
