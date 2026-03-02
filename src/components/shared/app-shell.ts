@@ -21,7 +21,7 @@ import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
-import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel } from '../../schema/types.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
@@ -51,6 +51,7 @@ import '../visualization/flow-diagram.js';
 import '../visualization/flow-minimap.js';
 import '../visualization/flow-search.js';
 import '../comparison/comparison-view.js';
+import '../comparison/comparison-diff.js';
 import './aggregate-nav.js';
 import './filter-panel.js';
 import '../visualization/detail-panel.js';
@@ -77,6 +78,8 @@ import '../visualization/integration-dashboard.js';
 import './suggestion-bar.js';
 import './onboarding-overlay.js';
 import './milestone-celebration.js';
+import './assumption-list.js';
+import './delegation-toggle.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -268,6 +271,7 @@ export class AppShell extends LitElement {
   @state() private _activeDraft: Draft | null = null;
   @state() private _sectionSettingsOpen = false;
   @state() private _sectionSettingsName = '';
+  @state() private _delegationLevel: DelegationLevel = 'assisted';
   private _prevMilestoneState: MilestoneState = {
     artifactCount: 0,
     participantCount: 0,
@@ -586,6 +590,10 @@ export class AppShell extends LitElement {
               .pendingItems=${this._pendingApprovals}
               @approval-decided=${this._onApprovalDecided}
             ></approval-queue>
+            <delegation-toggle
+              level=${this._delegationLevel}
+              @level-changed=${this._onDelegationLevelChanged}
+            ></delegation-toggle>
             <sl-icon-button
               name="gear"
               label=${t('shell.openSettings')}
@@ -631,6 +639,16 @@ export class AppShell extends LitElement {
                   .patterns=${ed.patterns}
                 ></exploration-guide>
               `;
+            })()}
+            <sl-divider></sl-divider>
+            ${(() => {
+              const allAssumptions: BoundaryAssumption[] = files.flatMap(f => f.data.boundary_assumptions);
+              return allAssumptions.length > 0 ? html`
+                <assumption-list
+                  .assumptions=${allAssumptions}
+                  .conflicts=${this._comparisonCtrl.overlaps}
+                ></assumption-list>
+              ` : nothing;
             })()}
             <sl-divider></sl-divider>
             <filter-panel
@@ -736,6 +754,7 @@ export class AppShell extends LitElement {
             <sl-tab-panel name="comparison">
               <help-tip tip-key="comparison-view" message=${t('helpTip.comparisonView')} ?active=${files.length >= 2}>
                 <comparison-view .files=${files}></comparison-view>
+                <comparison-diff .files=${files}></comparison-diff>
               </help-tip>
             </sl-tab-panel>
             <sl-tab-panel name="priority">
@@ -1300,6 +1319,10 @@ export class AppShell extends LitElement {
 
   private _onContractSelected(_e: CustomEvent<{ eventName: string; owner: string }>) {
     store.setView('contracts');
+  }
+
+  private _onDelegationLevelChanged(e: CustomEvent<{ level: string }>) {
+    this._delegationLevel = e.detail.level as 'assisted' | 'semi_autonomous' | 'autonomous';
   }
 
   private _onApprovalDecided(e: CustomEvent<ApprovalDecidedDetail>) {
