@@ -940,18 +940,23 @@ export class AppShell extends LitElement {
                     : '';
                   return html`
                     ${data.overlaps.length > 0
-                      ? data.overlaps.map((overlap) => html`
-                          <resolution-recorder
-                            .overlap=${overlap}
-                            sessionCode=${sessionCode}
-                            participantName=${participantName}
-                            .suggestion=${this._suggestions.get(overlap.label) ?? null}
-                            ?suggestionLoading=${this._suggestionLoadingLabels.has(overlap.label)}
-                            .existingResolution=${this._resolutions.find((r) => r.overlapLabel === overlap.label) ?? null}
-                            @resolution-recorded=${this._onResolutionRecorded}
-                            @suggestion-requested=${this._onSuggestionRequested}
-                          ></resolution-recorder>
-                        `)
+                      ? data.overlaps.map((overlap, i) => {
+                          const recorder = html`
+                            <resolution-recorder
+                              .overlap=${overlap}
+                              sessionCode=${sessionCode}
+                              participantName=${participantName}
+                              .suggestion=${this._suggestions.get(overlap.label) ?? null}
+                              ?suggestionLoading=${this._suggestionLoadingLabels.has(overlap.label)}
+                              .existingResolution=${this._resolutions.find((r) => r.overlapLabel === overlap.label) ?? null}
+                              @resolution-recorded=${this._onResolutionRecorded}
+                              @suggestion-requested=${this._onSuggestionRequested}
+                            ></resolution-recorder>
+                          `;
+                          return i === 0
+                            ? html`<help-tip tip-key="conflict-resolve" message=${t('helpTip.conflictResolve')} ?active=${true}>${recorder}</help-tip>`
+                            : recorder;
+                        })
                       : html`<empty-state
                       icon="people"
                       heading="${t('emptyState.agreements.heading')}"

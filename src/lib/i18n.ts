@@ -882,6 +882,7 @@ export const messages: Record<string, string> = {
   'helpTip.integrationDashboard': 'Review integration checks across all boundaries. Green means ready to ship.',
   'helpTip.sparkCanvas': 'Start by adding domain events here. Type event names, aggregates, and triggers — or drop a YAML file.',
   'helpTip.agreementsTab': 'Review overlapping domain events between roles. Resolve conflicts by choosing how your team handles each overlap.',
+  'helpTip.conflictResolve': 'Each conflict card shows differences between submissions. Use the suggestion banner or write your own resolution, then submit to record the team\'s decision.',
   'helpTip.contractsTab': 'Formalized event contracts appear here. Review schemas, check provenance, and verify compliance before integration.',
 
   // ---------------------------------------------------------------------------
