@@ -252,6 +252,8 @@ export class AppShell extends LitElement {
   @state() private _settingsOpen = false;
   @state() private _workItems: WorkItem[] = [];
   @state() private _flaggedItems: UnresolvedItem[] = [];
+  @state() private _tierOverrides = new Map<string, 'must_have' | 'should_have' | 'could_have'>();
+  @state() private _votes: Record<string, { up: string[]; down: string[] }> = {};
   private _prevMilestoneState: MilestoneState = {
     artifactCount: 0,
     participantCount: 0,
@@ -503,6 +505,11 @@ export class AppShell extends LitElement {
     const { files, activeView, filters, errors, sidebarCollapsed, selectedAggregate } = this.appState;
     this._comparisonCtrl.setFiles(files);
     const conflictCount = this._comparisonCtrl.conflictCount;
+    const participantName = this.appState.sessionState
+      ? (this.appState.sessionState.session.participants.find(
+          (p) => p.id === this.appState.sessionState!.participantId
+        )?.name ?? '')
+      : '';
 
     return html`
       ${errors.length > 0
@@ -697,6 +704,8 @@ export class AppShell extends LitElement {
             <sl-tab-panel name="priority">
               <priority-view
                 .events=${this._rankedEvents(files)}
+                .votes=${this._votes}
+                currentParticipant=${participantName}
                 @priority-changed=${this._onPriorityChanged}
                 @vote-cast=${this._onVoteCast}
               ></priority-view>
@@ -719,8 +728,7 @@ export class AppShell extends LitElement {
                       ></coverage-matrix>
                       <dependency-graph
                         .workItems=${this._workItems}
-                        @dependency-added=${this._onDependencyChanged}
-                        @dependency-removed=${this._onDependencyChanged}
+                        @dependency-created=${this._onDependencyCreated}
                       ></dependency-graph>
                     </div>
                   </div>
@@ -1389,6 +1397,12 @@ export class AppShell extends LitElement {
         tier = 'could_have';
       }
 
+      // Apply user's manual tier override if present
+      const overrideTier = this._tierOverrides.get(name);
+      if (overrideTier) {
+        tier = overrideTier;
+      }
+
       ranked.push({
         name,
         aggregate: event.aggregate,
@@ -1403,12 +1417,39 @@ export class AppShell extends LitElement {
     return ranked.sort((a, b) => b.compositeScore - a.compositeScore);
   }
 
-  private _onPriorityChanged(_e: CustomEvent<{ eventName: string; tier: string }>) {
-    // No-op for now — priority changes are UI-local until a store action is wired
+  private _onPriorityChanged(e: CustomEvent<{ eventName: string; tier: string }>) {
+    const { eventName, tier } = e.detail;
+    const newOverrides = new Map(this._tierOverrides);
+    newOverrides.set(eventName, tier as 'must_have' | 'should_have' | 'could_have');
+    this._tierOverrides = newOverrides;
   }
 
-  private _onVoteCast(_e: CustomEvent<{ eventName: string; direction: 'up' | 'down' }>) {
-    // No-op for now — vote events are UI-local until a store action is wired
+  private _onVoteCast(e: CustomEvent<{ eventName: string; direction: 'up' | 'down' }>) {
+    const { eventName, direction } = e.detail;
+    const participantName = this.appState.sessionState
+      ? (this.appState.sessionState.session.participants.find(
+          (p) => p.id === this.appState.sessionState!.participantId
+        )?.name ?? 'Solo')
+      : 'Solo';
+
+    const prev = this._votes[eventName] ?? { up: [], down: [] };
+    const opposite = direction === 'up' ? 'down' : 'up';
+
+    // Toggle: if already voted in this direction, remove; otherwise add and remove opposite
+    const alreadyVoted = prev[direction].includes(participantName);
+    const newVotes = { ...this._votes };
+    if (alreadyVoted) {
+      newVotes[eventName] = {
+        up: direction === 'up' ? prev.up.filter((n) => n !== participantName) : prev.up,
+        down: direction === 'down' ? prev.down.filter((n) => n !== participantName) : prev.down,
+      };
+    } else {
+      newVotes[eventName] = {
+        up: direction === 'up' ? [...prev.up, participantName] : prev.up.filter((n) => n !== participantName),
+        down: direction === 'down' ? [...prev.down, participantName] : prev.down.filter((n) => n !== participantName),
+      };
+    }
+    this._votes = newVotes;
   }
 
   private _onPhaseNavigate(e: CustomEvent<{ phase: string }>) {
@@ -1615,8 +1656,14 @@ export class AppShell extends LitElement {
     );
   }
 
-  private _onDependencyChanged() {
-    // No-op for now: dependency-graph fires events but state update deferred
+  private _onDependencyCreated(e: CustomEvent<{ fromId: string; toId: string }>) {
+    const { fromId, toId } = e.detail;
+    // Add the dependency to the source work item
+    this._workItems = this._workItems.map((item) =>
+      item.id === fromId && !item.dependencies.includes(toId)
+        ? { ...item, dependencies: [...item.dependencies, toId] }
+        : item
+    );
   }
 
   private _onCreateWorkItemFromCheck(e: CustomEvent<{ checkId: string; checkLabel: string }>) {
