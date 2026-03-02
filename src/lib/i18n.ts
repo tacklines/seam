@@ -1,5 +1,5 @@
 /**
- * Lightweight i18n module for multi-human workflows visualizer.
+ * Lightweight i18n module for Seam.
  * No heavy framework — just a flat messages object and a t() lookup function.
  *
  * Usage:
@@ -15,7 +15,7 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // app-shell
   // ---------------------------------------------------------------------------
-  'shell.title': 'Storm-Prep',
+  'shell.title': 'Seam',
   'shell.addFiles': 'Add files',
   'shell.expandSidebar': 'Expand sidebar',
   'shell.collapseSidebar': 'Collapse sidebar',
@@ -36,19 +36,19 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // file-drop-zone
   // ---------------------------------------------------------------------------
-  'dropZone.ariaLabel': 'Drop storm-prep YAML files here, or press Enter or Space to browse for files',
+  'dropZone.ariaLabel': 'Drop perspective YAML files here, or press Enter or Space to browse for files',
   'dropZone.ctaActive': 'Release to upload files',
-  'dropZone.ctaIdle': 'Drop storm-prep YAML files here',
+  'dropZone.ctaIdle': 'Drop perspective YAML files here',
   'dropZone.ctaSecondary': 'or click to browse',
-  'dropZone.fileInputAriaLabel': 'Choose storm-prep YAML files to upload',
-  'dropZone.heroTitle': 'Storm-Prep Visualizer',
-  'dropZone.heroSubtitle': 'Visualize and compare domain event candidates across roles',
+  'dropZone.fileInputAriaLabel': 'Choose perspective YAML files to upload',
+  'dropZone.heroTitle': 'Seam',
+  'dropZone.heroSubtitle': 'Surface boundaries, negotiate contracts, verify integration',
   'dropZone.hint': 'Supports multiple files for cross-role comparison',
 
   // ---------------------------------------------------------------------------
   // card-view (artifact)
   // ---------------------------------------------------------------------------
-  'cardView.empty': 'Load a storm-prep YAML file to view events',
+  'cardView.empty': 'Load a perspective YAML file to view events',
   'cardView.nEvents': '{{total}} events',
   'cardView.stat.confirmed': 'confirmed',
   'cardView.stat.likely': 'likely',
@@ -108,7 +108,7 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // comparison-view
   // ---------------------------------------------------------------------------
-  'comparisonView.empty': 'Load two or more storm-prep YAML files to compare roles',
+  'comparisonView.empty': 'Load two or more perspective YAML files to compare roles',
   'comparisonView.conflicts': 'Conflicts',
   'comparisonView.sharedEvents': 'Shared Events',
   'comparisonView.sharedAggregates': 'Shared Aggregates',
@@ -201,8 +201,8 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // session-lobby
   // ---------------------------------------------------------------------------
-  'lobby.heroTitle': 'Storm-Prep Visualizer',
-  'lobby.heroSubtitle': 'Collaborate with your team on Event Storming preparation. Each participant submits their storm-prep file, then explore the combined domain event flow together.',
+  'lobby.heroTitle': 'Seam',
+  'lobby.heroSubtitle': 'Your systems will meet. Make sure they agree. Each participant submits their perspective, then explore boundaries and negotiate contracts together.',
   'lobby.sessionOptions': 'Session options',
   'lobby.startSession.title': 'Start a Session',
   'lobby.startSession.description': 'Create a new session and invite your team with a join code',
@@ -332,7 +332,7 @@ export const messages: Record<string, string> = {
   // ownership-grid
   // ---------------------------------------------------------------------------
   'ownershipGrid.empty': 'No aggregates or roles to display.',
-  'ownershipGrid.emptyHint': 'Load storm-prep files to see the ownership grid.',
+  'ownershipGrid.emptyHint': 'Load perspective files to see the ownership grid.',
   'ownershipGrid.ariaLabel': 'Aggregate ownership grid',
   'ownershipGrid.column.aggregate': 'Aggregate',
   'ownershipGrid.status': '{{assigned}} of {{total}} aggregate(s) assigned. Click a role cell to assign ownership.',
@@ -384,7 +384,7 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // comparison-diff
   // ---------------------------------------------------------------------------
-  'comparisonDiff.empty': 'Load two or more storm-prep YAML files to use the diff view',
+  'comparisonDiff.empty': 'Load two or more perspective YAML files to use the diff view',
   'comparisonDiff.fileA': 'File A',
   'comparisonDiff.fileB': 'File B',
   'comparisonDiff.selectDifferentFiles': 'Select two different files to compare',
@@ -516,7 +516,7 @@ export const messages: Record<string, string> = {
   'priorityView.column.shouldHave': 'Should Have',
   'priorityView.column.couldHave': 'Could Have',
   'priorityView.empty': 'No events to rank yet.',
-  'priorityView.emptyHint': 'Load storm-prep YAML files to populate events.',
+  'priorityView.emptyHint': 'Load perspective YAML files to populate events.',
   'priorityView.emptyColumn': 'No events in this tier',
   'priorityView.sortBy': 'Sort by',
   'priorityView.sortBy.score': 'Composite Score',
@@ -807,7 +807,7 @@ export const messages: Record<string, string> = {
   'helpTip.priority-view': 'Drag events between columns to set priority. Scores are computed from confidence, complexity, and how many participants reference the event.',
   'helpTip.breakdown-editor': 'Break large events into smaller, more focused domain events. Each slice should represent a single meaningful state change.',
   'helpTip.integration-dashboard': 'This dashboard shows how domain events flow between services and external systems. Green means confirmed integration; amber means assumed.',
-  'helpTip.file-drop': 'Drop your storm-prep YAML file here to load your domain events. You can load multiple files to compare roles.',
+  'helpTip.file-drop': 'Drop your perspective YAML file here to load your domain events. You can load multiple files to compare roles.',
   'helpTip.comparisonView': 'Compare how different participants see the same domain events. Look for shared events and conflicts.',
   'helpTip.priorityView': 'Drag events between priority tiers or vote to help the team decide what matters most.',
   'helpTip.breakdownEditor': 'Break prioritized events into work items. Link events to tasks and track coverage.',
@@ -820,8 +820,8 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // onboarding-overlay
   // ---------------------------------------------------------------------------
-  'onboardingOverlay.title': 'Welcome to Event Storming Visualizer',
-  'onboardingOverlay.description': 'This tool helps teams discover and align on domain events. Upload your event files, explore the flow, and collaborate in real time.',
+  'onboardingOverlay.title': 'Welcome to Seam',
+  'onboardingOverlay.description': 'The boundary negotiation platform where teams turn integration assumptions into verified contracts. Upload your perspectives, explore boundaries, and negotiate agreements.',
   'onboardingOverlay.step1.label': 'Upload your YAML file',
   'onboardingOverlay.step2.label': 'Explore the event flow',
   'onboardingOverlay.step3.label': 'Collaborate with your team',
@@ -845,15 +845,15 @@ export const messages: Record<string, string> = {
   'emptyState.agreements.heading': 'No Overlaps Detected',
   'emptyState.agreements.description': 'When multiple artifacts share the same domain events, overlaps appear here for resolution. Load at least two files to begin.',
   'emptyState.cardView.heading': 'No Artifacts Loaded',
-  'emptyState.cardView.description': 'Drop or paste storm-prep YAML files to see domain events organized by role and aggregate.',
+  'emptyState.cardView.description': 'Drop or paste perspective YAML files to see domain events organized by role and aggregate.',
   'emptyState.flowDiagram.heading': 'No Event Flow Yet',
-  'emptyState.flowDiagram.description': 'Load storm-prep YAML files to see how domain events flow between aggregates.',
+  'emptyState.flowDiagram.description': 'Load perspective YAML files to see how domain events flow between aggregates.',
   'emptyState.contracts.heading': 'No contracts yet',
   'emptyState.contracts.description': 'Formalize agreements into versioned event contracts',
   'emptyState.integration.heading': 'Ready to ship?',
   'emptyState.integration.description': 'Run integration checks to verify all contracts are satisfied',
   'emptyState.comparison.heading': 'Load two or more files to compare',
-  'emptyState.comparison.description': 'Load storm-prep YAML files from multiple roles to see conflicts, shared events, and overlaps',
+  'emptyState.comparison.description': 'Load perspective YAML files from multiple roles to see conflicts, shared events, and overlaps',
 
   // ---------------------------------------------------------------------------
   // phase-ribbon
@@ -1001,7 +1001,7 @@ export const messages: Record<string, string> = {
   'settingsDialog.shortcutBinding': 'Binding',
 
   // ---------------------------------------------------------------------------
-  // glossary — plain-language definitions for DDD / Event Storming terms
+  // glossary — plain-language definitions for DDD / boundary negotiation terms
   // ---------------------------------------------------------------------------
   'glossary.aggregate': 'A cluster of related things that change together. Think of it as a "unit of work" — like an Order with its line items.',
   'glossary.domain-event': 'Something important that happened in your system. Written in past tense, like "OrderPlaced" or "PaymentReceived".',

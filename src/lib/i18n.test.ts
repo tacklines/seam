@@ -3,7 +3,7 @@ import { t, messages } from './i18n';
 
 describe('t()', () => {
   it('returns the message for a known key', () => {
-    expect(t('shell.title')).toBe('Storm-Prep');
+    expect(t('shell.title')).toBe('Seam');
     expect(t('shell.addFiles')).toBe('Add files');
   });
 
@@ -13,7 +13,7 @@ describe('t()', () => {
   });
 
   it('returns the template unchanged when no params provided', () => {
-    expect(t('cardView.empty')).toBe('Load a storm-prep YAML file to view events');
+    expect(t('cardView.empty')).toBe('Load a perspective YAML file to view events');
   });
 
   it('interpolates a single parameter', () => {
