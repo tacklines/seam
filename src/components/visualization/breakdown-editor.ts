@@ -282,8 +282,8 @@ export class BreakdownEditor extends LitElement {
 
     .criterion-remove {
       flex-shrink: 0;
-      width: 20px;
-      height: 20px;
+      min-width: 44px;
+      min-height: 44px;
       border: none;
       background: none;
       cursor: pointer;

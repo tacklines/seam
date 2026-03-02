@@ -74,6 +74,20 @@ export class DriftNotification extends LitElement {
 
     .notification-content {
       cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0;
+      text-align: left;
+      width: 100%;
+      font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+    }
+
+    .notification-content:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500);
+      outline-offset: 2px;
+      border-radius: 4px;
     }
 
     .notification-header {
@@ -118,8 +132,8 @@ export class DriftNotification extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 2rem;
-      height: 2rem;
+      min-width: 2.75rem;
+      min-height: 2.75rem;
       border-radius: 4px;
       flex-shrink: 0;
       color: #92400e;
@@ -223,11 +237,17 @@ export class DriftNotification extends LitElement {
         aria-label="${t('driftNotification.ariaLabel', { event: drift.eventName, participant: drift.participantName })}"
       >
         <sl-alert variant="warning" open>
-          <div class="notification-content" @click=${() => this._handleClick(drift)}>
+          <button
+            class="notification-content"
+            type="button"
+            aria-label="${t('driftNotification.ariaLabel', { event: drift.eventName, participant: drift.participantName })}"
+            @click=${() => this._handleClick(drift)}
+          >
             <div class="notification-header">
               <span class="notification-title">${t('driftNotification.title')}</span>
               <button
                 class="close-btn"
+                type="button"
                 aria-label="${t('driftNotification.closeAriaLabel', { event: drift.eventName })}"
                 @click=${(e: Event) => { e.stopPropagation(); this._dismiss(drift.id); }}
               >
@@ -242,7 +262,7 @@ export class DriftNotification extends LitElement {
               <span class="event-name">${drift.eventName}</span> payload.
               ${drift.description}
             </div>
-          </div>
+          </button>
         </sl-alert>
       </div>
     `;

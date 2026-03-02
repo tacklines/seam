@@ -83,7 +83,7 @@ export class VoteWidget extends LitElement {
     .vote-btn::after {
       content: '';
       position: absolute;
-      inset: -0.5rem;
+      inset: -0.625rem;
     }
 
     .vote-icon {

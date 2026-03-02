@@ -49,8 +49,9 @@ export class ComplianceBadge extends LitElement {
       gap: 0.25rem;
       border-radius: 4px;
       padding: 0.125rem 0.25rem;
-      /* Ensure minimum 44x44px touch target via min-width/height */
-      min-height: 2rem;
+      /* Ensure minimum 44x44px touch target */
+      min-height: 2.75rem;
+      min-width: 2.75rem;
     }
 
     .badge-btn:focus-visible {

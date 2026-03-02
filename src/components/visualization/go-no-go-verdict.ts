@@ -127,7 +127,6 @@ export class GoNoGoVerdict extends LitElement {
       top: 50%;
       left: 50%;
       pointer-events: none;
-      aria-hidden: true;
     }
 
     .confetti-layer::before,

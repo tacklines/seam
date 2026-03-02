@@ -352,6 +352,15 @@ export class PriorityView extends LitElement {
       user-select: none;
     }
 
+    th[tabindex] {
+      outline: none;
+    }
+
+    th[tabindex]:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500, #3b82f6);
+      outline-offset: -2px;
+    }
+
     th:hover {
       color: var(--sl-color-primary-700, #1d4ed8);
     }
@@ -643,8 +652,8 @@ export class PriorityView extends LitElement {
           <sl-badge variant="neutral" pill>${ev.aggregate}</sl-badge>
           <sl-badge variant="${CONFIDENCE_VARIANT[ev.confidence]}" pill>${ev.confidence}</sl-badge>
           <sl-badge variant="${DIRECTION_VARIANT[ev.direction]}" pill>${ev.direction}</sl-badge>
-          <span class="${this._scoreBadgeClass(ev.compositeScore)}">
-            ⚡ ${ev.compositeScore.toFixed(1)}
+          <span class="${this._scoreBadgeClass(ev.compositeScore)}" aria-label="Score: ${ev.compositeScore.toFixed(1)}">
+            <span aria-hidden="true">⚡</span> ${ev.compositeScore.toFixed(1)}
           </span>
         </div>
         <div class="card-footer">
@@ -731,24 +740,30 @@ export class PriorityView extends LitElement {
               <tr>
                 <th
                   scope="col"
+                  tabindex="0"
                   aria-sort="${this._ariaSortAttr('score')}"
                   @click=${() => this._setSort('score')}
+                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._setSort('score'); } }}
                 >
                   ${t('priorityView.col.name')}
                   <span class="sort-indicator" aria-hidden="true">${this._sortIndicator('score')}</span>
                 </th>
                 <th
                   scope="col"
+                  tabindex="0"
                   aria-sort="${this._ariaSortAttr('aggregate')}"
                   @click=${() => this._setSort('aggregate')}
+                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._setSort('aggregate'); } }}
                 >
                   ${t('priorityView.col.aggregate')}
                   <span class="sort-indicator" aria-hidden="true">${this._sortIndicator('aggregate')}</span>
                 </th>
                 <th
                   scope="col"
+                  tabindex="0"
                   aria-sort="${this._ariaSortAttr('confidence')}"
                   @click=${() => this._setSort('confidence')}
+                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._setSort('confidence'); } }}
                 >
                   ${t('priorityView.col.confidence')}
                   <span class="sort-indicator" aria-hidden="true">${this._sortIndicator('confidence')}</span>
@@ -756,8 +771,10 @@ export class PriorityView extends LitElement {
                 <th scope="col">${t('priorityView.col.direction')}</th>
                 <th
                   scope="col"
+                  tabindex="0"
                   aria-sort="${this._ariaSortAttr('crossRefs')}"
                   @click=${() => this._setSort('crossRefs')}
+                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._setSort('crossRefs'); } }}
                 >
                   ${t('priorityView.col.crossRefs')}
                   <span class="sort-indicator" aria-hidden="true">${this._sortIndicator('crossRefs')}</span>

@@ -254,8 +254,8 @@ export class SparkCanvas extends LitElement {
       display: none;
       align-items: center;
       justify-content: center;
-      width: 1.5rem;
-      height: 1.5rem;
+      min-width: 2.75rem;
+      min-height: 2.75rem;
       border: none;
       background: transparent;
       cursor: pointer;
@@ -627,6 +627,7 @@ export class SparkCanvas extends LitElement {
           <sl-button
             variant="primary"
             ?disabled=${filledRows === 0}
+            aria-label="${t('spark-canvas.submit')} (${filledRows} event${filledRows !== 1 ? 's' : ''})"
             @click=${this._handleSubmit}
           >
             <sl-icon slot="prefix" name="cloud-arrow-up" aria-hidden="true"></sl-icon>

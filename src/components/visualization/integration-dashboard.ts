@@ -436,7 +436,7 @@ export class IntegrationDashboard extends LitElement {
           </sl-button>
         </div>
 
-        <div class="dashboard-grid" role="main" aria-label="${t('integrationDashboard.gridAriaLabel')}">
+        <div class="dashboard-grid" role="region" aria-label="${t('integrationDashboard.gridAriaLabel')}">
           ${this._renderChecksColumn()}
           ${this._renderBoundaryColumn()}
           ${this._renderVerdictColumn()}
