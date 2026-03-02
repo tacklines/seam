@@ -2,6 +2,8 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { t } from '../../lib/i18n.js';
 import type { BoundaryNode, BoundaryConnection } from './boundary-map.js';
+import type { IntegrationReport } from '../../schema/types.js';
+import { downloadAsFile } from '../../lib/download.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
@@ -226,7 +228,15 @@ export class IntegrationDashboard extends LitElement {
   /** Number of aggregates aligned (used in GO celebration) */
   @property({ type: Number }) aggregateCount = 0;
 
+  /** Integration report for export (optional) */
+  @property({ attribute: false }) integrationReport: IntegrationReport | null = null;
+
   // ---- Events ----
+
+  private _exportReport() {
+    if (!this.integrationReport) return;
+    downloadAsFile(JSON.stringify(this.integrationReport, null, 2), 'integration-report.json');
+  }
 
   private _handleCreateWorkItem(check: IntegrationCheck) {
     this.dispatchEvent(
@@ -452,13 +462,20 @@ export class IntegrationDashboard extends LitElement {
       <div>
         <div class="top-bar">
           <h1 class="dashboard-title">${t('integrationDashboard.title')}</h1>
-          <sl-button
-            variant="primary"
-            @click=${this._handleRunChecks}
-            aria-label="${t('integrationDashboard.runChecks.ariaLabel')}"
-          >
-            ${t('integrationDashboard.runChecks.label')}
-          </sl-button>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            ${this.integrationReport ? html`
+              <sl-button size="small" variant="default" outline @click=${this._exportReport}>
+                ${t('integrationDashboard.export')}
+              </sl-button>
+            ` : nothing}
+            <sl-button
+              variant="primary"
+              @click=${this._handleRunChecks}
+              aria-label="${t('integrationDashboard.runChecks.ariaLabel')}"
+            >
+              ${t('integrationDashboard.runChecks.label')}
+            </sl-button>
+          </div>
         </div>
 
         <div class="dashboard-grid" role="region" aria-label="${t('integrationDashboard.gridAriaLabel')}">

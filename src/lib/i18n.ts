@@ -125,6 +125,7 @@ export const messages: Record<string, string> = {
   'comparisonView.formalizeCta.heading': 'All Conflicts Resolved',
   'comparisonView.formalizeCta.description': 'Ready to formalize agreements into contracts',
   'comparisonView.formalizeCta.button': 'Formalize Agreements',
+  'comparisonView.export': 'Export Comparison',
 
   // ---------------------------------------------------------------------------
   // conflict-card
@@ -850,6 +851,7 @@ export const messages: Record<string, string> = {
   'integrationDashboard.verdict.go.summary': 'All checks pass. Ready to ship.',
   'integrationDashboard.verdict.noGo.summary': '{{count}} issue(s) require resolution.',
   'integrationDashboard.verdict.caution.summary': 'All critical checks pass, but {{count}} advisory item(s) found.',
+  'integrationDashboard.export': 'Export Report',
 
   // ---------------------------------------------------------------------------
   // help-tip

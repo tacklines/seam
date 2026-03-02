@@ -929,6 +929,25 @@ export class AppShell extends LitElement {
               <help-tip tip-key="integration-dashboard" message=${t('helpTip.integrationDashboard')} ?active=${files.length >= 2}>
                 ${(() => {
                   const data = this._integrationData(files);
+                  const contractsData = this._contractsData(files);
+                  const integrationReport: IntegrationReport | null = data.checks.length > 0
+                    ? {
+                        generatedAt: new Date().toISOString(),
+                        sourceContracts: contractsData.bundle.eventContracts.map(ec => ec.eventName),
+                        checks: data.checks.map(c => ({
+                          name: c.label,
+                          status: c.status,
+                          message: c.description,
+                          details: c.details,
+                        })),
+                        overallStatus: data.checks.every(c => c.status === 'pass')
+                          ? 'pass'
+                          : data.checks.some(c => c.status === 'fail')
+                            ? 'fail'
+                            : 'warn',
+                        summary: data.verdictSummary,
+                      }
+                    : null;
                   return html`
                     <integration-dashboard
                       .checks=${data.checks}
@@ -938,6 +957,7 @@ export class AppShell extends LitElement {
                       verdictSummary=${data.verdictSummary}
                       contractCount=${data.contractCount}
                       aggregateCount=${data.aggregateCount}
+                      .integrationReport=${integrationReport}
                       @create-work-item-requested=${this._onCreateWorkItemFromCheck}
                       @run-checks-requested=${this._onRunChecks}
                     ></integration-dashboard>

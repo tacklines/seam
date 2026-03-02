@@ -4,6 +4,7 @@ import type { LoadedFile, ConflictResolution, EventPriority } from '../../schema
 import { ComparisonController } from '../controllers/comparison-controller.js';
 import { t } from '../../lib/i18n.js';
 import { matchAssumptions } from '../../lib/assumption-matching.js';
+import { downloadAsFile } from '../../lib/download.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
@@ -310,6 +311,13 @@ export class ComparisonView extends LitElement {
       color: #166534;
       margin: 0;
     }
+
+    /* ---- Export toolbar ---- */
+    .export-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 1rem;
+    }
   `;
 
   @property({ attribute: false }) files: LoadedFile[] = [];
@@ -317,6 +325,18 @@ export class ComparisonView extends LitElement {
   @property({ attribute: false }) priorities: EventPriority[] = [];
 
   private _comparisonCtrl = new ComparisonController(this);
+
+  private _exportComparison() {
+    this._comparisonCtrl.setFiles(this.files);
+    const data = {
+      exportedAt: new Date().toISOString(),
+      conflicts: this._comparisonCtrl.conflicts,
+      sharedEvents: this._comparisonCtrl.sharedEvents,
+      sharedAggregates: this._comparisonCtrl.sharedAggregates,
+      resolutions: this.resolutions,
+    };
+    downloadAsFile(JSON.stringify(data, null, 2), 'comparison-export.json');
+  }
 
   render() {
     if (this.files.length < 2) {
@@ -406,6 +426,13 @@ export class ComparisonView extends LitElement {
           >${t('comparisonView.formalizeCta.button')}</sl-button>
         </div>
       ` : ''}
+
+      <!-- Export toolbar -->
+      <div class="export-toolbar">
+        <sl-button size="small" variant="default" outline @click=${this._exportComparison}>
+          ${t('comparisonView.export')}
+        </sl-button>
+      </div>
 
       <!-- Dashboard Header -->
       <div class="stats" role="region" aria-label="Comparison summary">
