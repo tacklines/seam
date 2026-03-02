@@ -9,8 +9,12 @@ import type { Overlap } from '../../lib/comparison.js';
 import { t } from '../../lib/i18n.js';
 import { parseAndValidate } from '../../lib/yaml-loader.js';
 import { registry } from '../../lib/shortcut-registry.js';
-import { computeWorkflowStatus } from '../../lib/workflow-engine.js';
-import { computeSessionStatus } from '../../lib/prep-completeness.js';
+import { deriveExplorationData } from '../../lib/exploration-data.js';
+import { deriveIntegrationData, deriveComplianceStatus } from '../../lib/integration-data.js';
+import { deriveContractEntries, deriveContractsData, deriveProvenanceChain } from '../../lib/contract-data.js';
+import { deriveRankedEvents, deriveComparisonPriorities } from '../../lib/ranked-events.js';
+import { deriveAgreementsData } from '../../lib/agreements-data.js';
+import { deriveWorkflowStatus } from '../../lib/workflow-status-data.js';
 import type { SuggestionContext } from '../../lib/format-suggestion.js';
 import type { ResolutionSuggestion } from '../../lib/integration-heuristics.js';
 import { suggestResolutionHeuristic } from '../../lib/integration-heuristics.js';
@@ -26,7 +30,7 @@ import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visu
 import type { WorkItemSuggestion } from '../visualization/breakdown-editor.js';
 import { suggestDecomposition } from '../../lib/decomposition-heuristics.js';
 import { suggestPriorities } from '../../lib/priority-heuristics.js';
-import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority, SessionConfig } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, UnresolvedItem, PendingApproval, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority, SessionConfig } from '../../schema/types.js';
 import { DEFAULT_SESSION_CONFIG } from '../../schema/types.js';
 import { loadSessionConfig, saveSessionConfig } from '../../lib/session-config-persistence.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
@@ -1175,412 +1179,54 @@ export class AppShell extends LitElement {
   /**
    * Derive exploration data (completeness, gaps, prompts, patterns) from the
    * loaded files for the exploration-guide sidebar component.
-   * Pure derivation — no side effects.
+   * Delegates to src/lib/exploration-data.ts.
    */
-  private _explorationData(files: AppState['files']): {
-    score: number;
-    gaps: ExplorationGap[];
-    prompts: ExplorationPrompt[];
-    patterns: ExplorationPattern[];
-  } {
-    if (files.length === 0) {
-      return { score: 0, gaps: [], prompts: [], patterns: [] };
-    }
-
-    const sessionStatus = computeSessionStatus(files);
-    const { overallScore, sessionGaps, aggregateCoverage } = sessionStatus;
-
-    // Map gap strings to ExplorationGap objects with action hints
-    const gaps: ExplorationGap[] = sessionGaps.map((msg): ExplorationGap => {
-      let action = 'Review';
-      if (msg.includes('No domain events')) {
-        action = 'Add events';
-      } else if (msg.includes('No boundary assumptions')) {
-        action = 'Add assumptions';
-      } else if (msg.includes('inbound') || msg.includes('outbound') || msg.includes('internal')) {
-        action = 'Add event';
-      } else if (msg.includes('Only one aggregate')) {
-        action = 'Broaden scope';
-      } else if (msg.includes('POSSIBLE')) {
-        action = 'Review confidence';
-      } else if (msg.includes('1 participant') || msg.includes('Only 1')) {
-        action = 'Invite participant';
-      }
-      return { message: msg, action };
-    });
-
-    // Also include per-file gaps, deduplicating across files
-    const perFileGapMessages = new Set<string>(sessionGaps);
-    for (const fileEntry of sessionStatus.perFile) {
-      for (const gapMsg of fileEntry.status.gaps) {
-        if (!perFileGapMessages.has(gapMsg)) {
-          perFileGapMessages.add(gapMsg);
-          let action = 'Review';
-          if (gapMsg.includes('No domain events')) {
-            action = 'Add events';
-          } else if (gapMsg.includes('No boundary assumptions')) {
-            action = 'Add assumptions';
-          } else if (gapMsg.includes('Missing') && (gapMsg.includes('inbound') || gapMsg.includes('outbound') || gapMsg.includes('internal'))) {
-            action = 'Add event';
-          } else if (gapMsg.includes('Only one aggregate')) {
-            action = 'Broaden scope';
-          } else if (gapMsg.includes('POSSIBLE')) {
-            action = 'Review confidence';
-          }
-          gaps.push({ message: gapMsg, action, aggregate: fileEntry.role });
-        }
-      }
-    }
-
-    // Derive heuristic prompts from aggregates and event landscape
-    const prompts: ExplorationPrompt[] = [];
-
-    for (const agg of aggregateCoverage.slice(0, 3)) {
-      prompts.push({
-        question: `What happens when ${agg} fails to process?`,
-        type: 'event',
-      });
-    }
-
-    prompts.push({
-      question: 'What timeout or retry scenarios should be captured as events?',
-      type: 'event',
-    });
-
-    prompts.push({
-      question: 'Are there audit or compliance events that must be recorded?',
-      type: 'assumption',
-    });
-
-    // Pick a prominent event name from any file for the "who needs to know" prompt
-    const firstEvent = files[0]?.data.domain_events[0];
-    if (firstEvent) {
-      prompts.push({
-        question: `Who needs to know when ${firstEvent.name} happens?`,
-        type: 'assumption',
-      });
-    }
-
-    // Derive pattern suggestions from detected aggregates (max 3)
-    const patterns: ExplorationPattern[] = [];
-    const aggSet = new Set(aggregateCoverage.map((a) => a.toLowerCase()));
-
-    if ((aggSet.has('order') || aggSet.has('payment')) && patterns.length < 3) {
-      patterns.push({
-        description: 'Saga/Compensation: coordinate multi-step transactions with rollback events',
-        events: ['OrderCancelled', 'PaymentRefunded'],
-      });
-    }
-
-    if ((aggSet.has('user') || aggSet.has('account')) && patterns.length < 3) {
-      patterns.push({
-        description: 'Identity Lifecycle: track account state transitions and security events',
-        events: ['AccountLocked', 'PasswordReset'],
-      });
-    }
-
-    if (aggregateCoverage.length > 0 && patterns.length < 3) {
-      const agg = aggregateCoverage[0];
-      patterns.push({
-        description: `Audit Trail: record every significant change to ${agg} for compliance and debugging`,
-        events: [`${agg}Changed`, `${agg}Archived`],
-      });
-    }
-
-    return { score: overallScore, gaps, prompts, patterns };
+  private _explorationData(files: AppState['files']) {
+    return deriveExplorationData(files);
   }
 
   /**
    * Derive a WorkflowStatus from the loaded files and available artifacts.
-   * Jam, contracts, and integration report are derived from existing state
-   * so the phase ribbon and suggestion bar can progress past early phases.
+   * Delegates to src/lib/workflow-status-data.ts.
    */
   private _workflowStatus(files: AppState['files']) {
-    // Derive jam artifacts from overlaps and flagged items
-    const overlaps = this._comparisonCtrl.overlaps;
-    const jam: JamArtifacts | null = overlaps.length > 0
-      ? {
-          startedAt: new Date().toISOString(),
-          ownershipMap: [],
-          resolutions: overlaps
-            .filter(o => o.roles.length >= 2)
-            .map(o => ({
-              overlapLabel: o.label,
-              resolution: `Shared by ${o.roles.join(', ')}`,
-              chosenApproach: 'merge' as const,
-              resolvedBy: o.roles,
-              resolvedAt: new Date().toISOString(),
-            })),
-          unresolved: this._flaggedItems,
-        }
-      : null;
-
-    // Derive contracts from the current bundle
-    const contractsData = this._contractsData(files);
-    const contracts: ContractBundle | null =
-      contractsData.bundle.eventContracts.length > 0 ? contractsData.bundle : null;
-
-    // Derive integration report from integration data
-    // Map dashboard IntegrationCheck (label/description) to schema IntegrationCheck (name/message)
-    const integrationData = this._integrationData(files);
-    const integrationReport: IntegrationReport | null =
-      integrationData.checks.length > 0
-        ? {
-            generatedAt: new Date().toISOString(),
-            sourceContracts: contractsData.bundle.eventContracts.map(ec => ec.eventName),
-            checks: integrationData.checks.map(c => ({
-              name: c.label,
-              status: c.status,
-              message: c.description,
-              details: c.details,
-            })),
-            overallStatus: integrationData.checks.every(c => c.status === 'pass')
-              ? 'pass'
-              : integrationData.checks.some(c => c.status === 'fail')
-                ? 'fail'
-                : 'warn',
-            summary: integrationData.verdictSummary,
-          }
-        : null;
-
-    return computeWorkflowStatus({
-      participantCount: files.length,
-      submissionCount: files.length,
-      jam,
-      contracts,
-      integrationReport,
-    });
+    return deriveWorkflowStatus(
+      files,
+      this._comparisonCtrl.overlaps,
+      this._comparisonCtrl.conflicts,
+      this._comparisonCtrl.sharedEvents,
+      this._flaggedItems,
+    );
   }
 
   /**
    * Derive integration dashboard data (checks, nodes, connections, verdict, counts)
    * from loaded files and the comparison controller.
-   * Pure derivation — no side effects.
+   * Delegates to src/lib/integration-data.ts.
    */
-  private _integrationData(files: AppState['files']): {
-    checks: IntegrationCheck[];
-    nodes: BoundaryNode[];
-    connections: BoundaryConnection[];
-    verdict: 'go' | 'no-go' | 'caution';
-    verdictSummary: string;
-    contractCount: number;
-    aggregateCount: number;
-  } {
-    if (files.length === 0) {
-      return {
-        checks: [],
-        nodes: [],
-        connections: [],
-        verdict: 'go',
-        verdictSummary: '',
-        contractCount: 0,
-        aggregateCount: 0,
-      };
-    }
-
-    // Build a map of eventName -> aggregate from all files (first occurrence wins)
-    const eventAggregateMap = new Map<string, string>();
-    for (const file of files) {
-      for (const ev of file.data.domain_events) {
-        if (!eventAggregateMap.has(ev.name)) {
-          eventAggregateMap.set(ev.name, ev.aggregate);
-        }
-      }
-    }
-
-    // Build a set of event names that have conflicts
-    const conflictEventNames = new Set<string>(
-      this._comparisonCtrl.conflicts.map((c) => c.label)
+  private _integrationData(files: AppState['files']) {
+    return deriveIntegrationData(
+      files,
+      this._comparisonCtrl.conflicts,
+      this._comparisonCtrl.sharedEvents,
     );
-
-    const checks: IntegrationCheck[] = [];
-
-    // For each conflict (assumption-conflict), create a 'fail' check
-    for (const conflict of this._comparisonCtrl.conflicts) {
-      checks.push({
-        id: `conflict-${conflict.label}`,
-        label: conflict.label,
-        description: `Conflicting boundary assumptions between roles: ${conflict.roles.join(', ')}`,
-        status: 'fail',
-        details: conflict.details,
-        owner: conflict.roles[0],
-      });
-    }
-
-    // For each shared event with no conflict, create a 'pass' check
-    for (const shared of this._comparisonCtrl.sharedEvents) {
-      if (!conflictEventNames.has(shared.label)) {
-        checks.push({
-          id: `shared-${shared.label}`,
-          label: shared.label,
-          description: `Shared event across roles: ${shared.roles.join(', ')}`,
-          status: 'pass',
-          details: shared.details,
-          owner: shared.roles[0],
-        });
-      }
-    }
-
-    // For boundary assumptions of type 'contract' (integration points needing verification), create 'warn' checks
-    for (const file of files) {
-      for (const assumption of file.data.boundary_assumptions) {
-        if (assumption.type === 'contract') {
-          checks.push({
-            id: `assumption-${assumption.id}`,
-            label: assumption.id,
-            description: assumption.statement,
-            status: 'warn',
-            details: assumption.verify_with ? `Verify with: ${assumption.verify_with}` : undefined,
-            owner: file.role,
-          });
-        }
-      }
-    }
-
-    // Build BoundaryNodes: one per unique aggregate across all files
-    const aggregateSet = new Set<string>();
-    for (const file of files) {
-      for (const ev of file.data.domain_events) {
-        aggregateSet.add(ev.aggregate);
-      }
-    }
-    const nodes: BoundaryNode[] = [...aggregateSet].map((agg) => ({
-      id: agg.toLowerCase().replace(/\s+/g, '-'),
-      label: agg,
-    }));
-
-    // Build BoundaryConnections: one per shared event between aggregates
-    // The 'from' aggregate is the event's primary aggregate; 'to' is the aggregate
-    // of the same event in the other file(s) when they differ, or the role's aggregate
-    const connections: BoundaryConnection[] = [];
-    const seenConnectionKeys = new Set<string>();
-    for (const shared of this._comparisonCtrl.sharedEvents) {
-      const eventName = shared.label;
-      // Find aggregates from different files for this event
-      const aggregatesForEvent: string[] = [];
-      for (const file of files) {
-        for (const ev of file.data.domain_events) {
-          if (ev.name === eventName) {
-            aggregatesForEvent.push(ev.aggregate);
-            break;
-          }
-        }
-      }
-      // Create connections between distinct aggregates
-      for (let i = 0; i < aggregatesForEvent.length - 1; i++) {
-        const fromAgg = aggregatesForEvent[i].toLowerCase().replace(/\s+/g, '-');
-        const toAgg = aggregatesForEvent[i + 1].toLowerCase().replace(/\s+/g, '-');
-        if (fromAgg === toAgg) continue;
-        const key = `${fromAgg}->${toAgg}`;
-        if (seenConnectionKeys.has(key)) continue;
-        seenConnectionKeys.add(key);
-        const hasConflict = conflictEventNames.has(eventName);
-        connections.push({
-          from: fromAgg,
-          to: toAgg,
-          status: hasConflict ? 'fail' : 'pass',
-          label: eventName,
-        });
-      }
-    }
-
-    // Determine verdict
-    const failCount = checks.filter((c) => c.status === 'fail').length;
-    const warnCount = checks.filter((c) => c.status === 'warn').length;
-    const passCount = checks.filter((c) => c.status === 'pass').length;
-    const verdict: 'go' | 'no-go' | 'caution' = failCount > 0 ? 'no-go' : warnCount > 0 ? 'caution' : 'go';
-
-    // Build human-readable summary
-    const parts: string[] = [];
-    if (failCount > 0) parts.push(`${failCount} conflict${failCount !== 1 ? 's' : ''}`);
-    if (warnCount > 0) parts.push(`${warnCount} warning${warnCount !== 1 ? 's' : ''}`);
-    if (passCount > 0) parts.push(`${passCount} passing`);
-    const verdictSummary = parts.length > 0 ? parts.join(', ') : 'No checks';
-
-    return {
-      checks,
-      nodes,
-      connections,
-      verdict,
-      verdictSummary,
-      contractCount: this._comparisonCtrl.sharedEvents.length,
-      aggregateCount: aggregateSet.size,
-    };
   }
 
-  private _complianceStatus(files: AppState['files']): { status: 'pass' | 'warn' | 'fail'; details: ComplianceDetail[] } {
-    if (files.length < 2) {
-      return { status: 'pass', details: [] };
-    }
-    const conflictCount = this._comparisonCtrl.conflictCount;
-    if (conflictCount === 0) {
-      return { status: 'pass', details: [] };
-    }
-    const conflicts = this._comparisonCtrl.conflicts;
-    const details: ComplianceDetail[] = conflicts.map((conflict) => ({
-      eventName: conflict.label,
-      owner: conflict.roles.join(', '),
-      issue: conflict.details,
-      severity: 'warning' as const,
-    }));
-    const status = conflictCount > 3 ? 'fail' : 'warn';
-    return { status, details };
+  private _complianceStatus(files: AppState['files']) {
+    return deriveComplianceStatus(
+      files,
+      this._comparisonCtrl.conflicts,
+      this._comparisonCtrl.conflictCount,
+    );
   }
 
   /**
    * Derive ContractEntry[] from loaded files.
    * Events appearing in 2+ files are potential contract points.
-   * Uses sharedEvents from the comparison controller for overlap detection.
+   * Delegates to src/lib/contract-data.ts.
    */
   private _contractEntries(files: AppState['files']): ContractEntry[] {
-    if (files.length < 2) return [];
-
-    const sharedEvents = this._comparisonCtrl.sharedEvents;
-    if (sharedEvents.length === 0) return [];
-
-    // Build a map of eventName -> { aggregate, roles } from all files
-    const eventAggregateMap = new Map<string, string>();
-    for (const file of files) {
-      for (const ev of file.data.domain_events) {
-        if (!eventAggregateMap.has(ev.name)) {
-          eventAggregateMap.set(ev.name, ev.aggregate);
-        }
-      }
-    }
-
-    // Build a map of eventName -> all event definitions (for conflict detection)
-    const eventDefinitions = new Map<string, { aggregate: string; trigger: string | undefined; role: string }[]>();
-    for (const file of files) {
-      for (const ev of file.data.domain_events) {
-        const defs = eventDefinitions.get(ev.name) ?? [];
-        defs.push({ aggregate: ev.aggregate, trigger: ev.trigger, role: file.role });
-        eventDefinitions.set(ev.name, defs);
-      }
-    }
-
-    return sharedEvents.map((overlap): ContractEntry => {
-      const eventName = overlap.label;
-      const defs = eventDefinitions.get(eventName) ?? [];
-      const owner = defs[0]?.aggregate ?? overlap.roles[0];
-
-      // Consumers are roles that reference this event but are not the first definer
-      const consumers = overlap.roles.slice(1);
-
-      // Determine status: fail if aggregates disagree, warn if triggers differ, pass otherwise
-      const aggregates = [...new Set(defs.map((d) => d.aggregate))];
-      const triggers = [...new Set(defs.map((d) => d.trigger).filter(Boolean))];
-
-      let status: 'pass' | 'warn' | 'fail';
-      if (aggregates.length > 1) {
-        status = 'fail';
-      } else if (triggers.length > 1) {
-        status = 'warn';
-      } else {
-        status = 'pass';
-      }
-
-      return { eventName, owner, consumers, status };
-    });
+    return deriveContractEntries(files, this._comparisonCtrl.sharedEvents);
   }
 
   private _onContractSelected(_e: CustomEvent<{ eventName: string; owner: string }>) {
@@ -1607,232 +1253,46 @@ export class AppShell extends LitElement {
 
   /**
    * Derive a synthetic ContractBundle from loaded files for the contracts tab.
-   * Shared events become EventContracts (version "0.0.1-draft"); aggregates become
-   * BoundaryContracts. Also builds a combined schemas map for schema-display.
+   * Delegates to src/lib/contract-data.ts.
    */
-  private _contractsData(files: AppState['files']): {
-    bundle: ContractBundle;
-    schemas: Record<string, unknown>;
-  } {
-    const empty: ContractBundle = {
-      generatedAt: new Date().toISOString(),
-      eventContracts: [],
-      boundaryContracts: [],
-    };
-    if (files.length < 2) return { bundle: empty, schemas: {} };
-
-    const sharedOverlaps = this._comparisonCtrl.sharedEvents;
-    if (sharedOverlaps.length === 0) return { bundle: empty, schemas: {} };
-
-    // Build eventName -> aggregate from all files (first occurrence wins)
-    const eventAggregateMap = new Map<string, string>();
-    for (const file of files) {
-      for (const ev of file.data.domain_events) {
-        if (!eventAggregateMap.has(ev.name)) {
-          eventAggregateMap.set(ev.name, ev.aggregate);
-        }
-      }
-    }
-
-    const eventContracts: EventContract[] = sharedOverlaps.map((overlap) => {
-      const eventName = overlap.label;
-      const aggregate = eventAggregateMap.get(eventName) ?? '';
-      const roles = overlap.roles;
-      return {
-        eventName,
-        aggregate,
-        version: '0.0.1-draft',
-        schema: {},
-        owner: roles[0] ?? '',
-        consumers: roles.slice(1),
-        producedBy: roles[0] ?? '',
-      };
-    });
-
-    // Group shared events by aggregate for BoundaryContracts
-    const aggregateEventsMap = new Map<string, string[]>();
-    for (const ec of eventContracts) {
-      const evs = aggregateEventsMap.get(ec.aggregate) ?? [];
-      evs.push(ec.eventName);
-      aggregateEventsMap.set(ec.aggregate, evs);
-    }
-    const aggregateOwnerMap = new Map<string, string>();
-    for (const ec of eventContracts) {
-      if (!aggregateOwnerMap.has(ec.aggregate)) {
-        aggregateOwnerMap.set(ec.aggregate, ec.owner);
-      }
-    }
-
-    const boundaryContracts: BoundaryContract[] = [...aggregateEventsMap.entries()].map(
-      ([aggregate, events]): BoundaryContract => ({
-        boundaryName: aggregate,
-        aggregates: [aggregate],
-        events,
-        owner: aggregateOwnerMap.get(aggregate) ?? '',
-        externalDependencies: [],
-      })
-    );
-
-    const bundle: ContractBundle = {
-      generatedAt: new Date().toISOString(),
-      eventContracts,
-      boundaryContracts,
-    };
-
-    // Build combined schema map: eventName -> {} for schema-display
-    const schemas: Record<string, unknown> = {};
-    for (const ec of eventContracts) {
-      schemas[ec.eventName] = { type: 'object', description: `${ec.aggregate} (draft)` };
-    }
-
-    return { bundle, schemas };
+  private _contractsData(files: AppState['files']) {
+    return deriveContractsData(files, this._comparisonCtrl.sharedEvents);
   }
 
   /**
-   * Derive a provenance chain for the contracts tab, tracing the lineage of
-   * contract data back through participants, conflicts, and shared events.
+   * Derive a provenance chain for the contracts tab.
+   * Delegates to src/lib/contract-data.ts.
    */
   private _provenanceChain(files: AppState['files']): ProvenanceStep[] {
-    if (files.length < 2) return [];
-    const chain: ProvenanceStep[] = [];
-
-    // Add participant steps (base of the chain)
-    for (const file of files) {
-      chain.push({
-        kind: 'participant',
-        label: file.role,
-        detail: `Submitted ${file.data.domain_events.length} events`,
-      });
-    }
-
-    // Add conflict steps for overlaps
-    for (const conflict of this._comparisonCtrl.conflicts) {
-      chain.push({
-        kind: 'conflict',
-        label: conflict.label,
-        detail: conflict.details || `Conflict between ${conflict.roles.join(', ')}`,
-      });
-    }
-
-    // Add resolution steps for shared events (agreements)
-    for (const shared of this._comparisonCtrl.sharedEvents) {
-      chain.push({
-        kind: 'resolution',
-        label: shared.label,
-        detail: `Agreed by ${shared.roles.join(', ')}`,
-      });
-    }
-
-    return chain;
+    return deriveProvenanceChain(
+      files,
+      this._comparisonCtrl.conflicts,
+      this._comparisonCtrl.sharedEvents,
+    );
   }
 
   /**
    * Derive data needed for the agreements tab.
-   * Returns all overlaps (for resolution-recorder instances), unique aggregate
-   * names across all files (for ownership-grid rows), and unique role names
-   * across all files (for ownership-grid columns).
+   * Delegates to src/lib/agreements-data.ts.
    */
-  private _agreementsData(files: AppState['files']): {
-    overlaps: Overlap[];
-    aggregates: string[];
-    roles: string[];
-  } {
-    const overlaps = this._comparisonCtrl.overlaps;
-    const aggregateSet = new Set<string>();
-    const roleSet = new Set<string>();
-    for (const file of files) {
-      roleSet.add(file.role);
-      for (const ev of file.data.domain_events) {
-        aggregateSet.add(ev.aggregate);
-      }
-    }
-    return {
-      overlaps,
-      aggregates: [...aggregateSet],
-      roles: [...roleSet],
-    };
+  private _agreementsData(files: AppState['files']) {
+    return deriveAgreementsData(files, this._comparisonCtrl.overlaps);
   }
 
   /**
    * Derive RankedEvent[] from loaded files for the priority-view component.
-   * Deduplicates by event name (first occurrence wins), computes crossRefs,
-   * compositeScore, and tier.
-   * Pure derivation — no side effects.
+   * Delegates to src/lib/ranked-events.ts.
    */
   private _rankedEvents(files: AppState['files']): RankedEvent[] {
-    if (files.length === 0) return [];
-
-    // Build: eventName -> first occurrence data + crossRef count
-    const eventMap = new Map<string, { event: AppState['files'][number]['data']['domain_events'][number]; crossRefs: number }>();
-
-    for (const file of files) {
-      for (const ev of file.data.domain_events) {
-        const existing = eventMap.get(ev.name);
-        if (existing) {
-          existing.crossRefs += 1;
-        } else {
-          eventMap.set(ev.name, { event: ev, crossRefs: 1 });
-        }
-      }
-    }
-
-    const confidenceWeight: Record<string, number> = { CONFIRMED: 3, LIKELY: 2, POSSIBLE: 1 };
-    const directionWeight: Record<string, number> = { outbound: 2, inbound: 1.5, internal: 1 };
-
-    // Max possible raw score: confidenceWeight=3, directionWeight=2, crossRefs=files.length
-    // rawMax = 3 * 2 * (1 + files.length * 0.5)
-    const maxCrossRefs = files.length;
-    const rawMax = 3 * 2 * (1 + maxCrossRefs * 0.5);
-
-    const ranked: RankedEvent[] = [];
-
-    for (const [name, { event, crossRefs }] of eventMap) {
-      const cw = confidenceWeight[event.confidence] ?? 1;
-      const dw = directionWeight[event.integration?.direction ?? 'internal'] ?? 1;
-      const cappedCrossRefs = Math.min(crossRefs, maxCrossRefs);
-      const raw = cw * dw * (1 + cappedCrossRefs * 0.5);
-      const compositeScore = Math.round((raw / rawMax) * 100 * 10) / 10;
-
-      let tier: RankedEvent['tier'];
-      if (compositeScore >= 60) {
-        tier = 'must_have';
-      } else if (compositeScore >= 30) {
-        tier = 'should_have';
-      } else {
-        tier = 'could_have';
-      }
-
-      // Apply user's manual tier override if present
-      const overrideTier = this._tierOverrides.get(name);
-      if (overrideTier) {
-        tier = overrideTier;
-      }
-
-      ranked.push({
-        name,
-        aggregate: event.aggregate,
-        confidence: event.confidence,
-        direction: event.integration?.direction ?? 'internal',
-        crossRefs,
-        compositeScore,
-        tier,
-      });
-    }
-
-    return ranked.sort((a, b) => b.compositeScore - a.compositeScore);
+    return deriveRankedEvents(files, this._tierOverrides);
   }
 
   /**
    * Derive EventPriority[] from ranked events for the comparison-view progress bar.
-   * Maps RankedEvent tier (snake_case) to EventPriority tier.
+   * Delegates to src/lib/ranked-events.ts.
    */
   private _comparisonPriorities(files: AppState['files']): EventPriority[] {
-    return this._rankedEvents(files).map((ev) => ({
-      eventName: ev.name,
-      participantId: 'local',
-      tier: ev.tier,
-      setAt: new Date().toISOString(),
-    }));
+    return deriveComparisonPriorities(files, this._tierOverrides);
   }
 
   private _onPriorityChanged(e: CustomEvent<{ eventName: string; tier: string }>) {
