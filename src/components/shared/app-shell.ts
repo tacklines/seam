@@ -61,7 +61,6 @@ import '../agreement/ownership-grid.js';
 import '../contract/contract-diff.js';
 import '../contract/schema-display.js';
 import '../visualization/integration-dashboard.js';
-import '../visualization/go-no-go-verdict.js';
 import './suggestion-bar.js';
 
 @customElement('app-shell')
