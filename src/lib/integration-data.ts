@@ -2,6 +2,7 @@ import type { AppState } from '../state/app-state.js';
 import type { Overlap } from './comparison.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../components/visualization/integration-dashboard.js';
 import type { ComplianceDetail } from '../components/artifact/compliance-badge.js';
+import type { IntegrationReport } from '../schema/types.js';
 
 export type { IntegrationCheck, BoundaryNode, BoundaryConnection };
 
@@ -150,6 +151,34 @@ export function deriveIntegrationData(
     verdictSummary,
     contractCount: sharedEvents.length,
     aggregateCount: aggregateSet.size,
+  };
+}
+
+/**
+ * Build an IntegrationReport from integration check data and contract names.
+ * Returns null when there are no checks.
+ * Pure derivation — no side effects.
+ */
+export function buildIntegrationReport(
+  integrationData: { checks: IntegrationCheck[]; verdictSummary: string },
+  sourceContracts: string[],
+): IntegrationReport | null {
+  if (integrationData.checks.length === 0) return null;
+  return {
+    generatedAt: new Date().toISOString(),
+    sourceContracts,
+    checks: integrationData.checks.map(c => ({
+      name: c.label,
+      status: c.status,
+      message: c.description,
+      details: c.details,
+    })),
+    overallStatus: integrationData.checks.every(c => c.status === 'pass')
+      ? 'pass'
+      : integrationData.checks.some(c => c.status === 'fail')
+        ? 'fail'
+        : 'warn',
+    summary: integrationData.verdictSummary,
   };
 }
 

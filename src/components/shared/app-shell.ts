@@ -10,7 +10,7 @@ import { t } from '../../lib/i18n.js';
 import { parseAndValidate } from '../../lib/yaml-loader.js';
 import { registry } from '../../lib/shortcut-registry.js';
 import { deriveExplorationData } from '../../lib/exploration-data.js';
-import { deriveIntegrationData, deriveComplianceStatus } from '../../lib/integration-data.js';
+import { deriveIntegrationData, deriveComplianceStatus, buildIntegrationReport } from '../../lib/integration-data.js';
 import { deriveContractEntries, deriveContractsData, deriveProvenanceChain } from '../../lib/contract-data.js';
 import { deriveRankedEvents, deriveComparisonPriorities } from '../../lib/ranked-events.js';
 import { deriveAgreementsData } from '../../lib/agreements-data.js';
@@ -1119,24 +1119,10 @@ export class AppShell extends LitElement {
                 ${(() => {
                   const data = this._integrationData(files);
                   const contractsData = this._contractsData(files);
-                  const integrationReport: IntegrationReport | null = data.checks.length > 0
-                    ? {
-                        generatedAt: new Date().toISOString(),
-                        sourceContracts: contractsData.bundle.eventContracts.map(ec => ec.eventName),
-                        checks: data.checks.map(c => ({
-                          name: c.label,
-                          status: c.status,
-                          message: c.description,
-                          details: c.details,
-                        })),
-                        overallStatus: data.checks.every(c => c.status === 'pass')
-                          ? 'pass'
-                          : data.checks.some(c => c.status === 'fail')
-                            ? 'fail'
-                            : 'warn',
-                        summary: data.verdictSummary,
-                      }
-                    : null;
+                  const integrationReport = buildIntegrationReport(
+                    data,
+                    contractsData.bundle.eventContracts.map(ec => ec.eventName),
+                  );
                   return html`
                     <integration-dashboard
                       .checks=${data.checks}

@@ -1,9 +1,9 @@
 import type { AppState } from '../state/app-state.js';
 import type { Overlap } from './comparison.js';
-import type { JamArtifacts, UnresolvedItem, ContractBundle, IntegrationReport } from '../schema/types.js';
+import type { JamArtifacts, UnresolvedItem, ContractBundle } from '../schema/types.js';
 import { computeWorkflowStatus } from './workflow-engine.js';
 import { deriveContractsData } from './contract-data.js';
-import { deriveIntegrationData } from './integration-data.js';
+import { deriveIntegrationData, buildIntegrationReport } from './integration-data.js';
 
 /**
  * Derive a WorkflowStatus from the loaded files and available artifacts.
@@ -42,27 +42,11 @@ export function deriveWorkflowStatus(
     contractsData.bundle.eventContracts.length > 0 ? contractsData.bundle : null;
 
   // Derive integration report from integration data
-  // Map dashboard IntegrationCheck (label/description) to schema IntegrationCheck (name/message)
   const integrationData = deriveIntegrationData(files, conflicts, sharedEvents);
-  const integrationReport: IntegrationReport | null =
-    integrationData.checks.length > 0
-      ? {
-          generatedAt: new Date().toISOString(),
-          sourceContracts: contractsData.bundle.eventContracts.map(ec => ec.eventName),
-          checks: integrationData.checks.map(c => ({
-            name: c.label,
-            status: c.status,
-            message: c.description,
-            details: c.details,
-          })),
-          overallStatus: integrationData.checks.every(c => c.status === 'pass')
-            ? 'pass'
-            : integrationData.checks.some(c => c.status === 'fail')
-              ? 'fail'
-              : 'warn',
-          summary: integrationData.verdictSummary,
-        }
-      : null;
+  const integrationReport = buildIntegrationReport(
+    integrationData,
+    contractsData.bundle.eventContracts.map(ec => ec.eventName),
+  );
 
   return computeWorkflowStatus({
     participantCount: files.length,

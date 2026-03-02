@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveIntegrationData, deriveComplianceStatus } from './integration-data.js';
+import { deriveIntegrationData, deriveComplianceStatus, buildIntegrationReport } from './integration-data.js';
 import type { LoadedFile, DomainEvent, BoundaryAssumption } from '../schema/types.js';
 import type { Overlap } from './comparison.js';
 
@@ -138,6 +138,63 @@ describe('deriveIntegrationData', () => {
       const result = deriveIntegrationData(files, conflicts, sharedEvents);
       expect(result.verdictSummary).toContain('1 conflict');
       expect(result.verdictSummary).toContain('1 passing');
+    });
+  });
+});
+
+describe('buildIntegrationReport', () => {
+  describe('Given no checks', () => {
+    it('returns null', () => {
+      const result = buildIntegrationReport({ checks: [], verdictSummary: '' }, []);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('Given checks that all pass', () => {
+    it('returns report with overallStatus pass', () => {
+      const checks = [
+        { id: 'c1', label: 'EventA', description: 'Desc A', status: 'pass' as const, owner: 'role-a' },
+      ];
+      const result = buildIntegrationReport({ checks, verdictSummary: '1 passing' }, ['EventA']);
+      expect(result).not.toBeNull();
+      expect(result!.overallStatus).toBe('pass');
+      expect(result!.sourceContracts).toEqual(['EventA']);
+      expect(result!.checks).toHaveLength(1);
+      expect(result!.checks[0].name).toBe('EventA');
+      expect(result!.checks[0].message).toBe('Desc A');
+      expect(result!.summary).toBe('1 passing');
+      expect(result!.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+  });
+
+  describe('Given checks with a fail', () => {
+    it('returns report with overallStatus fail', () => {
+      const checks = [
+        { id: 'c1', label: 'EventA', description: 'Conflict', status: 'fail' as const, owner: 'role-a' },
+        { id: 'c2', label: 'EventB', description: 'Shared', status: 'pass' as const, owner: 'role-b' },
+      ];
+      const result = buildIntegrationReport({ checks, verdictSummary: '1 conflict, 1 passing' }, []);
+      expect(result!.overallStatus).toBe('fail');
+    });
+  });
+
+  describe('Given checks with only warns (no fail)', () => {
+    it('returns report with overallStatus warn', () => {
+      const checks = [
+        { id: 'c1', label: 'BA-1', description: 'API contract', status: 'warn' as const, owner: 'role-a' },
+      ];
+      const result = buildIntegrationReport({ checks, verdictSummary: '1 warning' }, []);
+      expect(result!.overallStatus).toBe('warn');
+    });
+  });
+
+  describe('Given checks with details', () => {
+    it('maps details field from IntegrationCheck to output', () => {
+      const checks = [
+        { id: 'c1', label: 'EventA', description: 'Desc', status: 'pass' as const, details: 'extra info', owner: 'role-a' },
+      ];
+      const result = buildIntegrationReport({ checks, verdictSummary: '1 passing' }, []);
+      expect(result!.checks[0].details).toBe('extra info');
     });
   });
 });
