@@ -8,6 +8,7 @@ import { ComparisonController } from '../controllers/comparison-controller.js';
 import { t } from '../../lib/i18n.js';
 import { parseAndValidate } from '../../lib/yaml-loader.js';
 import { registry } from '../../lib/shortcut-registry.js';
+import { computeWorkflowStatus } from '../../lib/workflow-engine.js';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../visualization/flow-minimap.js';
 import type { FlowDiagram } from '../visualization/flow-diagram.js';
 import type { DetailNodeData } from '../visualization/detail-panel.js';
@@ -25,6 +26,7 @@ import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
 import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
+import './phase-ribbon.js';
 import '../artifact/card-view.js';
 import '../visualization/flow-diagram.js';
 import '../visualization/flow-minimap.js';
@@ -50,15 +52,21 @@ export class AppShell extends LitElement {
 
       display: grid;
       grid-template-columns: var(--sidebar-width) 1fr;
-      grid-template-rows: var(--header-height) 1fr;
+      grid-template-rows: var(--header-height) auto 1fr;
       height: 100vh;
       grid-template-areas:
         "header header"
+        "ribbon ribbon"
         "sidebar main";
     }
 
     .app-layout.sidebar-collapsed {
       grid-template-columns: 0 1fr;
+    }
+
+    /* ── Phase Ribbon ── */
+    .ribbon {
+      grid-area: ribbon;
     }
 
     /* ── Header ── */
@@ -447,6 +455,14 @@ export class AppShell extends LitElement {
           </div>
         </div>
 
+        <!-- Phase Ribbon -->
+        <div class="ribbon">
+          <phase-ribbon
+            .status=${this._workflowStatus(files)}
+            @phase-navigate=${this._onPhaseNavigate}
+          ></phase-ribbon>
+        </div>
+
         <!-- Sidebar -->
         <div class="sidebar">
           <div class="sidebar-toggle">
@@ -534,6 +550,36 @@ export class AppShell extends LitElement {
       <!-- Hidden file drop zone triggered by "Add files" button -->
       <file-drop-zone mode="compact" style="display:none" id="hidden-drop"></file-drop-zone>
     `;
+  }
+
+  /**
+   * Derive a minimal WorkflowStatus from the loaded files for the Phase Ribbon.
+   * In standalone (non-session) mode we only know submission count; jam, contracts,
+   * and integration artifacts are absent.
+   */
+  private _workflowStatus(files: AppState['files']) {
+    return computeWorkflowStatus({
+      participantCount: files.length,
+      submissionCount: files.length,
+      jam: null,
+      contracts: null,
+      integrationReport: null,
+    });
+  }
+
+  private _onPhaseNavigate(e: CustomEvent<{ phase: string }>) {
+    // Map UX phase to the most relevant tab
+    const phaseToTab: Record<string, 'cards' | 'flow' | 'comparison'> = {
+      spark: 'cards',
+      explore: 'cards',
+      rank: 'cards',
+      slice: 'comparison',
+      agree: 'comparison',
+      build: 'cards',
+      ship: 'cards',
+    };
+    const tab = phaseToTab[e.detail.phase] ?? 'cards';
+    store.setView(tab);
   }
 
   private _onSessionFilesReady(e: CustomEvent<{ files: import('../../schema/types.js').LoadedFile[] }>) {

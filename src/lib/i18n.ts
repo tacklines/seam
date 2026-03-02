@@ -805,6 +805,21 @@ export const messages: Record<string, string> = {
   'emptyState.defaultDescription': 'There is no content to display.',
 
   // ---------------------------------------------------------------------------
+  // phase-ribbon
+  // ---------------------------------------------------------------------------
+  'phaseRibbon.ariaLabel': 'Session progress',
+  'phaseRibbon.spark': 'Spark',
+  'phaseRibbon.explore': 'Explore',
+  'phaseRibbon.rank': 'Rank',
+  'phaseRibbon.slice': 'Slice',
+  'phaseRibbon.agree': 'Agree',
+  'phaseRibbon.build': 'Build',
+  'phaseRibbon.ship': 'Ship',
+  'phaseRibbon.completed': '{{phase}}, completed',
+  'phaseRibbon.current': '{{phase}}, current step',
+  'phaseRibbon.upcoming': '{{phase}}, upcoming',
+
+  // ---------------------------------------------------------------------------
   // shortcut-reference component
   // ---------------------------------------------------------------------------
   'shortcuts.dialogTitle': 'Keyboard Shortcuts',

@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { UX_PHASES, inferUxPhase, isPhaseComplete, type UxPhase } from '../../lib/ux-phases.js';
 import type { WorkflowStatus } from '../../lib/workflow-engine.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * Phase Ribbon — thin horizontal strip shown below the header indicating
@@ -193,12 +194,18 @@ export class PhaseRibbon extends LitElement {
     return html`
       <nav
         role="navigation"
-        aria-label="Session phases"
+        aria-label=${t('phaseRibbon.ariaLabel')}
       >
         ${UX_PHASES.map((phaseInfo, index) => {
           const state = this._phaseState(phaseInfo.id);
           const isCurrent = state === 'current';
           const isCompleted = state === 'completed';
+          const phaseLabel = t(`phaseRibbon.${phaseInfo.id}`);
+          const ariaLabel = isCompleted
+            ? t('phaseRibbon.completed', { phase: phaseLabel })
+            : isCurrent
+            ? t('phaseRibbon.current', { phase: phaseLabel })
+            : t('phaseRibbon.upcoming', { phase: phaseLabel });
 
           // Connector before this phase (all except the first)
           const connector = index > 0 ? html`
@@ -214,7 +221,7 @@ export class PhaseRibbon extends LitElement {
               <button
                 class="phase-circle ${state}"
                 role="button"
-                aria-label="${phaseInfo.label} phase"
+                aria-label=${ariaLabel}
                 aria-current=${isCurrent ? 'step' : nothing}
                 tabindex=${isCurrent ? '0' : '-1'}
                 @click=${() => this._handlePhaseClick(phaseInfo.id)}
@@ -228,7 +235,7 @@ export class PhaseRibbon extends LitElement {
                   : html`<span class="phase-icon" aria-hidden="true"></span>`
                 }
               </button>
-              <span class="phase-label ${state}">${phaseInfo.label}</span>
+              <span class="phase-label ${state}">${phaseLabel}</span>
             </div>
           `;
         })}
