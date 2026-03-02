@@ -66,5 +66,9 @@
 - When an event schema uses `eventId` as the record identifier, use the same generated ID for both the event's `eventId` and the stored entity's `id` — makes tracing between events and state trivial (added: 2026-03-01, dispatch: 3r3.8)
 - Service-level Map storage (`Map<sessionCode, Map<entityId, Entity>>`) is the right pattern for approval queues where entries come and go with business decisions (added: 2026-03-01, dispatch: 3r3.8)
 
+### Presence & Real-time
+- When adding a new domain event to DomainEventSchema union, also update DOMAIN_EVENT_TYPES array and count assertion in domain-events.test.ts (added: 2026-03-02, dispatch: 3r3.24)
+- PresenceTracker singleton shared between http.ts and websocket.ts — Node module cache ensures same instance; test with fresh instances for isolation (added: 2026-03-02, dispatch: 3r3.24)
+
 ## Cross-Agent Notes
 - Participant type now unified in `src/schema/types.ts` — `SessionParticipant` is an alias. Both layers import from schema/ (added: 2026-03-01, dispatch: xiu)

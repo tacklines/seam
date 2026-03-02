@@ -1,27 +1,21 @@
 ## Pre-Compact Snapshot
-**Time**: 2026-03-02T07:13:13Z
+**Time**: 2026-03-02T09:54:12Z
 
 ### In-Progress Tasks
-◐ multi-human-workflows-3r3.12 [● P1] [task] - Implement Phase IV MCP tools (create_work_items, get_decomposition, suggest_decomposition, set_dependency) (blocked by: multi-human-workflows-3r3)
+◐ multi-human-workflows-sof [● P2] [feature] - Enhance exploration-guide with completeness check, heuristic prompts, and pattern suggestions
 
 ### Recent Commits
-b2de5fc feat: add spark-canvas and draft-editor components (3r3.16)
-0784b75 Merge branch 'worktree-agent-a5dfd572'
-973d788 feat: add Phase III MCP tools for Rank phase (3r3.11)
-3a34811 chore: Sprint 10 — DelegationService, Suggestion Bar, Phase I-II MCP tools, Settings Drawer
-c6ea17d feat: add settings-drawer component with contextual gear icon pattern
+080e994 Merge branch 'worktree-agent-a38c8233'
+89861f1 feat: wire spark-canvas into app-shell for Phase I onboarding
+4af2e1d feat: wire suggestion-bar into app-shell layout
+e78e739 Merge branch 'worktree-agent-a57a2f30'
+9276393 fix: accessibility improvements across phase components
 
 ### Working Tree
- D memory/sessions/2026-03-01T18-37-39Z.md
- D memory/sessions/2026-03-01T18-59-14Z.md
- D memory/sessions/2026-03-01T19-01-45Z.md
- D memory/sessions/2026-03-02T05-25-37Z.md
- M memory/sessions/last.md
+ M memory/agents/architect/learnings.md
+ M memory/agents/tester/learnings.md
  M memory/sessions/pre-compact.md
-?? .claire/
-?? memory/sessions/2026-03-02T06-33-23Z.md
-?? multi-human-howto.md
-?? multi-human-intro.md
+?? .claire/worktrees/agent-a2d261cd/
 
 ### Open Questions
 (fill in before context is lost)
