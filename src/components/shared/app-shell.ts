@@ -26,6 +26,7 @@ import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
 import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
+import '../session/spark-canvas.js';
 import './phase-ribbon.js';
 import '../artifact/card-view.js';
 import '../visualization/flow-diagram.js';
@@ -204,6 +205,7 @@ export class AppShell extends LitElement {
   @state() private _searchCurrentMatch = -1;
   @state() private _detailNodeData: DetailNodeData | null = null;
   @state() private _soloMode = false;
+  @state() private _sparkCollapsed = false;
   @state() private _pasteToast: { count: number; role: string } | null = null;
   @state() private _shortcutReferenceOpen = false;
   @state() private _settingsOpen = false;
@@ -335,6 +337,8 @@ export class AppShell extends LitElement {
     // Prevent default only after successful parse so normal paste (e.g. into inputs) still works
     // when the content doesn't look like YAML
     store.addFile(result.file);
+    // Files loaded via paste — collapse spark canvas so it doesn't dominate the layout
+    this._sparkCollapsed = true;
     const count = result.file.data.domain_events.length;
     const role = result.file.role;
     this._pasteToast = { count, role };
@@ -496,6 +500,11 @@ export class AppShell extends LitElement {
 
         <!-- Main content -->
         <div class="main">
+          <spark-canvas
+            ?collapsed=${this._sparkCollapsed}
+            session-code="${this.appState.sessionState?.code ?? ''}"
+            @spark-submit=${this._onSparkSubmit}
+          ></spark-canvas>
           <sl-tab-group @sl-tab-show=${this.onTabChange}>
             <sl-tab slot="nav" panel="cards" ?active=${activeView === 'cards'}>
               ${t('shell.tab.events')}
@@ -633,10 +642,23 @@ export class AppShell extends LitElement {
     for (const file of e.detail.files) {
       store.addFile(file);
     }
+    // Files loaded from session — collapse spark canvas so it doesn't dominate the layout
+    this._sparkCollapsed = true;
   }
 
   private _onSoloMode() {
     this._soloMode = true;
+  }
+
+  private _onSparkSubmit(e: CustomEvent<{ rows: import('../session/spark-canvas.js').SparkRow[]; candidateEvents: import('../../schema/types.js').CandidateEventsFile }>) {
+    const { candidateEvents } = e.detail;
+    const file: import('../../schema/types.js').LoadedFile = {
+      role: candidateEvents.metadata.role,
+      filename: 'spark-canvas.yaml',
+      data: candidateEvents,
+    };
+    store.addFile(file);
+    this._sparkCollapsed = true;
   }
 
   private onTabChange(e: CustomEvent) {
