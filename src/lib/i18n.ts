@@ -612,6 +612,53 @@ export const messages: Record<string, string> = {
   'settingsGear.modifiedAriaLabel': 'This section has modified settings',
 
   // ---------------------------------------------------------------------------
+  // section settings (used by _sectionSettings() in app-shell)
+  // ---------------------------------------------------------------------------
+  // Comparison section
+  'settings.comparison.sensitivity': 'Comparison Sensitivity',
+  'settings.comparison.sensitivity.description': 'How strictly event names and field names are compared.',
+  'settings.comparison.sensitivity.semantic': 'Semantic — treat camelCase and snake_case as equal',
+  'settings.comparison.sensitivity.exact': 'Exact — require byte-for-byte equality',
+  'settings.comparison.autoDetectConflicts': 'Auto-detect Conflicts',
+  'settings.comparison.autoDetectConflicts.description': 'Automatically detect overlaps and conflicts as artifacts arrive.',
+  'settings.comparison.suggestResolutions': 'Suggest Resolutions',
+  'settings.comparison.suggestResolutions.description': 'Generate resolution suggestions for detected conflicts.',
+  // Contracts section
+  'settings.contracts.strictness': 'Contract Strictness',
+  'settings.contracts.strictness.description': 'How non-compliant artifacts are handled.',
+  'settings.contracts.strictness.strict': 'Strict — block submission',
+  'settings.contracts.strictness.warn': 'Warn — surface warnings',
+  'settings.contracts.strictness.relaxed': 'Relaxed — log only',
+  'settings.contracts.driftNotifications': 'Drift Notifications',
+  'settings.contracts.driftNotifications.description': 'When and how participants are notified of contract drift.',
+  'settings.contracts.driftNotifications.immediate': 'Immediate — toast on every drift event',
+  'settings.contracts.driftNotifications.batched': 'Batched — digest at end of session',
+  'settings.contracts.driftNotifications.silent': 'Silent — visible in Contract tab only',
+  // Ranking/Priority section
+  'settings.ranking.weights.confidence': 'Confidence Weight',
+  'settings.ranking.weights.confidence.description': 'Multiplier applied to the confidence score when computing priority.',
+  'settings.ranking.weights.complexity': 'Complexity Weight',
+  'settings.ranking.weights.complexity.description': 'Multiplier applied to the implementation complexity estimate.',
+  'settings.ranking.weights.references': 'References Weight',
+  'settings.ranking.weights.references.description': 'Multiplier applied to how many other events reference this one.',
+  'settings.ranking.defaultTier': 'Default Tier',
+  'settings.ranking.defaultTier.description': 'The MoSCoW tier assigned to newly discovered events before voting.',
+  'settings.ranking.defaultTier.mustHave': 'Must Have',
+  'settings.ranking.defaultTier.shouldHave': 'Should Have',
+  'settings.ranking.defaultTier.couldHave': 'Could Have',
+  // Delegation section
+  'settings.delegation.level': 'Autonomy Level',
+  'settings.delegation.level.description': 'How much autonomy agents have when proposing actions.',
+  'settings.delegation.level.assisted': 'Assisted — agent proposes, human approves',
+  'settings.delegation.level.semiAutonomous': 'Semi-autonomous — agent acts, human can undo',
+  'settings.delegation.level.autonomous': 'Autonomous — agent acts without approval',
+  'settings.delegation.approvalExpiry': 'Approval Request Expiry (seconds)',
+  'settings.delegation.approvalExpiry.description': 'How long a pending approval request remains active before it expires.',
+  // Notifications section
+  'settings.notifications.toastDuration': 'Toast Duration (ms)',
+  'settings.notifications.toastDuration.description': 'How long toast notifications remain visible before auto-dismissing.',
+
+  // ---------------------------------------------------------------------------
   // global-settings
   // ---------------------------------------------------------------------------
   'globalSettings.title': 'Settings',

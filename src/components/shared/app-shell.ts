@@ -26,7 +26,8 @@ import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visu
 import type { WorkItemSuggestion } from '../visualization/breakdown-editor.js';
 import { suggestDecomposition } from '../../lib/decomposition-heuristics.js';
 import { suggestPriorities } from '../../lib/priority-heuristics.js';
-import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority, SessionConfig } from '../../schema/types.js';
+import { DEFAULT_SESSION_CONFIG } from '../../schema/types.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
@@ -277,6 +278,7 @@ export class AppShell extends LitElement {
   @state() private _activeDraft: Draft | null = null;
   @state() private _sectionSettingsOpen = false;
   @state() private _sectionSettingsName = '';
+  @state() private _sessionConfig: SessionConfig = { ...DEFAULT_SESSION_CONFIG };
   @state() private _delegationLevel: DelegationLevel = 'assisted';
   @state() private _suggestions: Map<string, ResolutionSuggestion> = new Map();
   @state() private _suggestionLoadingLabels: Set<string> = new Set();
@@ -1810,6 +1812,18 @@ export class AppShell extends LitElement {
   }
 
   private _onSettingChanged(e: CustomEvent<{ key: string; value: unknown }>) {
+    const { key, value } = e.detail;
+    // Update _sessionConfig via dot-path key (e.g. 'comparison.sensitivity')
+    const parts = key.split('.');
+    if (parts.length >= 2) {
+      const config = structuredClone(this._sessionConfig) as unknown as Record<string, unknown>;
+      let target = config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        target = target[parts[i]] as Record<string, unknown>;
+      }
+      target[parts[parts.length - 1]] = value;
+      this._sessionConfig = config as unknown as SessionConfig;
+    }
     // Forward setting-changed events from the dialog to the app level.
     // Parent components or the store can listen for these to apply changes.
     this.dispatchEvent(
@@ -1826,10 +1840,157 @@ export class AppShell extends LitElement {
     this._sectionSettingsOpen = true;
   }
 
-  private _sectionSettings(_sectionName: string): SettingItem[] {
-    // Return settings relevant to this section.
-    // For now, return empty — settings will be populated when SessionConfig is wired.
-    return [];
+  private _sectionSettings(sectionName: string): SettingItem[] {
+    const cfg = this._sessionConfig;
+    const def = DEFAULT_SESSION_CONFIG;
+
+    switch (sectionName) {
+      case 'comparison':
+      case 'agree':
+        return [
+          {
+            key: 'comparison.sensitivity',
+            label: t('settings.comparison.sensitivity'),
+            description: t('settings.comparison.sensitivity.description'),
+            type: 'select',
+            value: cfg.comparison.sensitivity,
+            defaultValue: def.comparison.sensitivity,
+            options: [
+              { value: 'semantic', label: t('settings.comparison.sensitivity.semantic') },
+              { value: 'exact', label: t('settings.comparison.sensitivity.exact') },
+            ],
+          },
+          {
+            key: 'comparison.autoDetectConflicts',
+            label: t('settings.comparison.autoDetectConflicts'),
+            description: t('settings.comparison.autoDetectConflicts.description'),
+            type: 'switch',
+            value: cfg.comparison.autoDetectConflicts,
+            defaultValue: def.comparison.autoDetectConflicts,
+          },
+          {
+            key: 'comparison.suggestResolutions',
+            label: t('settings.comparison.suggestResolutions'),
+            description: t('settings.comparison.suggestResolutions.description'),
+            type: 'switch',
+            value: cfg.comparison.suggestResolutions,
+            defaultValue: def.comparison.suggestResolutions,
+          },
+        ];
+
+      case 'contracts':
+      case 'build':
+        return [
+          {
+            key: 'contracts.strictness',
+            label: t('settings.contracts.strictness'),
+            description: t('settings.contracts.strictness.description'),
+            type: 'select',
+            value: cfg.contracts.strictness,
+            defaultValue: def.contracts.strictness,
+            options: [
+              { value: 'strict', label: t('settings.contracts.strictness.strict') },
+              { value: 'warn', label: t('settings.contracts.strictness.warn') },
+              { value: 'relaxed', label: t('settings.contracts.strictness.relaxed') },
+            ],
+          },
+          {
+            key: 'contracts.driftNotifications',
+            label: t('settings.contracts.driftNotifications'),
+            description: t('settings.contracts.driftNotifications.description'),
+            type: 'select',
+            value: cfg.contracts.driftNotifications,
+            defaultValue: def.contracts.driftNotifications,
+            options: [
+              { value: 'immediate', label: t('settings.contracts.driftNotifications.immediate') },
+              { value: 'batched', label: t('settings.contracts.driftNotifications.batched') },
+              { value: 'silent', label: t('settings.contracts.driftNotifications.silent') },
+            ],
+          },
+        ];
+
+      case 'priority':
+      case 'rank':
+        return [
+          {
+            key: 'ranking.weights.confidence',
+            label: t('settings.ranking.weights.confidence'),
+            description: t('settings.ranking.weights.confidence.description'),
+            type: 'number',
+            value: cfg.ranking.weights.confidence,
+            defaultValue: def.ranking.weights.confidence,
+          },
+          {
+            key: 'ranking.weights.complexity',
+            label: t('settings.ranking.weights.complexity'),
+            description: t('settings.ranking.weights.complexity.description'),
+            type: 'number',
+            value: cfg.ranking.weights.complexity,
+            defaultValue: def.ranking.weights.complexity,
+          },
+          {
+            key: 'ranking.weights.references',
+            label: t('settings.ranking.weights.references'),
+            description: t('settings.ranking.weights.references.description'),
+            type: 'number',
+            value: cfg.ranking.weights.references,
+            defaultValue: def.ranking.weights.references,
+          },
+          {
+            key: 'ranking.defaultTier',
+            label: t('settings.ranking.defaultTier'),
+            description: t('settings.ranking.defaultTier.description'),
+            type: 'select',
+            value: cfg.ranking.defaultTier,
+            defaultValue: def.ranking.defaultTier,
+            options: [
+              { value: 'Must Have', label: t('settings.ranking.defaultTier.mustHave') },
+              { value: 'Should Have', label: t('settings.ranking.defaultTier.shouldHave') },
+              { value: 'Could Have', label: t('settings.ranking.defaultTier.couldHave') },
+            ],
+          },
+        ];
+
+      case 'delegation':
+        return [
+          {
+            key: 'delegation.level',
+            label: t('settings.delegation.level'),
+            description: t('settings.delegation.level.description'),
+            type: 'select',
+            value: cfg.delegation.level,
+            defaultValue: def.delegation.level,
+            options: [
+              { value: 'assisted', label: t('settings.delegation.level.assisted') },
+              { value: 'semi_autonomous', label: t('settings.delegation.level.semiAutonomous') },
+              { value: 'autonomous', label: t('settings.delegation.level.autonomous') },
+            ],
+          },
+          {
+            key: 'delegation.approvalExpiry',
+            label: t('settings.delegation.approvalExpiry'),
+            description: t('settings.delegation.approvalExpiry.description'),
+            type: 'number',
+            value: cfg.delegation.approvalExpiry,
+            defaultValue: def.delegation.approvalExpiry,
+          },
+        ];
+
+      case 'notifications':
+        return [
+          {
+            key: 'notifications.toastDuration',
+            label: t('settings.notifications.toastDuration'),
+            description: t('settings.notifications.toastDuration.description'),
+            type: 'number',
+            value: cfg.notifications.toastDuration,
+            defaultValue: def.notifications.toastDuration,
+          },
+        ];
+
+      default:
+        return [];
+    }
   }
 
   private _onDraftChange(e: CustomEvent<{ id: string; rows: Array<{ eventName: string; aggregate: string; trigger: string }> }>) {
