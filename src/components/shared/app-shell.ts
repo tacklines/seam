@@ -776,8 +776,8 @@ export class AppShell extends LitElement {
                     verdictSummary=${data.verdictSummary}
                     contractCount=${data.contractCount}
                     aggregateCount=${data.aggregateCount}
-                    @create-work-item-requested=${(_e: CustomEvent) => {}}
-                    @run-checks-requested=${(_e: CustomEvent) => {}}
+                    @create-work-item-requested=${this._onCreateWorkItemFromCheck}
+                    @run-checks-requested=${this._onRunChecks}
                   ></integration-dashboard>
                 `;
               })()}
@@ -796,7 +796,7 @@ export class AppShell extends LitElement {
       <!-- Hidden file drop zone triggered by "Add files" button -->
       <file-drop-zone mode="compact" style="display:none" id="hidden-drop"></file-drop-zone>
       <!-- Drift notification toast stack (fixed-position, bottom-right) -->
-      <drift-notification .drifts=${[] as DriftEvent[]}></drift-notification>
+      <drift-notification .drifts=${this._driftEvents(files)}></drift-notification>
       <!-- First-visit onboarding overlay (self-managing via localStorage) -->
       <onboarding-overlay></onboarding-overlay>
       <!-- Milestone celebration toast (shown via .show() on state transitions) -->
@@ -1561,6 +1561,26 @@ export class AppShell extends LitElement {
     // No-op for now: dependency-graph fires events but state update deferred
   }
 
+  private _onCreateWorkItemFromCheck(e: CustomEvent<{ checkId: string; checkLabel: string }>) {
+    const { checkLabel } = e.detail;
+    const newItem: WorkItem = {
+      id: `wi-${Date.now().toString(36)}`,
+      title: `Resolve: ${checkLabel}`,
+      description: `Created from integration check "${checkLabel}"`,
+      acceptanceCriteria: [`${checkLabel} check passes`],
+      complexity: 'M' as const,
+      linkedEvents: [checkLabel],
+      dependencies: [],
+    };
+    this._workItems = [...this._workItems, newItem];
+    store.setView('breakdown');
+  }
+
+  private _onRunChecks() {
+    // Force re-render by requesting update — integration data is derived fresh each render
+    this.requestUpdate();
+  }
+
   /**
    * Derive event names for the breakdown tab from loaded files.
    * eventNames: all unique domain event names across all files (for linked-events dropdowns).
@@ -1574,5 +1594,20 @@ export class AppShell extends LitElement {
       }
     }
     return Array.from(eventNameSet);
+  }
+
+  /**
+   * Derive drift events from comparison conflicts.
+   * Each conflict between files represents a "drift" — divergent assumptions
+   * about the same event across different roles.
+   */
+  private _driftEvents(files: AppState['files']): DriftEvent[] {
+    if (files.length < 2) return [];
+    return this._comparisonCtrl.conflicts.map((conflict) => ({
+      id: `drift-${conflict.label}`,
+      eventName: conflict.label,
+      participantName: conflict.roles.join(' vs '),
+      description: conflict.details,
+    }));
   }
 }
