@@ -1795,7 +1795,7 @@ export class AppShell extends LitElement {
     this._votes = newVotes;
   }
 
-  private _onPhaseNavigate(e: CustomEvent<{ phase: string }>) {
+  private async _onPhaseNavigate(e: CustomEvent<{ phase: string }>) {
     // Map UX phase to the most relevant tab
     const phaseToTab: Record<string, import('../../state/app-state.js').ViewMode> = {
       spark: 'cards',
@@ -1808,6 +1808,28 @@ export class AppShell extends LitElement {
     };
     const tab = phaseToTab[e.detail.phase] ?? 'cards';
     store.setView(tab);
+
+    // Wait for tab switch to render before scrolling
+    await this.updateComplete;
+
+    // Map phase to a CSS selector for the scroll target within the newly-active tab
+    const phaseToSelector: Record<string, string> = {
+      spark: 'spark-canvas',
+      explore: 'card-view',
+      rank: 'priority-view',
+      slice: 'breakdown-editor',
+      agree: 'resolution-recorder',
+      build: 'contract-diff',
+      ship: 'integration-dashboard',
+    };
+
+    const selector = phaseToSelector[e.detail.phase];
+    if (selector) {
+      const target =
+        this.renderRoot.querySelector(selector) ??
+        this.renderRoot.querySelector(`sl-tab-panel[name="${tab}"]`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   private _onSessionFilesReady(e: CustomEvent<{ files: import('../../schema/types.js').LoadedFile[] }>) {
