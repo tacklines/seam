@@ -1,0 +1,286 @@
+metadata:
+  role: "tech-lead"
+  scope: "Microservice migration from monolith"
+  goal: "Decompose the payment monolith into independent microservices with zero downtime migration"
+  generated_at: "2026-03-02T08:15:00Z"
+  event_count: 11
+  assumption_count: 5
+
+domain_events:
+
+  - name: "DatabaseSchemaCreated"
+    aggregate: "Database"
+    trigger: "DBA executes schema migration scripts in the new service database"
+    payload:
+      - field: "database_id"
+        type: "str"
+      - field: "service_name"
+        type: "str"
+      - field: "schema_version"
+        type: "str"
+      - field: "tables_created"
+        type: "list[str]"
+      - field: "migration_script_path"
+        type: "str"
+    state_change: "(new) -> SCHEMA_READY"
+    integration:
+      direction: internal
+    sources:
+      - "infra/db/migrations/001_create_payment_service_schema.sql"
+    confidence: CONFIRMED
+
+  - name: "ServiceDeployed"
+    aggregate: "Service"
+    trigger: "CI/CD pipeline completes deployment of new microservice to staging"
+    payload:
+      - field: "service_id"
+        type: "str"
+      - field: "service_name"
+        type: "str"
+      - field: "image_tag"
+        type: "str"
+      - field: "environment"
+        type: "str"
+      - field: "replicas"
+        type: "int"
+      - field: "health_check_url"
+        type: "str"
+    state_change: "PENDING -> RUNNING"
+    integration:
+      direction: outbound
+      channel: "deployment-events"
+    sources:
+      - ".github/workflows/deploy.yml:45-78"
+    confidence: CONFIRMED
+
+  - name: "APIEndpointRegistered"
+    aggregate: "API"
+    trigger: "Service registers its endpoints with the API gateway after successful deployment"
+    payload:
+      - field: "service_id"
+        type: "str"
+      - field: "endpoint_paths"
+        type: "list[str]"
+      - field: "gateway_id"
+        type: "str"
+      - field: "auth_scheme"
+        type: "str"
+      - field: "rate_limit_rpm"
+        type: "int"
+    state_change: "(new) -> REGISTERED"
+    integration:
+      direction: outbound
+      channel: "api-gateway-control-plane"
+    confidence: CONFIRMED
+
+  - name: "MigrationStarted"
+    aggregate: "Migration"
+    trigger: "Tech lead kicks off the migration plan after all pre-conditions are verified"
+    payload:
+      - field: "migration_id"
+        type: "str"
+      - field: "source_service"
+        type: "str"
+      - field: "target_service"
+        type: "str"
+      - field: "migration_strategy"
+        type: "str"
+      - field: "rollback_plan"
+        type: "str"
+      - field: "estimated_duration_hours"
+        type: "int"
+    state_change: "(new) -> IN_PROGRESS"
+    integration:
+      direction: outbound
+      channel: "migration-control-bus"
+    confidence: CONFIRMED
+
+  - name: "DataMigrated"
+    aggregate: "Migration"
+    trigger: "ETL job completes copying historical data from monolith DB to service DB"
+    payload:
+      - field: "migration_id"
+        type: "str"
+      - field: "rows_migrated"
+        type: "int"
+      - field: "rows_failed"
+        type: "int"
+      - field: "checksum_verified"
+        type: "bool"
+      - field: "duration_seconds"
+        type: "int"
+    state_change: "IN_PROGRESS -> DATA_SYNCED"
+    integration:
+      direction: internal
+    confidence: CONFIRMED
+
+  - name: "TrafficSwitched"
+    aggregate: "Migration"
+    trigger: "Traffic router updates routing rules to send requests to new service"
+    payload:
+      - field: "migration_id"
+        type: "str"
+      - field: "traffic_percentage"
+        type: "int"
+      - field: "switch_strategy"
+        type: "str"
+      - field: "canary_duration_minutes"
+        type: "int"
+      - field: "fallback_timeout_seconds"
+        type: "int"
+    state_change: "DATA_SYNCED -> TRAFFIC_SWITCHED"
+    integration:
+      direction: outbound
+      channel: "traffic-router-control"
+    confidence: LIKELY
+    notes: "May be done incrementally with canary percentages before full cutover"
+
+  - name: "MonolithDecommissioned"
+    aggregate: "Service"
+    trigger: "Tech lead confirms all traffic migrated and shuts down monolith endpoints"
+    payload:
+      - field: "service_id"
+        type: "str"
+      - field: "decommission_timestamp"
+        type: "str"
+      - field: "data_retention_policy"
+        type: "str"
+      - field: "backup_location"
+        type: "str"
+    state_change: "RUNNING -> DECOMMISSIONED"
+    integration:
+      direction: outbound
+      channel: "deployment-events"
+    confidence: LIKELY
+    notes: "Terminal event for the monolith service. Triggers cleanup of allocated resources."
+
+  - name: "SchemaVersionMismatchDetected"
+    aggregate: "Database"
+    trigger: "Migration validator detects schema drift between source and target databases"
+    payload:
+      - field: "database_id"
+        type: "str"
+      - field: "source_version"
+        type: "str"
+      - field: "target_version"
+        type: "str"
+      - field: "mismatched_tables"
+        type: "list[str]"
+      - field: "auto_remediation_possible"
+        type: "bool"
+    integration:
+      direction: outbound
+      channel: "migration-control-bus"
+    confidence: POSSIBLE
+    notes: "Failure event that may block TrafficSwitched; requires manual intervention"
+
+  - name: "ServiceHealthDegraded"
+    aggregate: "Service"
+    trigger: "Health check monitor detects response time or error rate threshold breach"
+    payload:
+      - field: "service_id"
+        type: "str"
+      - field: "metric_name"
+        type: "str"
+      - field: "current_value"
+        type: "str"
+      - field: "threshold_value"
+        type: "str"
+      - field: "degradation_start"
+        type: "str"
+    state_change: "RUNNING -> DEGRADED"
+    integration:
+      direction: outbound
+      channel: "alerting-bus"
+    confidence: LIKELY
+
+  - name: "MigrationRolledBack"
+    aggregate: "Migration"
+    trigger: "Automated rollback triggered by health degradation or manual tech lead decision"
+    payload:
+      - field: "migration_id"
+        type: "str"
+      - field: "rollback_reason"
+        type: "str"
+      - field: "rollback_initiated_by"
+        type: "str"
+      - field: "traffic_restored_to_monolith"
+        type: "bool"
+    state_change: "TRAFFIC_SWITCHED -> ROLLED_BACK"
+    integration:
+      direction: outbound
+      channel: "migration-control-bus"
+    confidence: LIKELY
+
+  - name: "APIEndpointDeprecated"
+    aggregate: "API"
+    trigger: "Tech lead marks monolith API version as deprecated after new service is stable"
+    payload:
+      - field: "endpoint_path"
+        type: "str"
+      - field: "deprecated_version"
+        type: "str"
+      - field: "replacement_endpoint"
+        type: "str"
+      - field: "sunset_date"
+        type: "str"
+      - field: "migration_guide_url"
+        type: "str"
+    state_change: "REGISTERED -> DEPRECATED"
+    integration:
+      direction: outbound
+      channel: "api-gateway-control-plane"
+    confidence: POSSIBLE
+    notes: "Requires consumer notification before sunset date"
+
+boundary_assumptions:
+
+  - id: "BA-1"
+    type: ordering
+    statement: "DatabaseSchemaCreated must complete and be verified before ServiceDeployed is emitted; a service cannot start if its schema is not in place"
+    affects_events:
+      - "DatabaseSchemaCreated"
+      - "ServiceDeployed"
+      - "DataMigrated"
+    confidence: CONFIRMED
+    verify_with: "already confirmed in deployment runbook — pre-flight checks enforce this ordering"
+
+  - id: "BA-2"
+    type: ordering
+    statement: "TrafficSwitched can only occur after DataMigrated completes with checksum_verified=true; partial data migrations must not receive live traffic"
+    affects_events:
+      - "DataMigrated"
+      - "TrafficSwitched"
+      - "MigrationRolledBack"
+    confidence: CONFIRMED
+    verify_with: "migration control bus — confirm that gate check is enforced by orchestrator, not by convention"
+
+  - id: "BA-3"
+    type: ownership
+    statement: "The Migration aggregate owns the overall migration state machine; the Service and Database aggregates are supporting actors that emit their own events but do not control migration state transitions"
+    affects_events:
+      - "MigrationStarted"
+      - "DataMigrated"
+      - "TrafficSwitched"
+      - "MonolithDecommissioned"
+      - "MigrationRolledBack"
+    confidence: LIKELY
+    verify_with: "architecture review — clarify whether Migration is a process manager or a true aggregate"
+
+  - id: "BA-4"
+    type: contract
+    statement: "ServiceHealthDegraded carries metric_name and threshold_value as strings rather than typed enums; consumers must handle unknown metric names gracefully"
+    affects_events:
+      - "ServiceHealthDegraded"
+      - "MigrationRolledBack"
+    confidence: POSSIBLE
+    verify_with: "platform team — determine if alerting-bus supports a typed metric schema or accepts free-form strings"
+
+  - id: "BA-5"
+    type: existence
+    statement: "MonolithDecommissioned is a terminal event with no undo path; a post-decommission issue must initiate a new ServiceDeployed cycle rather than reversing decommission"
+    affects_events:
+      - "MonolithDecommissioned"
+      - "MigrationRolledBack"
+    confidence: LIKELY
+    verify_with: "tech lead and operations team — confirm that rollback window closes definitively at decommission"

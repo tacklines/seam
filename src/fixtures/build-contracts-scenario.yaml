@@ -1,0 +1,244 @@
+metadata:
+  role: "api-architect"
+  scope: "Payment gateway API contract design"
+  goal: "Design and formalize API contracts for the payment gateway integration layer"
+  generated_at: "2026-03-02T08:30:00Z"
+  event_count: 9
+  assumption_count: 3
+
+domain_events:
+
+  - name: "GatewayRegistered"
+    aggregate: "Gateway"
+    trigger: "API architect registers a new payment gateway provider with the integration layer"
+    payload:
+      - field: "gateway_id"
+        type: "str"
+      - field: "provider_name"
+        type: "str"
+      - field: "api_base_url"
+        type: "str"
+      - field: "supported_currencies"
+        type: "list[str]"
+      - field: "supported_payment_methods"
+        type: "list[str]"
+      - field: "api_version"
+        type: "str"
+      - field: "webhook_signing_algorithm"
+        type: "str"
+    state_change: "(new) -> REGISTERED"
+    integration:
+      direction: internal
+    confidence: CONFIRMED
+
+  - name: "GatewayActivated"
+    aggregate: "Gateway"
+    trigger: "Gateway passes end-to-end connectivity and authentication test"
+    payload:
+      - field: "gateway_id"
+        type: "str"
+      - field: "activated_at"
+        type: "str"
+      - field: "test_transaction_id"
+        type: "str"
+      - field: "latency_p50_ms"
+        type: "int"
+      - field: "latency_p99_ms"
+        type: "int"
+    state_change: "REGISTERED -> ACTIVE"
+    integration:
+      direction: outbound
+      channel: "gateway-lifecycle-events"
+    confidence: CONFIRMED
+
+  - name: "GatewayContractVersioned"
+    aggregate: "Gateway"
+    trigger: "API architect publishes a new version of the gateway contract schema"
+    payload:
+      - field: "gateway_id"
+        type: "str"
+      - field: "contract_version"
+        type: "str"
+      - field: "previous_version"
+        type: "str"
+      - field: "breaking_changes"
+        type: "list[str]"
+      - field: "deprecation_date"
+        type: "str | None"
+      - field: "migration_guide_url"
+        type: "str"
+    integration:
+      direction: outbound
+      channel: "contract-registry-bus"
+    confidence: LIKELY
+    notes: "Triggers consumer notifications when breaking_changes is non-empty"
+
+  - name: "MerchantOnboarded"
+    aggregate: "Merchant"
+    trigger: "Merchant completes KYC verification and platform agreement signing"
+    payload:
+      - field: "merchant_id"
+        type: "str"
+      - field: "business_name"
+        type: "str"
+      - field: "country_code"
+        type: "str"
+      - field: "currency"
+        type: "str"
+      - field: "gateway_id"
+        type: "str"
+      - field: "settlement_schedule"
+        type: "str"
+      - field: "risk_tier"
+        type: "str"
+    state_change: "(new) -> ACTIVE"
+    integration:
+      direction: inbound
+      channel: "kyc-verification-service"
+    confidence: CONFIRMED
+
+  - name: "MerchantWebhookConfigured"
+    aggregate: "Merchant"
+    trigger: "Merchant registers their endpoint URL to receive payment notification events"
+    payload:
+      - field: "merchant_id"
+        type: "str"
+      - field: "webhook_url"
+        type: "str"
+      - field: "event_types"
+        type: "list[str]"
+      - field: "signing_secret_hash"
+        type: "str"
+      - field: "retry_policy"
+        type: "dict"
+    integration:
+      direction: internal
+    confidence: CONFIRMED
+
+  - name: "MerchantSuspended"
+    aggregate: "Merchant"
+    trigger: "Risk team suspends merchant account due to fraud signals or policy violation"
+    payload:
+      - field: "merchant_id"
+        type: "str"
+      - field: "suspension_reason"
+        type: "str"
+      - field: "suspended_by"
+        type: "str"
+      - field: "can_appeal"
+        type: "bool"
+      - field: "funds_held"
+        type: "bool"
+      - field: "effective_at"
+        type: "str"
+    state_change: "ACTIVE -> SUSPENDED"
+    integration:
+      direction: outbound
+      channel: "merchant-lifecycle-events"
+    confidence: LIKELY
+
+  - name: "TransactionAuthorized"
+    aggregate: "Transaction"
+    trigger: "Payment gateway authorizes the transaction amount on the card network"
+    payload:
+      - field: "transaction_id"
+        type: "str"
+      - field: "merchant_id"
+        type: "str"
+      - field: "gateway_id"
+        type: "str"
+      - field: "amount_minor_units"
+        type: "int"
+      - field: "currency"
+        type: "str"
+      - field: "authorization_code"
+        type: "str"
+      - field: "card_last_four"
+        type: "str"
+      - field: "card_network"
+        type: "str"
+    state_change: "PENDING -> AUTHORIZED"
+    integration:
+      direction: inbound
+      channel: "gateway-webhook"
+    confidence: CONFIRMED
+
+  - name: "TransactionSettled"
+    aggregate: "Transaction"
+    trigger: "Funds are transferred from issuing bank to merchant account during settlement run"
+    payload:
+      - field: "transaction_id"
+        type: "str"
+      - field: "merchant_id"
+        type: "str"
+      - field: "settled_amount_minor_units"
+        type: "int"
+      - field: "fee_amount_minor_units"
+        type: "int"
+      - field: "settlement_batch_id"
+        type: "str"
+      - field: "settled_at"
+        type: "str"
+      - field: "payout_id"
+        type: "str"
+    state_change: "AUTHORIZED -> SETTLED"
+    integration:
+      direction: outbound
+      channel: "accounting-bus"
+    confidence: CONFIRMED
+
+  - name: "TransactionDisputeOpened"
+    aggregate: "Transaction"
+    trigger: "Cardholder initiates a chargeback through their issuing bank"
+    payload:
+      - field: "transaction_id"
+        type: "str"
+      - field: "dispute_id"
+        type: "str"
+      - field: "dispute_reason_code"
+        type: "str"
+      - field: "disputed_amount_minor_units"
+        type: "int"
+      - field: "evidence_due_date"
+        type: "str"
+      - field: "merchant_id"
+        type: "str"
+    state_change: "SETTLED -> DISPUTED"
+    integration:
+      direction: inbound
+      channel: "gateway-webhook"
+    confidence: LIKELY
+    notes: "Triggers merchant notification via configured webhook"
+
+boundary_assumptions:
+
+  - id: "BA-1"
+    type: contract
+    statement: "All monetary amounts are expressed in the smallest currency unit (minor units / cents) as integers — never as decimal floats — to prevent floating point rounding errors across service boundaries"
+    affects_events:
+      - "TransactionAuthorized"
+      - "TransactionSettled"
+      - "TransactionDisputeOpened"
+    confidence: CONFIRMED
+    verify_with: "already confirmed in gateway API spec v2.1 — enforced at schema validation layer"
+
+  - id: "BA-2"
+    type: contract
+    statement: "GatewayContractVersioned breaking_changes field governs consumer migration; consumers subscribed to contract-registry-bus must handle both old and new schemas until deprecation_date passes"
+    affects_events:
+      - "GatewayContractVersioned"
+      - "TransactionAuthorized"
+      - "TransactionSettled"
+    confidence: LIKELY
+    verify_with: "platform team — confirm whether consumers can declare supported contract versions or must handle all versions"
+
+  - id: "BA-3"
+    type: ownership
+    statement: "The Gateway aggregate owns the contract registry; individual Transaction events do not carry full contract metadata — consumers must look up contract version from Gateway state to validate incoming payloads"
+    affects_events:
+      - "GatewayContractVersioned"
+      - "GatewayActivated"
+      - "TransactionAuthorized"
+      - "TransactionSettled"
+    confidence: POSSIBLE
+    verify_with: "architecture review — evaluate whether embedding contract_version in every Transaction event would reduce consumer coupling"
