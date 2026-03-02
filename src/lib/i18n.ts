@@ -275,6 +275,8 @@ export const messages: Record<string, string> = {
   'shell.pasteSuccess': 'Pasted YAML loaded — {{count}} events from {{role}}',
   'shell.pasteSuccessAriaLabel': 'YAML pasted from clipboard and loaded successfully',
   'shell.openSettings': 'Open settings',
+  'shell.resetHelp': 'Show help tips again',
+  'shell.helpReset': 'Help tips re-enabled! They will appear as you navigate.',
 
   // ---------------------------------------------------------------------------
   // participant-registry

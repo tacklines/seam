@@ -33,6 +33,7 @@ import { DEFAULT_SESSION_CONFIG } from '../../schema/types.js';
 import { loadSessionConfig, saveSessionConfig } from '../../lib/session-config-persistence.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
+import { resetAllTips } from '../../lib/first-run.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -696,6 +697,11 @@ export class AppShell extends LitElement {
               @level-changed=${this._onDelegationLevelChanged}
             ></delegation-toggle>
             <sl-icon-button
+              name="question-circle"
+              label=${t('shell.resetHelp')}
+              @click=${this._onResetHelp}
+            ></sl-icon-button>
+            <sl-icon-button
               name="gear"
               label=${t('shell.openSettings')}
               @click=${() => { this._settingsOpen = true; }}
@@ -1232,6 +1238,19 @@ export class AppShell extends LitElement {
 
   private onAggregateSelect(e: CustomEvent) {
     store.setSelectedAggregate(e.detail.aggregate);
+  }
+
+  private _onResetHelp() {
+    resetAllTips();
+    // Show a brief toast confirming tips are re-enabled
+    const alert = Object.assign(document.createElement('sl-alert'), {
+      variant: 'primary',
+      closable: true,
+      duration: 3000,
+      innerHTML: `<sl-icon name="lightbulb" slot="icon"></sl-icon>${t('shell.helpReset')}`,
+    });
+    document.body.append(alert);
+    (alert as any).toast();
   }
 
   private onAddFilesClick() {
