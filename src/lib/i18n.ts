@@ -897,6 +897,37 @@ export const messages: Record<string, string> = {
   // Flow diagram hints
   'flowHints.suggested': 'Suggested: {{name}}',
   'flowHints.accept': 'Add this event',
+
+  // ---------------------------------------------------------------------------
+  // settings-dialog
+  // ---------------------------------------------------------------------------
+  'settingsDialog.title': 'Settings',
+  'settingsDialog.session': 'Session',
+  'settingsDialog.artifacts': 'Artifacts',
+  'settingsDialog.comparison': 'Comparison',
+  'settingsDialog.contracts': 'Contracts',
+  'settingsDialog.notifications': 'Notifications',
+  'settingsDialog.delegation': 'Delegation',
+  'settingsDialog.shortcuts': 'Shortcuts',
+  'settingsDialog.sessionName': 'Session name',
+  'settingsDialog.participantLimit': 'Participant limit',
+  'settingsDialog.workflowTemplate': 'Workflow template',
+  'settingsDialog.validationStrictness': 'Validation strictness',
+  'settingsDialog.autoValidate': 'Auto-validate on submit',
+  'settingsDialog.comparisonSensitivity': 'Comparison sensitivity',
+  'settingsDialog.autoSuggestResolutions': 'Auto-suggest resolutions',
+  'settingsDialog.contractStrictness': 'Contract strictness',
+  'settingsDialog.driftNotifications': 'Drift notifications',
+  'settingsDialog.complianceCheckFrequency': 'Compliance check frequency',
+  'settingsDialog.showArtifactToasts': 'Artifact notifications',
+  'settingsDialog.showResolutionToasts': 'Resolution notifications',
+  'settingsDialog.showPresenceToasts': 'Presence notifications',
+  'settingsDialog.showMilestoneToasts': 'Milestone celebrations',
+  'settingsDialog.defaultDelegationLevel': 'Default delegation level',
+  'settingsDialog.resetShortcut': 'Reset',
+  'settingsDialog.resetAllShortcuts': 'Reset All to Defaults',
+  'settingsDialog.shortcutAction': 'Action',
+  'settingsDialog.shortcutBinding': 'Binding',
 };
 
 /**
