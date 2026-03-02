@@ -228,6 +228,7 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   'shell.pasteSuccess': 'Pasted YAML loaded — {{count}} events from {{role}}',
   'shell.pasteSuccessAriaLabel': 'YAML pasted from clipboard and loaded successfully',
+  'shell.openSettings': 'Open settings',
 
   // ---------------------------------------------------------------------------
   // participant-registry

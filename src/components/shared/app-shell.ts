@@ -19,6 +19,7 @@ import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
+import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
 import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
@@ -33,6 +34,7 @@ import './aggregate-nav.js';
 import './filter-panel.js';
 import '../visualization/detail-panel.js';
 import './shortcut-reference.js';
+import './settings-dialog.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -188,6 +190,7 @@ export class AppShell extends LitElement {
   @state() private _soloMode = false;
   @state() private _pasteToast: { count: number; role: string } | null = null;
   @state() private _shortcutReferenceOpen = false;
+  @state() private _settingsOpen = false;
 
   private _pasteToastTimer: ReturnType<typeof setTimeout> | null = null;
   private _boundPasteHandler: ((e: ClipboardEvent) => void) | null = null;
@@ -337,6 +340,7 @@ export class AppShell extends LitElement {
           <file-drop-zone mode="hero"></file-drop-zone>
           ${this._renderPasteToast()}
           ${this._renderShortcutReference()}
+          ${this._renderSettingsDialog()}
         `;
       }
       return html`
@@ -346,10 +350,11 @@ export class AppShell extends LitElement {
         ></session-lobby>
         ${this._renderPasteToast()}
         ${this._renderShortcutReference()}
+        ${this._renderSettingsDialog()}
       `;
     }
 
-    return html`${this.renderAppLayout()}${this._renderPasteToast()}${this._renderShortcutReference()}`;
+    return html`${this.renderAppLayout()}${this._renderPasteToast()}${this._renderShortcutReference()}${this._renderSettingsDialog()}`;
   }
 
   private _renderShortcutReference() {
@@ -358,6 +363,16 @@ export class AppShell extends LitElement {
         ?open=${this._shortcutReferenceOpen}
         @shortcut-reference-close=${() => { this._shortcutReferenceOpen = false; }}
       ></shortcut-reference>
+    `;
+  }
+
+  private _renderSettingsDialog() {
+    return html`
+      <settings-dialog
+        ?open=${this._settingsOpen}
+        @settings-dialog-close=${() => { this._settingsOpen = false; }}
+        @setting-changed=${this._onSettingChanged}
+      ></settings-dialog>
     `;
   }
 
@@ -424,6 +439,11 @@ export class AppShell extends LitElement {
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
               ${t('shell.addFiles')}
             </sl-button>
+            <sl-icon-button
+              name="gear"
+              label=${t('shell.openSettings')}
+              @click=${() => { this._settingsOpen = true; }}
+            ></sl-icon-button>
           </div>
         </div>
 
@@ -664,5 +684,17 @@ export class AppShell extends LitElement {
 
   private _onDetailPanelClose() {
     this._detailNodeData = null;
+  }
+
+  private _onSettingChanged(e: CustomEvent<{ key: string; value: unknown }>) {
+    // Forward setting-changed events from the dialog to the app level.
+    // Parent components or the store can listen for these to apply changes.
+    this.dispatchEvent(
+      new CustomEvent('setting-changed', {
+        detail: e.detail,
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 }
