@@ -12,14 +12,15 @@ The boundary negotiation platform where teams and AI agents turn integration ass
 2. **Coordination**: Manage dependencies between tasks, unblock work, review agent outputs
 3. **Backlog Management**: Use `tk` commands to triage, prioritize, and track issues
 
-### Serialized Dispatching
+### Parallel Worktree Dispatching
 
-**Dispatch tasks one at a time, not in parallel.** This approach:
-- Avoids API throttling, enabling longer uninterrupted work sessions
-- Allows learning from each task's output before starting the next
-- Reduces context bloat from concurrent agent results
+**Dispatch independent tasks in parallel using worktree isolation.** Each agent gets its own repo copy, eliminating merge conflicts between concurrent work.
 
-Workflow: dispatch -> wait for completion -> review -> dispatch next task
+- Use `isolation: "worktree"` and `run_in_background: true` for independent tasks
+- Merge worktree branches sequentially after agents complete
+- Fall back to serial dispatch only when tasks have true sequential dependencies (each task needs the previous one's output)
+
+Workflow: dispatch wave -> wait for completions -> merge results -> verify tests -> dispatch next wave
 
 ---
 
