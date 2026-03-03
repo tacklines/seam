@@ -112,7 +112,7 @@ export const Comparison: Story = {
   args: {
     icon: 'files',
     heading: 'Load two or more files to compare',
-    description: 'Load storm-prep YAML files from multiple roles to see conflicts, shared events, and overlaps',
+    description: 'Load perspective files from multiple participants to see conflicts, shared events, and overlaps',
     actionLabel: '',
   },
 };

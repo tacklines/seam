@@ -50,7 +50,7 @@ const PHASE_METADATA: Record<WorkflowPhase, { label: string; description: string
   },
   prep: {
     label: 'Prep',
-    description: 'Submit your storm-prep findings independently',
+    description: 'Submit your perspective independently',
   },
   compare: {
     label: 'Compare',
@@ -76,7 +76,7 @@ const PHASE_METADATA: Record<WorkflowPhase, { label: string; description: string
 
 const NEXT_ACTIONS: Record<WorkflowPhase, string> = {
   lobby: 'Share the join code and wait for participants',
-  prep: 'Each participant should submit their storm-prep YAML',
+  prep: 'Each participant should submit their perspective file',
   compare: 'Review the comparison view to identify overlaps',
   jam: 'Start resolving conflicts in the jam session',
   formalize: 'Generate contracts from the jam session results',

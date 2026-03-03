@@ -262,7 +262,7 @@ describe('computeWorkflowStatus', () => {
   it('returns correct nextAction for each phase', () => {
     expect(
       computeWorkflowStatus(makeSession({ submissionCount: 1 })).nextAction
-    ).toBe('Each participant should submit their storm-prep YAML');
+    ).toBe('Each participant should submit their perspective file');
 
     expect(
       computeWorkflowStatus(makeSession({ submissionCount: 2 })).nextAction

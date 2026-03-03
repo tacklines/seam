@@ -76,7 +76,7 @@ export const LobbyWithParticipants: Story = {
         hasIntegrationReport: false,
         integrationStatus: null,
       },
-      nextAction: 'Each participant should submit their storm-prep YAML',
+      nextAction: 'Each participant should submit their perspective file',
     } satisfies WorkflowStatus,
   },
 };
@@ -104,7 +104,7 @@ export const PrepOneSubmission: Story = {
         hasIntegrationReport: false,
         integrationStatus: null,
       },
-      nextAction: 'Each participant should submit their storm-prep YAML',
+      nextAction: 'Each participant should submit their perspective file',
     } satisfies WorkflowStatus,
   },
 };
