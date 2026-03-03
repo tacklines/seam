@@ -8,6 +8,8 @@ import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
 import { compareFiles } from '../lib/comparison.js';
 import { suggestResolutionHeuristic } from '../lib/integration-heuristics.js';
+import { deriveFromRequirements } from '../lib/requirement-derivation.js';
+import type { Requirement } from '../schema/types.js';
 
 const PORT = Number(process.env.PORT ?? 3002);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
@@ -344,6 +346,88 @@ const server = http.createServer(async (req, res) => {
       const overlapKind = overlap?.kind ?? 'same-name';
       const suggestion = suggestResolutionHeuristic(overlapKind, overlapLabel);
       sendJson(res, 200, { suggestion });
+      return;
+    }
+
+    // POST /api/sessions/:code/requirements — Submit a requirement
+    const requirementsMatch = url.match(/^\/api\/sessions\/([^/]+)\/requirements$/);
+    if (method === 'POST' && requirementsMatch) {
+      const code = requirementsMatch[1];
+      const body = await parseBody(req) as {
+        participantId?: string;
+        statement?: string;
+        tags?: string[];
+      };
+      if (typeof body.participantId !== 'string' || typeof body.statement !== 'string' || !body.statement.trim()) {
+        sendJson(res, 400, { error: 'participantId and statement are required' });
+        return;
+      }
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const requirement = store.addRequirement(code, body.participantId, body.statement.trim(), body.tags);
+      if (!requirement) {
+        sendJson(res, 403, { error: 'Participant not in session' });
+        return;
+      }
+      sendJson(res, 201, { requirement });
+      return;
+    }
+
+    // POST /api/sessions/:code/requirements/derive — Derive events from requirements
+    const requirementsDeriveMatch = url.match(/^\/api\/sessions\/([^/]+)\/requirements\/derive$/);
+    if (method === 'POST' && requirementsDeriveMatch) {
+      const code = requirementsDeriveMatch[1];
+      const body = await parseBody(req) as { requirementIds?: string[] };
+      if (!Array.isArray(body.requirementIds) || body.requirementIds.length === 0) {
+        sendJson(res, 400, { error: 'requirementIds array is required' });
+        return;
+      }
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const allRequirements = store.getRequirements(code);
+      const selected = allRequirements.filter(r => body.requirementIds!.includes(r.id));
+      const files = store.getSessionFiles(code);
+      const existingEventNames = files.flatMap(f => f.data.domain_events.map(ev => ev.name));
+      const results = deriveFromRequirements(selected, existingEventNames);
+      sendJson(res, 200, { results });
+      return;
+    }
+
+    // POST /api/sessions/:code/requirements/:reqId/accept — Accept derived events
+    const requirementsAcceptMatch = url.match(/^\/api\/sessions\/([^/]+)\/requirements\/([^/]+)\/accept$/);
+    if (method === 'POST' && requirementsAcceptMatch) {
+      const code = requirementsAcceptMatch[1];
+      const reqId = requirementsAcceptMatch[2];
+      const body = await parseBody(req) as {
+        participantId?: string;
+        eventNames?: string[];
+      };
+      if (typeof body.participantId !== 'string' || !Array.isArray(body.eventNames)) {
+        sendJson(res, 400, { error: 'participantId and eventNames are required' });
+        return;
+      }
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const existing = store.getRequirement(code, reqId);
+      if (!existing) {
+        sendJson(res, 404, { error: 'Requirement not found' });
+        return;
+      }
+      const merged = [...existing.derivedEvents, ...body.eventNames];
+      const requirement = store.updateRequirement(code, reqId, {
+        derivedEvents: merged,
+        status: existing.status === 'draft' ? 'active' : existing.status,
+      });
+      sendJson(res, 200, { requirement });
       return;
     }
 

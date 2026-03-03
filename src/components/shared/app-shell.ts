@@ -858,7 +858,11 @@ export class AppShell extends LitElement {
             <spark-canvas
               ?collapsed=${this._sparkCollapsed}
               session-code="${this.appState.sessionState?.code ?? ''}"
+              .requirements=${this.appState.sessionState?.session?.requirements ?? []}
               @spark-submit=${this._onSparkSubmit}
+              @requirement-added=${this._onRequirementAdded}
+              @requirement-removed=${this._onRequirementRemoved}
+              @derive-events-requested=${this._onDeriveEventsRequested}
             ></spark-canvas>
           </help-tip>
           ${this.appState.derivationSuggestions.length > 0 ? html`
@@ -1335,9 +1339,110 @@ export class AppShell extends LitElement {
     }
   }
 
-  private _onEventsAccepted(e: CustomEvent) {
+  private async _onRequirementAdded(e: CustomEvent<{ text: string }>) {
+    const sessionState = this.appState.sessionState;
+    if (!sessionState) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions/${sessionState.code}/requirements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          participantId: sessionState.participantId,
+          statement: e.detail.text,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.error('requirement submit failed:', body || `HTTP ${res.status}`);
+        return;
+      }
+
+      const data = await res.json() as { requirement: import('../../schema/types.js').Requirement };
+      store.addRequirement(data.requirement);
+    } catch (err) {
+      console.error('requirement submit error:', (err as Error).message);
+    }
+  }
+
+  private _onRequirementRemoved(e: CustomEvent<{ id: string }>) {
+    const sessionState = this.appState.sessionState;
+    if (!sessionState) return;
+    store.removeRequirement(e.detail.id);
+  }
+
+  private async _onDeriveEventsRequested(e: CustomEvent<{ requirements: import('../../schema/types.js').Requirement[] }>) {
+    const sessionState = this.appState.sessionState;
+    if (!sessionState) return;
+
+    const requirementIds = e.detail.requirements.map(r => r.id);
+    if (requirementIds.length === 0) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions/${sessionState.code}/requirements/derive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requirementIds }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.error('derive events failed:', body || `HTTP ${res.status}`);
+        return;
+      }
+
+      const data = await res.json() as {
+        results: Array<{
+          requirementId: string;
+          events: Array<{ name: string; aggregate: string; trigger: string; confidence: string; payload: unknown[]; integration: { direction: string } }>;
+          assumptions: unknown[];
+        }>;
+      };
+
+      // Map DerivationResult[] to DerivationSuggestionGroup[] for the review panel
+      const reqMap = new Map(e.detail.requirements.map(r => [r.id, r]));
+      const suggestions = data.results
+        .filter(r => r.events.length > 0)
+        .map(r => ({
+          requirementId: r.requirementId,
+          requirementText: reqMap.get(r.requirementId)?.statement ?? '',
+          events: r.events.map(ev => ({
+            name: ev.name,
+            description: `${ev.aggregate} — ${ev.trigger}`,
+            confidence: ev.confidence,
+            trigger: ev.trigger,
+            stateChange: ev.aggregate,
+          })),
+        }));
+
+      store.setDerivationSuggestions(suggestions);
+    } catch (err) {
+      console.error('derive events error:', (err as Error).message);
+    }
+  }
+
+  private async _onEventsAccepted(e: CustomEvent) {
+    const sessionState = this.appState.sessionState;
+
+    if (sessionState && e.detail?.accepted) {
+      for (const group of e.detail.accepted as Array<{ requirementId: string; eventNames: string[] }>) {
+        try {
+          await fetch(`${API_BASE}/api/sessions/${sessionState.code}/requirements/${group.requirementId}/accept`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              participantId: sessionState.participantId,
+              eventNames: group.eventNames,
+            }),
+          });
+        } catch (err) {
+          console.error('accept derived events error:', (err as Error).message);
+        }
+      }
+    }
+
     store.clearDerivationSuggestions();
-    console.debug('Events accepted:', e.detail);
   }
 
   private _onEventEditRequested(e: CustomEvent) {
