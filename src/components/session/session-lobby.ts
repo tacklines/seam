@@ -6,6 +6,7 @@ import { t } from '../../lib/i18n.js';
 import { store } from '../../state/app-state.js';
 import type { SessionState } from '../../state/app-state.js';
 import { connectSession, disconnectSession } from '../../state/session-connection.js';
+import { categorizeLobbyError } from '../../lib/error-categorization.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -517,7 +518,7 @@ export class SessionLobby extends LitElement {
       store.setSession(code, participantId, session);
       connectSession(code);
     } catch (err) {
-      this._error = (err as Error).message;
+      this._error = this._friendlyError(err);
     } finally {
       this._loading = false;
     }
@@ -552,7 +553,7 @@ export class SessionLobby extends LitElement {
       store.setSession(code, participantId, session);
       connectSession(code);
     } catch (err) {
-      this._error = (err as Error).message;
+      this._error = this._friendlyError(err);
     } finally {
       this._loading = false;
     }
@@ -583,12 +584,12 @@ export class SessionLobby extends LitElement {
         });
         if (!res.ok) {
           const body = await res.text();
-          this._error = body || `HTTP ${res.status}`;
+          this._error = this._friendlyError(body || `HTTP ${res.status}`);
           hadError = true;
         }
       }
     } catch (err) {
-      this._error = (err as Error).message;
+      this._error = this._friendlyError(err);
       hadError = true;
     } finally {
       this._submitting = false;
@@ -638,10 +639,22 @@ export class SessionLobby extends LitElement {
         })
       );
     } catch (err) {
-      this._error = (err as Error).message;
+      this._error = this._friendlyError(err);
     } finally {
       this._loading = false;
     }
+  }
+
+  /**
+   * Converts an unknown caught value into a plain-language string suitable for
+   * display in the lobby error alert. Uses categorizeLobbyError for consistent
+   * friendly messages.
+   */
+  private _friendlyError(error: unknown): string {
+    const category = categorizeLobbyError(error);
+    return category.hint
+      ? `${category.message} ${category.hint}`
+      : category.message;
   }
 
   private _onFileInputChange(e: Event) {
