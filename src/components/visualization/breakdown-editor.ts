@@ -48,6 +48,30 @@ const TIER_RANK: Record<PriorityTier, number> = {
 };
 
 /**
+ * Add a criterion text to a work item's acceptanceCriteria array.
+ * Returns a new WorkItem — does not mutate the original.
+ * Trims whitespace; returns the original item unchanged if text is empty.
+ */
+export function addCriterion(item: WorkItem, text: string): WorkItem {
+  const trimmed = text.trim();
+  if (!trimmed) return item;
+  return { ...item, acceptanceCriteria: [...item.acceptanceCriteria, trimmed] };
+}
+
+/**
+ * Remove the criterion at `idx` from a work item's acceptanceCriteria array.
+ * Returns a new WorkItem — does not mutate the original.
+ * If `idx` is out of range, returns the original item unchanged.
+ */
+export function removeCriterion(item: WorkItem, idx: number): WorkItem {
+  if (idx < 0 || idx >= item.acceptanceCriteria.length) return item;
+  return {
+    ...item,
+    acceptanceCriteria: item.acceptanceCriteria.filter((_, i) => i !== idx),
+  };
+}
+
+/**
  * Stable-sort work items by their highest-priority linked event.
  *
  * Ordering: must_have > should_have > could_have > unranked
@@ -481,18 +505,16 @@ export class BreakdownEditor extends LitElement {
   }
 
   private _addCriterion(item: WorkItem) {
-    const text = (this._newCriterionByItem[item.id] ?? '').trim();
-    if (!text) return;
-    const updated: WorkItem = { ...item, acceptanceCriteria: [...item.acceptanceCriteria, text] };
+    const text = this._newCriterionByItem[item.id] ?? '';
+    const updated = addCriterion(item, text);
+    if (updated === item) return; // nothing to add (empty text)
     this._emitUpdated(updated);
     this._newCriterionByItem = { ...this._newCriterionByItem, [item.id]: '' };
   }
 
   private _removeCriterion(item: WorkItem, idx: number) {
-    const updated: WorkItem = {
-      ...item,
-      acceptanceCriteria: item.acceptanceCriteria.filter((_, i) => i !== idx),
-    };
+    const updated = removeCriterion(item, idx);
+    if (updated === item) return; // idx out of range
     this._emitUpdated(updated);
   }
 
