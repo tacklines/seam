@@ -182,7 +182,7 @@ export type DriftDetected = z.infer<typeof DriftDetectedSchema>;
 export const PrioritySetSchema = baseEventSchema.extend({
   type: z.literal("PrioritySet"),
   eventName: z.string(),
-  tier: z.enum(["must_have", "should_have", "could_have"]) satisfies z.ZodType<PriorityTier>,
+  tier: z.enum(["must_have", "should_have", "could_have", "wont_have"]) satisfies z.ZodType<PriorityTier>,
   participantId: z.string(),
 });
 export type PrioritySet = z.infer<typeof PrioritySetSchema>;

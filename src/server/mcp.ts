@@ -1246,7 +1246,7 @@ async function main(): Promise<void> {
       inputSchema: {
         sessionCode: z.string().describe('Session join code'),
         eventName: z.string().describe('Name of the domain event to prioritize'),
-        tier: z.enum(['must_have', 'should_have', 'could_have']).describe('Priority tier for the event'),
+        tier: z.enum(['must_have', 'should_have', 'could_have', 'wont_have']).describe('Priority tier for the event'),
       },
     },
     ({ sessionCode, eventName, tier }) => {
@@ -2186,7 +2186,7 @@ async function main(): Promise<void> {
           'Set a priority tier for a domain event in your session. Idempotent — calling again updates the tier.',
         inputSchema: {
           eventName: z.string().describe('Name of the domain event to prioritize'),
-          tier: z.enum(['must_have', 'should_have', 'could_have']).describe('Priority tier for the event'),
+          tier: z.enum(['must_have', 'should_have', 'could_have', 'wont_have']).describe('Priority tier for the event'),
         },
       },
       ({ eventName, tier }) => {

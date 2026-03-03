@@ -21,7 +21,7 @@ export interface RankedEvent {
   direction: 'inbound' | 'outbound' | 'internal';
   crossRefs: number;
   compositeScore: number;
-  tier: 'must_have' | 'should_have' | 'could_have';
+  tier: 'must_have' | 'should_have' | 'could_have' | 'wont_have';
 }
 
 /** Agent suggestion shown in the suggestion banner area. */
@@ -31,12 +31,13 @@ export interface PrioritySuggestion {
 }
 
 type SortKey = 'score' | 'aggregate' | 'confidence' | 'crossRefs';
-type TierKey = 'must_have' | 'should_have' | 'could_have';
+type TierKey = 'must_have' | 'should_have' | 'could_have' | 'wont_have';
 
 const TIER_LABELS: Record<TierKey, string> = {
   must_have: 'Must Have',
   should_have: 'Should Have',
   could_have: 'Could Have',
+  wont_have: "Won't Have",
 };
 
 const CONFIDENCE_ORDER: Record<string, number> = {
@@ -146,8 +147,14 @@ export class PriorityView extends LitElement {
     /* ---- Board mode ---- */
     .board {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 1rem;
+    }
+
+    @media (max-width: 900px) {
+      .board {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
 
     @media (max-width: 700px) {
@@ -190,6 +197,12 @@ export class PriorityView extends LitElement {
       background: #f3f4f6;
       color: #374151;
       border-bottom: 1px solid #e5e7eb;
+    }
+
+    .column.wont-have .column-header {
+      background: #fee2e2;
+      color: #991b1b;
+      border-bottom: 1px solid #fecaca;
     }
 
     .column-count {
@@ -424,6 +437,58 @@ export class PriorityView extends LitElement {
       background: #f3f4f6;
       color: #374151;
     }
+
+    .tier-pill.wont_have {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    /* ---- Capacity warning ---- */
+    .capacity-warning {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      padding: 0.625rem 0.875rem;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: var(--sl-border-radius-medium, 8px);
+      font-size: var(--sl-font-size-small, 0.875rem);
+      color: #92400e;
+      margin-bottom: 1rem;
+    }
+
+    .capacity-warning-text {
+      flex: 1;
+      line-height: 1.4;
+    }
+
+    .capacity-hint {
+      display: block;
+      font-size: 0.75rem;
+      color: #b45309;
+      margin-top: 0.25rem;
+    }
+
+    .capacity-dismiss {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      color: #b45309;
+      padding: 0.125rem;
+      border-radius: 3px;
+    }
+
+    .capacity-dismiss:hover {
+      background: #fef3c7;
+    }
+
+    .capacity-dismiss:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500, #3b82f6);
+      outline-offset: 2px;
+    }
   `;
 
   @property({ type: Array }) events: RankedEvent[] = [];
@@ -437,6 +502,7 @@ export class PriorityView extends LitElement {
   @state() private _draggingName: string | null = null;
   @state() private _dragOverTier: TierKey | null = null;
   @state() private _announcement = '';
+  @state() private _dismissedCapacityWarning = false;
 
   // Keyboard drag state
   @state() private _kbActiveCard: string | null = null;
@@ -556,7 +622,7 @@ export class PriorityView extends LitElement {
 
   // ---- Keyboard card movement ----
   private _handleCardKeydown(e: KeyboardEvent, evName: string, currentTier: TierKey) {
-    const TIERS: TierKey[] = ['must_have', 'should_have', 'could_have'];
+    const TIERS: TierKey[] = ['must_have', 'should_have', 'could_have', 'wont_have'];
 
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
@@ -676,8 +742,13 @@ export class PriorityView extends LitElement {
 
   private _renderColumn(tier: TierKey) {
     const tierEvents = this._eventsForTier(tier);
-    const label = t(`priorityView.column.${tier === 'must_have' ? 'mustHave' : tier === 'should_have' ? 'shouldHave' : 'couldHave'}`);
-    const colClass = tier.replace('_', '-');
+    const label = t(`priorityView.column.${
+      tier === 'must_have' ? 'mustHave'
+      : tier === 'should_have' ? 'shouldHave'
+      : tier === 'could_have' ? 'couldHave'
+      : 'wontHave'
+    }`);
+    const colClass = tier === 'wont_have' ? 'wont-have' : tier.replace('_', '-');
     const isDragOver = this._dragOverTier === tier;
     const colAriaLabel = t('priorityView.ariaLabel.column', {
       tier: label,
@@ -707,8 +778,31 @@ export class PriorityView extends LitElement {
     `;
   }
 
+  private _renderCapacityWarning() {
+    if (this._dismissedCapacityWarning) return nothing;
+    const total = this.events.length;
+    if (total < 3) return nothing;
+    const mustCount = this._eventsForTier('must_have').length;
+    if (mustCount / total <= 0.6) return nothing;
+
+    return html`
+      <div class="capacity-warning" role="alert">
+        <span class="capacity-warning-text">
+          ${t('priorityView.capacityWarning', { mustCount: String(mustCount), total: String(total) })}
+          <span class="capacity-hint">${t('priorityView.capacityWarningHint')}</span>
+        </span>
+        <button
+          class="capacity-dismiss"
+          aria-label="${t('priorityView.capacityWarningDismiss')}"
+          @click=${() => { this._dismissedCapacityWarning = true; }}
+        >&times;</button>
+      </div>
+    `;
+  }
+
   private _renderBoard() {
     return html`
+      ${this._renderCapacityWarning()}
       <div
         class="board"
         role="region"
@@ -717,6 +811,7 @@ export class PriorityView extends LitElement {
         ${this._renderColumn('must_have')}
         ${this._renderColumn('should_have')}
         ${this._renderColumn('could_have')}
+        ${this._renderColumn('wont_have')}
       </div>
     `;
   }

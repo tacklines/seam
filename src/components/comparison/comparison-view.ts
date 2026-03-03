@@ -371,7 +371,7 @@ export class ComparisonView extends LitElement {
     const matchedCount = assumptionMatches.filter((m) => m.matched).length;
 
     // Sort conflicts by priority tier if priorities are available
-    const tierOrder: EventPriority['tier'][] = ['must_have', 'should_have', 'could_have'];
+    const tierOrder: EventPriority['tier'][] = ['must_have', 'should_have', 'could_have', 'wont_have'];
     const priorityMap = new Map(this.priorities.map((p) => [p.eventName, tierOrder.indexOf(p.tier)]));
     const sortedConflicts = this.priorities.length > 0
       ? [...conflicts].sort((a, b) => {

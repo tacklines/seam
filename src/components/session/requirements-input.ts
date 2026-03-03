@@ -127,6 +127,76 @@ export class RequirementsInput extends LitElement {
       font-size: var(--sl-font-size-x-small);
       color: var(--sl-color-neutral-500);
     }
+
+    /* ---- Mode toggle ---- */
+    .mode-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .mode-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--sl-color-neutral-500);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .mode-btn {
+      padding: 0.25rem 0.75rem;
+      border: 1px solid var(--sl-color-neutral-200);
+      background: #fff;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--sl-color-neutral-600);
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .mode-btn.active {
+      background: var(--sl-color-primary-600);
+      border-color: var(--sl-color-primary-600);
+      color: #fff;
+    }
+
+    .mode-btn:hover:not(.active) {
+      border-color: var(--sl-color-primary-400);
+      color: var(--sl-color-primary-700);
+    }
+
+    .mode-btn:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500);
+      outline-offset: 2px;
+    }
+
+    /* ---- JTBD form ---- */
+    .jtbd-form {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      padding: 0.75rem;
+      background: var(--sl-color-primary-50, #eff6ff);
+      border: 1px solid var(--sl-color-primary-200, #bfdbfe);
+      border-radius: var(--sl-border-radius-medium);
+      margin-bottom: 0.75rem;
+    }
+
+    .jtbd-label {
+      font-size: var(--sl-font-size-small);
+      color: var(--sl-color-primary-700);
+      font-style: italic;
+      white-space: nowrap;
+    }
+
+    .jtbd-field {
+      flex: 1;
+      min-width: 120px;
+    }
   `;
 
   /** Current list of requirements. */
@@ -139,6 +209,16 @@ export class RequirementsInput extends LitElement {
   @property({ type: String, attribute: 'participant-id' }) participantId = '';
 
   @state() private _inputValue = '';
+  @state() private _mode: 'plain' | 'jtbd' = 'plain';
+  @state() private _jtbdSituation = '';
+  @state() private _jtbdMotivation = '';
+  @state() private _jtbdOutcome = '';
+
+  private get _jtbdValid(): boolean {
+    return this._jtbdSituation.trim().length > 0
+      && this._jtbdMotivation.trim().length > 0
+      && this._jtbdOutcome.trim().length > 0;
+  }
 
   private _handleInputKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
@@ -173,6 +253,28 @@ export class RequirementsInput extends LitElement {
     });
   }
 
+  private _submitJtbd() {
+    if (!this._jtbdValid) return;
+    const text = `When ${this._jtbdSituation.trim()}, I want to ${this._jtbdMotivation.trim()}, so I can ${this._jtbdOutcome.trim()}.`;
+    this.dispatchEvent(
+      new CustomEvent('requirement-added', {
+        detail: { text },
+        bubbles: true,
+        composed: true,
+      })
+    );
+    this._jtbdSituation = '';
+    this._jtbdMotivation = '';
+    this._jtbdOutcome = '';
+  }
+
+  private _onJtbdKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      this._submitJtbd();
+    }
+  }
+
   private _removeRequirement(id: string) {
     this.dispatchEvent(
       new CustomEvent('requirement-removed', {
@@ -199,6 +301,18 @@ export class RequirementsInput extends LitElement {
     return html`
       <div class="requirements-container">
         <h2 class="heading">${t('requirements-input.heading')}</h2>
+
+        <div class="mode-row">
+          <span class="mode-label">${t('requirements-input.mode.label')}</span>
+          <button
+            class="mode-btn ${this._mode === 'plain' ? 'active' : ''}"
+            @click=${() => { this._mode = 'plain'; }}
+          >${t('requirements-input.mode.plain')}</button>
+          <button
+            class="mode-btn ${this._mode === 'jtbd' ? 'active' : ''}"
+            @click=${() => { this._mode = 'jtbd'; }}
+          >${t('requirements-input.mode.jtbd')}</button>
+        </div>
 
         ${count === 0
           ? html`<p class="empty-state">${t('requirements-input.empty-state')}</p>`
@@ -244,6 +358,49 @@ export class RequirementsInput extends LitElement {
   }
 
   private _renderInput() {
+    if (this._mode === 'jtbd') {
+      return html`
+        <div class="jtbd-form">
+          <span class="jtbd-label">${t('requirements-input.jtbd.when')}</span>
+          <sl-input
+            class="jtbd-field"
+            size="small"
+            placeholder="${t('requirements-input.jtbd.situationPlaceholder')}"
+            .value=${this._jtbdSituation}
+            aria-label="When (situation or trigger)"
+            @sl-input=${(e: Event) => { this._jtbdSituation = (e.target as HTMLInputElement & { value: string }).value; }}
+            @keydown=${this._onJtbdKeydown}
+          ></sl-input>
+          <span class="jtbd-label">${t('requirements-input.jtbd.iWantTo')}</span>
+          <sl-input
+            class="jtbd-field"
+            size="small"
+            placeholder="${t('requirements-input.jtbd.motivationPlaceholder')}"
+            .value=${this._jtbdMotivation}
+            aria-label="I want to (motivation)"
+            @sl-input=${(e: Event) => { this._jtbdMotivation = (e.target as HTMLInputElement & { value: string }).value; }}
+            @keydown=${this._onJtbdKeydown}
+          ></sl-input>
+          <span class="jtbd-label">${t('requirements-input.jtbd.soICan')}</span>
+          <sl-input
+            class="jtbd-field"
+            size="small"
+            placeholder="${t('requirements-input.jtbd.outcomePlaceholder')}"
+            .value=${this._jtbdOutcome}
+            aria-label="So I can (expected outcome)"
+            @sl-input=${(e: Event) => { this._jtbdOutcome = (e.target as HTMLInputElement & { value: string }).value; }}
+            @keydown=${this._onJtbdKeydown}
+          ></sl-input>
+          <sl-button
+            size="small"
+            variant="primary"
+            ?disabled=${!this._jtbdValid}
+            @click=${this._submitJtbd}
+          >${t('requirements-input.jtbd.add')}</sl-button>
+        </div>
+      `;
+    }
+
     return html`
       <div class="input-row">
         <sl-input

@@ -310,7 +310,7 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
 } as const satisfies SessionConfig;
 
 /** Priority tier for ranking domain events — MoSCoW-style classification */
-export type PriorityTier = 'must_have' | 'should_have' | 'could_have';
+export type PriorityTier = 'must_have' | 'should_have' | 'could_have' | 'wont_have';
 
 /**
  * Per-participant priority record for a single domain event.
@@ -348,7 +348,7 @@ export interface CompositeScore {
   eventName: string;
   /**
    * Score computed from tier weights and vote balance:
-   * - Tier weights: must_have=3, should_have=2, could_have=1
+   * - Tier weights: must_have=3, should_have=2, could_have=1, wont_have=0
    * - Averaged across participants then adjusted by net vote (upvotes - downvotes)
    */
   compositeScore: number;

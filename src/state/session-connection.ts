@@ -109,7 +109,7 @@ function openSocket(code: string): void {
           version?: number;
           // PrioritySet
           eventName?: string;
-          tier?: 'must_have' | 'should_have' | 'could_have';
+          tier?: 'must_have' | 'should_have' | 'could_have' | 'wont_have';
           // VoteCast
           direction?: 'up' | 'down';
           // WorkItemCreated
@@ -184,7 +184,7 @@ function handleDomainEvent(event: {
   version?: number;
   // PrioritySet
   eventName?: string;
-  tier?: 'must_have' | 'should_have' | 'could_have';
+  tier?: 'must_have' | 'should_have' | 'could_have' | 'wont_have';
   // VoteCast
   direction?: 'up' | 'down';
   // WorkItemCreated

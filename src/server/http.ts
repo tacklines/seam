@@ -459,8 +459,8 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: 'participantId, eventName, and tier are required' });
         return;
       }
-      if (body.tier !== 'must_have' && body.tier !== 'should_have' && body.tier !== 'could_have') {
-        sendJson(res, 400, { error: 'tier must be must_have, should_have, or could_have' });
+      if (body.tier !== 'must_have' && body.tier !== 'should_have' && body.tier !== 'could_have' && body.tier !== 'wont_have') {
+        sendJson(res, 400, { error: 'tier must be must_have, should_have, could_have, or wont_have' });
         return;
       }
       const service = new PrioritizationService((c) => store.getSession(c));

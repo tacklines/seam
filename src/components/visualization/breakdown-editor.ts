@@ -37,14 +37,38 @@ function generateId(): string {
   return `wi-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+const CRITERIA_TEMPLATES = {
+  o11y: [
+    'Metrics, logs, and traces added for new behavior',
+    'Dashboard updated for new events',
+    'Alerts configured for critical paths',
+  ],
+  a11y: [
+    'Keyboard navigable with visible focus indicators',
+    'Screen reader announcements for dynamic content (aria-live)',
+    'Color contrast ≥ 4.5:1 for normal text, ≥ 3:1 for large text',
+  ],
+  security: [
+    'Input validated server-side',
+    'No sensitive data in logs or traces',
+    'Least-privilege authorization enforced',
+  ],
+  i18n: [
+    'All user-facing strings extracted to i18n resource bundle',
+    'UI handles text expansion (German-style 30% longer strings)',
+    'Date/time formatted with Intl API, stored as UTC',
+  ],
+} as const;
+
 /**
  * Numeric rank for each priority tier — lower number = higher priority.
- * Events with no assigned tier get rank 3 (lowest).
+ * Events with no assigned tier get rank 4 (lowest).
  */
 const TIER_RANK: Record<PriorityTier, number> = {
   must_have: 0,
   should_have: 1,
   could_have: 2,
+  wont_have: 3,
 };
 
 /**
@@ -84,7 +108,7 @@ export function sortWorkItemsByPriority(
   items: WorkItem[],
   eventTiers: ReadonlyMap<string, PriorityTier>,
 ): WorkItem[] {
-  const unranked = Object.keys(TIER_RANK).length; // 3 — sentinel for "no tier"
+  const unranked = Object.keys(TIER_RANK).length; // 4 — sentinel for "no tier"
 
   const rank = (item: WorkItem): number => {
     let best = unranked;
@@ -422,6 +446,46 @@ export class BreakdownEditor extends LitElement {
       margin-top: 0.5rem;
       text-align: right;
     }
+
+    /* ---- Acceptance criteria templates ---- */
+    .criteria-templates {
+      display: flex;
+      gap: 0.375rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+
+    .template-label {
+      font-size: 0.6875rem;
+      color: var(--sl-color-neutral-500, #6b7280);
+      margin-bottom: 0.25rem;
+    }
+
+    .template-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.1875rem 0.5rem;
+      border: 1px solid var(--sl-color-neutral-200, #e5e7eb);
+      background: var(--sl-color-neutral-50, #f9fafb);
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: var(--sl-color-neutral-600, #4b5563);
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .template-btn:hover {
+      border-color: var(--sl-color-primary-400, #60a5fa);
+      background: var(--sl-color-primary-50, #eff6ff);
+      color: var(--sl-color-primary-700, #1d4ed8);
+    }
+
+    .template-btn:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500, #3b82f6);
+      outline-offset: 2px;
+    }
   `;
 
   /** Work items currently in the breakdown. */
@@ -518,6 +582,16 @@ export class BreakdownEditor extends LitElement {
     this._emitUpdated(updated);
   }
 
+  private _addCriteriaTemplate(item: WorkItem, templateKey: 'o11y' | 'a11y' | 'security' | 'i18n') {
+    let updated = item;
+    for (const criterion of CRITERIA_TEMPLATES[templateKey]) {
+      updated = addCriterion(updated, criterion);
+    }
+    if (updated !== item) {
+      this._emitUpdated(updated);
+    }
+  }
+
   private _acceptSuggestion(suggestion: WorkItemSuggestion) {
     const item: WorkItem = {
       id: generateId(),
@@ -579,6 +653,17 @@ export class BreakdownEditor extends LitElement {
             </ul>
           `
           : nothing}
+        <div class="template-label">${t('breakdownEditor.template.label')}</div>
+        <div class="criteria-templates">
+          ${(['o11y', 'a11y', 'security', 'i18n'] as const).map((key) => html`
+            <button
+              class="template-btn"
+              title="${t(`breakdownEditor.template.${key}.tooltip`)}"
+              aria-label="${t(`breakdownEditor.template.${key}.ariaLabel`)}"
+              @click=${() => this._addCriteriaTemplate(item, key)}
+            >${t(`breakdownEditor.template.${key}`)}</button>
+          `)}
+        </div>
         <sl-input
           size="small"
           placeholder="${t('breakdownEditor.acceptanceCriteriaPlaceholder')}"

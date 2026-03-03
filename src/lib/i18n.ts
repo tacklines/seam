@@ -534,6 +534,16 @@ export const messages: Record<string, string> = {
   'requirements-input.delete-label': 'Delete requirement {{index}}',
   'requirements-input.empty-state': 'Start by describing what your system needs to do. Type a requirement below and press Enter.',
   'requirements-input.count': '{{count}} requirement{{count}} captured',
+  'requirements-input.mode.label': 'Format:',
+  'requirements-input.mode.plain': 'Plain text',
+  'requirements-input.mode.jtbd': 'Jobs-to-be-Done',
+  'requirements-input.jtbd.when': 'When',
+  'requirements-input.jtbd.iWantTo': ', I want to',
+  'requirements-input.jtbd.soICan': ', so I can',
+  'requirements-input.jtbd.situationPlaceholder': '...situation or trigger...',
+  'requirements-input.jtbd.motivationPlaceholder': '...motivation...',
+  'requirements-input.jtbd.outcomePlaceholder': '...expected outcome...',
+  'requirements-input.jtbd.add': 'Add',
 
   // ---------------------------------------------------------------------------
   // draft-editor
@@ -559,6 +569,10 @@ export const messages: Record<string, string> = {
   'priorityView.column.mustHave': 'Must Have',
   'priorityView.column.shouldHave': 'Should Have',
   'priorityView.column.couldHave': 'Could Have',
+  'priorityView.column.wontHave': "Won't Have",
+  'priorityView.capacityWarning': "Must Have exceeds 60% ({{mustCount}} of {{total}} events). MoSCoW guidance: keep Must Have under 60% of the timebox.",
+  'priorityView.capacityWarningHint': 'Consider moving some items to Should Have.',
+  'priorityView.capacityWarningDismiss': 'Dismiss capacity warning',
   'priorityView.empty': 'No events to rank yet.',
   'priorityView.emptyHint': 'Load perspective YAML files to populate events.',
   'priorityView.emptyColumn': 'No events in this tier',
@@ -633,6 +647,19 @@ export const messages: Record<string, string> = {
   'breakdownEditor.complexity.L': 'L — Large',
   'breakdownEditor.complexity.XL': 'XL — Extra Large',
   'breakdownEditor.workItemCard.ariaLabel': 'Work item: {{title}}, complexity {{complexity}}',
+  'breakdownEditor.template.label': 'Add standard criteria:',
+  'breakdownEditor.template.o11y': '+ O11y',
+  'breakdownEditor.template.o11y.tooltip': 'Add observability acceptance criteria (metrics, logs, traces)',
+  'breakdownEditor.template.o11y.ariaLabel': 'Add observability acceptance criteria',
+  'breakdownEditor.template.a11y': '+ A11y',
+  'breakdownEditor.template.a11y.tooltip': 'Add accessibility acceptance criteria (keyboard nav, screen reader, contrast)',
+  'breakdownEditor.template.a11y.ariaLabel': 'Add accessibility acceptance criteria',
+  'breakdownEditor.template.security': '+ Security',
+  'breakdownEditor.template.security.tooltip': 'Add security acceptance criteria (validation, no sensitive data, least privilege)',
+  'breakdownEditor.template.security.ariaLabel': 'Add security acceptance criteria',
+  'breakdownEditor.template.i18n': '+ i18n',
+  'breakdownEditor.template.i18n.tooltip': 'Add internationalization acceptance criteria (string extraction, text expansion, Intl API)',
+  'breakdownEditor.template.i18n.ariaLabel': 'Add internationalization acceptance criteria',
 
   // ---------------------------------------------------------------------------
   // coverage-matrix

@@ -332,7 +332,7 @@ export class AppShell extends LitElement {
   @state() private _workItems: WorkItem[] = [];
   @state() private _resolutions: ConflictResolution[] = [];
   @state() private _flaggedItems: UnresolvedItem[] = [];
-  @state() private _tierOverrides = new Map<string, 'must_have' | 'should_have' | 'could_have'>();
+  @state() private _tierOverrides = new Map<string, 'must_have' | 'should_have' | 'could_have' | 'wont_have'>();
   @state() private _votes: Record<string, { up: string[]; down: string[] }> = {};
   @state() private _pendingApprovals: PendingApproval[] = [];
   @state() private _activeDraft: Draft | null = null;
@@ -1215,7 +1215,7 @@ export class AppShell extends LitElement {
   private _onPriorityChanged(e: CustomEvent<{ eventName: string; tier: string }>) {
     const { eventName, tier } = e.detail;
     const newOverrides = new Map(this._tierOverrides);
-    newOverrides.set(eventName, tier as 'must_have' | 'should_have' | 'could_have');
+    newOverrides.set(eventName, tier as 'must_have' | 'should_have' | 'could_have' | 'wont_have');
     this._tierOverrides = newOverrides;
   }
 

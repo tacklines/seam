@@ -19,6 +19,7 @@ const TIER_WEIGHTS: Record<PriorityTier, number> = {
   must_have: 3,
   should_have: 2,
   could_have: 1,
+  wont_have: 0,
 };
 
 export class PrioritizationService {
