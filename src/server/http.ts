@@ -7,7 +7,7 @@ import { presenceTracker } from './presence.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
 import { compareFiles } from '../lib/comparison.js';
-import { suggestResolutionHeuristic } from '../lib/integration-heuristics.js';
+import { suggestResolutionHeuristic, runIntegrationChecks, deriveOverallStatus } from '../lib/integration-heuristics.js';
 import { deriveFromRequirements } from '../lib/requirement-derivation.js';
 import type { Requirement } from '../schema/types.js';
 import { PrioritizationService } from '../contexts/prioritization/prioritization-service.js';
@@ -536,6 +536,165 @@ const server = http.createServer(async (req, res) => {
         };
       });
       sendJson(res, 200, { events });
+      return;
+    }
+
+    // GET /api/sessions/:code/resolutions — List all recorded conflict resolutions
+    const resolutionsMatch = url.match(/^\/api\/sessions\/([^/]+)\/resolutions$/);
+    if (method === 'GET' && resolutionsMatch) {
+      const code = resolutionsMatch[1];
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      sendJson(res, 200, { resolutions: session.jam?.resolutions ?? [] });
+      return;
+    }
+
+    // GET /api/sessions/:code/ownership — List ownership assignments
+    const ownershipMatch = url.match(/^\/api\/sessions\/([^/]+)\/ownership$/);
+    if (method === 'GET' && ownershipMatch) {
+      const code = ownershipMatch[1];
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      sendJson(res, 200, { ownership: session.jam?.ownershipMap ?? [] });
+      return;
+    }
+
+    // GET /api/sessions/:code/contracts — Get contracts
+    const contractsMatch = url.match(/^\/api\/sessions\/([^/]+)\/contracts$/);
+    if (method === 'GET' && contractsMatch) {
+      const code = contractsMatch[1];
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      sendJson(res, 200, { contracts: session.contracts });
+      return;
+    }
+
+    // POST /api/sessions/:code/compliance — Check compliance
+    const complianceMatch = url.match(/^\/api\/sessions\/([^/]+)\/compliance$/);
+    if (method === 'POST' && complianceMatch) {
+      const code = complianceMatch[1];
+      const body = await parseBody(req) as { participantId?: string };
+      if (typeof body.participantId !== 'string' || !body.participantId) {
+        sendJson(res, 400, { error: 'participantId is required' });
+        return;
+      }
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const files = store.getSessionFiles(code);
+      const allAggregates = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.aggregate))),
+      ];
+      const allEventNames = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.name))),
+      ];
+      const checks = runIntegrationChecks({
+        jam: session.jam,
+        contracts: session.contracts,
+        workItems: session.workItems,
+        allAggregates,
+        allEventNames,
+      });
+      sendJson(res, 200, { checks });
+      return;
+    }
+
+    // GET /api/sessions/:code/integration-report — Get integration report
+    const integrationReportMatch = url.match(/^\/api\/sessions\/([^/]+)\/integration-report$/);
+    if (method === 'GET' && integrationReportMatch) {
+      const code = integrationReportMatch[1];
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      sendJson(res, 200, { report: session.integrationReport });
+      return;
+    }
+
+    // POST /api/sessions/:code/integration-check — Run integration check
+    const integrationCheckMatch = url.match(/^\/api\/sessions\/([^/]+)\/integration-check$/);
+    if (method === 'POST' && integrationCheckMatch) {
+      const code = integrationCheckMatch[1];
+      const body = await parseBody(req) as { participantId?: string };
+      if (typeof body.participantId !== 'string' || !body.participantId) {
+        sendJson(res, 400, { error: 'participantId is required' });
+        return;
+      }
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const files = store.getSessionFiles(code);
+      const allAggregates = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.aggregate))),
+      ];
+      const allEventNames = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.name))),
+      ];
+      const checks = runIntegrationChecks({
+        jam: session.jam,
+        contracts: session.contracts,
+        workItems: session.workItems,
+        allAggregates,
+        allEventNames,
+      });
+      const status = deriveOverallStatus(checks);
+      sendJson(res, 200, { checks, status });
+      return;
+    }
+
+    // GET /api/sessions/:code/go-no-go — Get go/no-go verdict
+    const goNoGoMatch = url.match(/^\/api\/sessions\/([^/]+)\/go-no-go$/);
+    if (method === 'GET' && goNoGoMatch) {
+      const code = goNoGoMatch[1];
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      if (!session.contracts) {
+        sendJson(res, 200, { verdict: 'pending', summary: 'No contracts defined yet' });
+        return;
+      }
+      const files = store.getSessionFiles(code);
+      const allAggregates = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.aggregate))),
+      ];
+      const allEventNames = [
+        ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.name))),
+      ];
+      const checks = runIntegrationChecks({
+        jam: session.jam,
+        contracts: session.contracts,
+        workItems: session.workItems,
+        allAggregates,
+        allEventNames,
+      });
+      const overallStatus = deriveOverallStatus(checks);
+      const verdict: 'go' | 'no-go' | 'pending' = overallStatus === 'fail' ? 'no-go' : overallStatus === 'pass' ? 'go' : 'pending';
+      const failCount = checks.filter((c) => c.status === 'fail').length;
+      const warnCount = checks.filter((c) => c.status === 'warn').length;
+      const passCount = checks.filter((c) => c.status === 'pass').length;
+      const summary =
+        verdict === 'go'
+          ? `GO: All ${passCount} check(s) passed — session is ready to ship`
+          : verdict === 'no-go'
+          ? `NO-GO: ${failCount} check(s) failed — resolve issues before shipping`
+          : `PENDING: ${warnCount} warning(s) present — review before shipping`;
+      sendJson(res, 200, { verdict, summary, checks });
       return;
     }
 
