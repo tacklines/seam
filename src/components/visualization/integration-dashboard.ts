@@ -453,6 +453,8 @@ export class IntegrationDashboard extends LitElement {
             icon="rocket-takeoff"
             heading="${t('emptyState.integration.heading')}"
             description="${t('emptyState.integration.description')}"
+            actionLabel="${t('emptyState.integration.action')}"
+            @empty-state-action=${this._handleRunChecks}
           ></empty-state>
         </div>
       `;

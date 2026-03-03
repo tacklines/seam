@@ -889,6 +889,12 @@ export const messages: Record<string, string> = {
   'emptyState.integration.description': 'Run integration checks to verify all contracts are satisfied',
   'emptyState.comparison.heading': 'Load two or more files to compare',
   'emptyState.comparison.description': 'Load perspective YAML files from multiple roles to see conflicts, shared events, and overlaps',
+  'emptyState.comparison.action': 'Upload your files',
+  'emptyState.priority.action': 'Go to your events',
+  'emptyState.breakdown.action': 'Add a work item',
+  'emptyState.agreements.action': 'Go to your events',
+  'emptyState.contracts.action': 'Resolve conflicts first',
+  'emptyState.integration.action': 'Run checks',
 
   // ---------------------------------------------------------------------------
   // phase-ribbon

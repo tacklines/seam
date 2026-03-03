@@ -95,6 +95,8 @@ export class AgreementsTab extends LitElement {
               icon="people"
               heading="${t('emptyState.agreements.heading')}"
               description="${t('emptyState.agreements.description')}"
+              actionLabel="${t('emptyState.agreements.action')}"
+              @empty-state-action=${this._onEmptyStateAction}
             ></empty-state>`
         }
         <ownership-grid
@@ -112,6 +114,16 @@ export class AgreementsTab extends LitElement {
         ></flag-manager>
       </help-tip>
     `;
+  }
+
+  private _onEmptyStateAction() {
+    this.dispatchEvent(
+      new CustomEvent('suggestion-navigate', {
+        detail: { panel: 'cards' },
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   private _onItemFlagged(e: CustomEvent<{ item: UnresolvedItem }>) {

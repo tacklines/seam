@@ -673,6 +673,8 @@ export class BreakdownEditor extends LitElement {
               icon="diagram-3"
               heading="${t('emptyState.breakdown.heading')}"
               description="${t('emptyState.breakdown.description')}"
+              actionLabel="${t('emptyState.breakdown.action')}"
+              @empty-state-action=${this._addWorkItem}
             ></empty-state>
           `
           : html`

@@ -476,6 +476,16 @@ export class PriorityView extends LitElement {
     return sorted;
   }
 
+  private _onEmptyStateAction() {
+    this.dispatchEvent(
+      new CustomEvent('suggestion-navigate', {
+        detail: { panel: 'cards' },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
   // ---- Mode toggle ----
   private _toggleMode(e: Event) {
     const checked = (e.target as HTMLInputElement).checked;
@@ -859,6 +869,8 @@ export class PriorityView extends LitElement {
               icon="sort-up"
               heading="${t('emptyState.priority.heading')}"
               description="${t('emptyState.priority.description')}"
+              actionLabel="${t('emptyState.priority.action')}"
+              @empty-state-action=${this._onEmptyStateAction}
             ></empty-state>
           `
         : isTableMode

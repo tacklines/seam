@@ -339,6 +339,16 @@ export class ComparisonView extends LitElement {
     downloadAsFile(JSON.stringify(data, null, 2), 'comparison-export.json');
   }
 
+  private _onEmptyStateAction() {
+    this.dispatchEvent(
+      new CustomEvent('suggestion-navigate', {
+        detail: { panel: 'cards' },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
   render() {
     if (this.files.length < 2) {
       return html`
@@ -346,6 +356,8 @@ export class ComparisonView extends LitElement {
           icon="files"
           heading="${t('emptyState.comparison.heading')}"
           description="${t('emptyState.comparison.description')}"
+          actionLabel="${t('emptyState.comparison.action')}"
+          @empty-state-action=${this._onEmptyStateAction}
         ></empty-state>
       `;
     }

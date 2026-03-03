@@ -237,6 +237,16 @@ export class ContractDiff extends LitElement {
     return _noopService.diff(this.bundleBefore, this.bundleAfter);
   }
 
+  private _onEmptyStateAction() {
+    this.dispatchEvent(
+      new CustomEvent('suggestion-navigate', {
+        detail: { panel: 'agreements' },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
   override render() {
     if (!this.bundleBefore || !this.bundleAfter) {
       return html`
@@ -244,6 +254,8 @@ export class ContractDiff extends LitElement {
           icon="file-earmark-check"
           heading="${t('emptyState.contracts.heading')}"
           description="${t('emptyState.contracts.description')}"
+          actionLabel="${t('emptyState.contracts.action')}"
+          @empty-state-action=${this._onEmptyStateAction}
         ></empty-state>
       `;
     }
