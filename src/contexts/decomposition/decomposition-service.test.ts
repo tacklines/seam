@@ -24,6 +24,7 @@ function makeSession(code: string = 'TEST01'): Session {
     workItems: [],
     workItemDependencies: [],
     drafts: [],
+    requirements: [],
   };
 }
 

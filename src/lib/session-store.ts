@@ -17,6 +17,8 @@ import {
   WorkItem,
   WorkItemDependency,
   Draft,
+  Requirement,
+  RequirementStatus,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -29,6 +31,7 @@ import type {
   SessionResumed,
   SessionClosed,
   SessionConfigured,
+  RequirementSubmitted,
 } from '../contexts/session/domain-events.js';
 import { AgreementService } from '../contexts/agreement/agreement-service.js';
 import { canTransition, transitionSession } from './session-state-machine.js';
@@ -68,6 +71,7 @@ export interface Session {
   workItems: WorkItem[];
   workItemDependencies: WorkItemDependency[];
   drafts: Draft[];
+  requirements: Requirement[];
 }
 
 export interface SerializedSession {
@@ -86,6 +90,7 @@ export interface SerializedSession {
   workItems: WorkItem[];
   workItemDependencies: WorkItemDependency[];
   drafts: Draft[];
+  requirements: Requirement[];
 }
 
 function generateCode(): string {
@@ -118,6 +123,7 @@ export function serializeSession(session: Session): SerializedSession {
     workItems: session.workItems,
     workItemDependencies: session.workItemDependencies,
     drafts: session.drafts,
+    requirements: session.requirements,
   };
 }
 
@@ -138,6 +144,7 @@ export function deserializeSession(serialized: SerializedSession): Session {
     workItems: serialized.workItems ?? [],
     workItemDependencies: serialized.workItemDependencies ?? [],
     drafts: serialized.drafts ?? [],
+    requirements: serialized.requirements ?? [],
   };
 }
 
@@ -181,6 +188,7 @@ export class SessionStore {
       workItems: [],
       workItemDependencies: [],
       drafts: [],
+      requirements: [],
     };
 
     this.sessions.set(code, session);
@@ -572,6 +580,100 @@ export class SessionStore {
       filename: sub.fileName,
       role: session.participants.get(sub.participantId)?.name ?? 'unknown',
       data: sub.data,
+    }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Requirements CRUD
+  // ---------------------------------------------------------------------------
+
+  addRequirement(
+    code: string,
+    participantId: string,
+    statement: string,
+    tags?: string[]
+  ): Requirement | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    if (session.status === 'closed') return null;
+    if (!session.participants.has(participantId)) return null;
+
+    const now = new Date().toISOString();
+    const requirement: Requirement = {
+      id: generateId(),
+      statement,
+      authorId: participantId,
+      status: 'draft',
+      priority: 0,
+      tags: tags ?? [],
+      derivedEvents: [],
+      derivedAssumptions: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    session.requirements.push(requirement);
+
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'RequirementSubmitted',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: now,
+        requirementId: requirement.id,
+        statement,
+        authorId: participantId,
+        ...(tags && tags.length > 0 ? { tags } : {}),
+      } satisfies RequirementSubmitted);
+    }
+
+    return requirement;
+  }
+
+  updateRequirement(
+    code: string,
+    requirementId: string,
+    updates: Partial<Pick<Requirement, 'status' | 'priority' | 'tags' | 'derivedEvents' | 'derivedAssumptions'>>
+  ): Requirement | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    if (session.status === 'closed') return null;
+
+    const requirement = session.requirements.find(r => r.id === requirementId);
+    if (!requirement) return null;
+
+    if (updates.status !== undefined) requirement.status = updates.status;
+    if (updates.priority !== undefined) requirement.priority = updates.priority;
+    if (updates.tags !== undefined) requirement.tags = updates.tags;
+    if (updates.derivedEvents !== undefined) requirement.derivedEvents = updates.derivedEvents;
+    if (updates.derivedAssumptions !== undefined) requirement.derivedAssumptions = updates.derivedAssumptions;
+    requirement.updatedAt = new Date().toISOString();
+
+    return requirement;
+  }
+
+  getRequirements(code: string): Requirement[] {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return [];
+    return session.requirements;
+  }
+
+  getRequirementCoverage(
+    code: string,
+    requirementId?: string
+  ): { reqId: string; eventCount: number; fulfilled: boolean }[] {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return [];
+
+    let requirements = session.requirements;
+    if (requirementId) {
+      requirements = requirements.filter(r => r.id === requirementId);
+    }
+
+    return requirements.map(r => ({
+      reqId: r.id,
+      eventCount: r.derivedEvents.length,
+      fulfilled: r.derivedEvents.length > 0,
     }));
   }
 }

@@ -33,6 +33,7 @@ function sessionToJson(session: Session): SerializedSession {
     workItems: session.workItems,
     workItemDependencies: session.workItemDependencies,
     drafts: session.drafts,
+    requirements: session.requirements,
   };
 }
 
@@ -56,6 +57,7 @@ function sessionFromJson(json: SerializedSession): Session {
     workItems: json.workItems ?? [],
     workItemDependencies: json.workItemDependencies ?? [],
     drafts: json.drafts ?? [],
+    requirements: json.requirements ?? [],
   };
 }
 

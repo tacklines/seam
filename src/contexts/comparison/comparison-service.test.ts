@@ -84,6 +84,7 @@ function makeSession(
     workItems: [],
     workItemDependencies: [],
     drafts: [],
+    requirements: [],
   };
 }
 

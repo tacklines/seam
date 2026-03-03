@@ -5,6 +5,7 @@ import type {
   DelegationLevel,
   SessionConfig,
   CandidateEventsFile,
+  RequirementStatus,
 } from "../../schema/types.js";
 
 // ---------------------------------------------------------------------------
@@ -333,7 +334,35 @@ export const ActivityPulsedSchema = baseEventSchema.extend({
 export type ActivityPulsed = z.infer<typeof ActivityPulsedSchema>;
 
 // ---------------------------------------------------------------------------
-// Discriminated union — all 28 domain events
+// Requirement Context events (requirements-driven funnel)
+// ---------------------------------------------------------------------------
+
+export const RequirementSubmittedSchema = baseEventSchema.extend({
+  type: z.literal("RequirementSubmitted"),
+  requirementId: z.string(),
+  statement: z.string(),
+  authorId: z.string(),
+  tags: z.array(z.string()).optional(),
+});
+export type RequirementSubmitted = z.infer<typeof RequirementSubmittedSchema>;
+
+export const EventsDerivedSchema = baseEventSchema.extend({
+  type: z.literal("EventsDerived"),
+  requirementId: z.string(),
+  suggestedEvents: z.array(z.string()),
+});
+export type EventsDerived = z.infer<typeof EventsDerivedSchema>;
+
+export const DerivedEventsAcceptedSchema = baseEventSchema.extend({
+  type: z.literal("DerivedEventsAccepted"),
+  requirementId: z.string(),
+  acceptedEvents: z.array(z.string()),
+  participantId: z.string(),
+});
+export type DerivedEventsAccepted = z.infer<typeof DerivedEventsAcceptedSchema>;
+
+// ---------------------------------------------------------------------------
+// Discriminated union — all 31 domain events
 // ---------------------------------------------------------------------------
 
 export const DomainEventSchema = z.discriminatedUnion("type", [
@@ -365,6 +394,9 @@ export const DomainEventSchema = z.discriminatedUnion("type", [
   ApprovalRequestedSchema,
   ApprovalDecidedSchema,
   ActivityPulsedSchema,
+  RequirementSubmittedSchema,
+  EventsDerivedSchema,
+  DerivedEventsAcceptedSchema,
 ]);
 
 export type DomainEvent = z.infer<typeof DomainEventSchema>;
@@ -404,4 +436,7 @@ export const DOMAIN_EVENT_TYPES: readonly DomainEventType[] = [
   "ApprovalRequested",
   "ApprovalDecided",
   "ActivityPulsed",
+  "RequirementSubmitted",
+  "EventsDerived",
+  "DerivedEventsAccepted",
 ] as const;

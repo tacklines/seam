@@ -450,3 +450,38 @@ export interface PendingApproval {
   /** ISO 8601 timestamp when this approval request expires (default: 24 hours after creation) */
   expiresAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Requirements — requirements-driven funnel (Phase 0 / Spark)
+// ---------------------------------------------------------------------------
+
+/** Lifecycle status of a requirement */
+export type RequirementStatus = 'draft' | 'active' | 'fulfilled' | 'deferred';
+
+/**
+ * A business requirement submitted by a participant.
+ * Requirements drive event derivation and provide traceability
+ * from business needs to domain events.
+ */
+export interface Requirement {
+  /** Unique identifier */
+  id: string;
+  /** The requirement statement in plain language */
+  statement: string;
+  /** Participant who authored this requirement */
+  authorId: string;
+  /** Current lifecycle status */
+  status: RequirementStatus;
+  /** Optional priority (higher = more important) */
+  priority: number;
+  /** Free-form classification tags */
+  tags: string[];
+  /** Domain event names derived from this requirement */
+  derivedEvents: string[];
+  /** Boundary assumption IDs derived from this requirement */
+  derivedAssumptions: string[];
+  /** ISO 8601 timestamp when the requirement was created */
+  createdAt: string;
+  /** ISO 8601 timestamp when the requirement was last updated */
+  updatedAt: string;
+}
