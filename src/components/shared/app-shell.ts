@@ -921,6 +921,7 @@ export class AppShell extends LitElement {
                 .workItems=${this._workItems}
                 .suggestions=${this._computeDecompositionSuggestions(files).filter(s => !this._dismissedDecompositionIds.has(s.id))}
                 .activeDraft=${this._activeDraft}
+                .priorities=${this._tierOverrides}
                 @work-item-created=${this._onWorkItemCreated}
                 @work-item-updated=${this._onWorkItemUpdated}
                 @suggestion-accepted=${this._onDecompositionSuggestionAccepted}

@@ -2,7 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { t } from '../../lib/i18n.js';
-import type { WorkItem, WorkItemComplexity } from '../../schema/types.js';
+import type { WorkItem, WorkItemComplexity, PriorityTier } from '../../schema/types.js';
 
 import '@shoelace-style/shoelace/dist/components/input/input.js';
 import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
@@ -35,6 +35,50 @@ const COMPLEXITY_OPTIONS: WorkItemComplexity[] = ['S', 'M', 'L', 'XL'];
 
 function generateId(): string {
   return `wi-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/**
+ * Numeric rank for each priority tier — lower number = higher priority.
+ * Events with no assigned tier get rank 3 (lowest).
+ */
+const TIER_RANK: Record<PriorityTier, number> = {
+  must_have: 0,
+  should_have: 1,
+  could_have: 2,
+};
+
+/**
+ * Stable-sort work items by their highest-priority linked event.
+ *
+ * Ordering: must_have > should_have > could_have > unranked
+ * Items within the same effective tier preserve original order.
+ *
+ * @param items - Work items to sort
+ * @param eventTiers - Map from event name to its priority tier
+ */
+export function sortWorkItemsByPriority(
+  items: WorkItem[],
+  eventTiers: ReadonlyMap<string, PriorityTier>,
+): WorkItem[] {
+  const unranked = Object.keys(TIER_RANK).length; // 3 — sentinel for "no tier"
+
+  const rank = (item: WorkItem): number => {
+    let best = unranked;
+    for (const ev of item.linkedEvents) {
+      const tier = eventTiers.get(ev);
+      if (tier !== undefined) {
+        const r = TIER_RANK[tier];
+        if (r < best) best = r;
+      }
+    }
+    return best;
+  };
+
+  // Attach original indices for stable sort, then sort, then strip indices.
+  return items
+    .map((item, idx) => ({ item, idx, rank: rank(item) }))
+    .sort((a, b) => a.rank - b.rank || a.idx - b.idx)
+    .map(({ item }) => item);
 }
 
 /**
@@ -362,6 +406,11 @@ export class BreakdownEditor extends LitElement {
   @property({ type: Array }) events: string[] = [];
   /** Agent-suggested work items shown as ghost cards. */
   @property({ type: Array }) suggestions: WorkItemSuggestion[] = [];
+  /**
+   * Map from event name to its priority tier.
+   * Used to pre-sort work items so higher-priority items appear first.
+   */
+  @property({ attribute: false }) priorities: ReadonlyMap<string, PriorityTier> = new Map();
 
   @state() private _newCriterionByItem: Record<string, string> = {};
 
@@ -650,6 +699,7 @@ export class BreakdownEditor extends LitElement {
 
   override render() {
     const hasItems = this.workItems.length > 0 || this.suggestions.length > 0;
+    const sortedItems = sortWorkItemsByPriority(this.workItems, this.priorities);
 
     return html`
       <div>
@@ -678,7 +728,7 @@ export class BreakdownEditor extends LitElement {
           : html`
             <div class="items-list" role="list" aria-label="${t('breakdownEditor.title')}">
               ${repeat(
-                this.workItems,
+                sortedItems,
                 (item) => item.id,
                 (item) => this._renderWorkItemCard(item)
               )}

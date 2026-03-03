@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { t } from '../../lib/i18n.js';
-import type { WorkItem, Draft } from '../../schema/types.js';
+import type { WorkItem, Draft, PriorityTier } from '../../schema/types.js';
 import type { WorkItemSuggestion } from '../visualization/breakdown-editor.js';
 
 import '../visualization/breakdown-editor.js';
@@ -58,6 +58,11 @@ export class BreakdownTab extends LitElement {
   @property({ attribute: false }) suggestions: WorkItemSuggestion[] = [];
   /** The currently active draft, or null if none */
   @property({ attribute: false }) activeDraft: Draft | null = null;
+  /**
+   * Map from event name to its priority tier.
+   * Forwarded to breakdown-editor to pre-sort work items by priority.
+   */
+  @property({ attribute: false }) priorities: ReadonlyMap<string, PriorityTier> = new Map();
 
   render() {
     return html`
@@ -67,6 +72,7 @@ export class BreakdownTab extends LitElement {
             .events=${this.events}
             .workItems=${this.workItems}
             .suggestions=${this.suggestions}
+            .priorities=${this.priorities}
             @work-item-created=${(e: Event) =>
               this.dispatchEvent(
                 new CustomEvent('work-item-created', {
