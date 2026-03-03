@@ -547,9 +547,11 @@ export class AppShell extends LitElement {
 
   render() {
     const { files } = this.appState;
+    const inSession = !!this.appState.sessionState;
 
     if (files.length === 0) {
       if (this._soloMode) {
+        // Solo mode: full-screen drop zone
         return html`
           <file-drop-zone mode="hero"></file-drop-zone>
           ${this._renderPasteToast()}
@@ -558,16 +560,21 @@ export class AppShell extends LitElement {
           <error-boundary></error-boundary>
         `;
       }
-      return html`
-        <session-lobby
-          @session-files-ready=${this._onSessionFilesReady}
-          @solo-mode=${this._onSoloMode}
-        ></session-lobby>
-        ${this._renderPasteToast()}
-        ${this._renderShortcutReference()}
-        ${this._renderSettingsDialog()}
-        <error-boundary></error-boundary>
-      `;
+      if (!inSession) {
+        // No session yet: show lobby to create/join
+        return html`
+          <session-lobby
+            @session-files-ready=${this._onSessionFilesReady}
+            @solo-mode=${this._onSoloMode}
+          ></session-lobby>
+          ${this._renderPasteToast()}
+          ${this._renderShortcutReference()}
+          ${this._renderSettingsDialog()}
+          <error-boundary></error-boundary>
+        `;
+      }
+      // In session but no files yet: fall through to renderAppLayout()
+      // which shows the Spark Canvas as the primary content area
     }
 
     return html`${this.renderAppLayout()}${this._renderPasteToast()}${this._renderShortcutReference()}${this._renderSettingsDialog()}${this._renderSectionSettingsDrawer()}<error-boundary></error-boundary>`;
