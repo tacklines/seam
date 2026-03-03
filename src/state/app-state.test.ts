@@ -23,6 +23,7 @@ const makeSession = (code = 'ABC123'): ActiveSession => ({
   workItemDependencies: [],
   ownershipMap: [],
   resolutions: [],
+  requirements: [],
 });
 
 describe('Store — session state', () => {

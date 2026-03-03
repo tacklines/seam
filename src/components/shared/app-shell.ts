@@ -844,7 +844,11 @@ export class AppShell extends LitElement {
             <spark-canvas
               ?collapsed=${this._sparkCollapsed}
               session-code="${this.appState.sessionState?.code ?? ''}"
+              .requirements=${this.appState.sessionState?.session?.requirements ?? []}
               @spark-submit=${this._onSparkSubmit}
+              @requirement-added=${this._onRequirementAdded}
+              @requirement-removed=${this._onRequirementRemoved}
+              @derive-events-requested=${this._onDeriveEventsRequested}
             ></spark-canvas>
           </help-tip>
           <sl-tab-group @sl-tab-show=${this.onTabChange} @open-settings=${this._onOpenSectionSettings}>
@@ -1301,6 +1305,76 @@ export class AppShell extends LitElement {
         console.error('spark-canvas session submit error:', err.message);
         store.addError('spark-canvas.yaml', [err.message]);
       });
+    }
+  }
+
+  private async _onRequirementAdded(e: CustomEvent<{ text: string }>) {
+    const sessionState = this.appState.sessionState;
+    if (!sessionState) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions/${sessionState.code}/requirements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          participantId: sessionState.participantId,
+          statement: e.detail.text,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.error('requirement submit failed:', body || `HTTP ${res.status}`);
+        return;
+      }
+
+      const data = await res.json() as { requirement: import('../../schema/types.js').Requirement };
+      store.addRequirement(data.requirement);
+    } catch (err) {
+      console.error('requirement submit error:', (err as Error).message);
+    }
+  }
+
+  private _onRequirementRemoved(e: CustomEvent<{ id: string }>) {
+    const sessionState = this.appState.sessionState;
+    if (!sessionState) return;
+    // Optimistic local removal — server doesn't have a delete endpoint yet
+    store.removeRequirement(e.detail.id);
+  }
+
+  private async _onDeriveEventsRequested(e: CustomEvent<{ requirements: import('../../schema/types.js').Requirement[] }>) {
+    const sessionState = this.appState.sessionState;
+    if (!sessionState) return;
+
+    const requirementIds = e.detail.requirements.map(r => r.id);
+    if (requirementIds.length === 0) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions/${sessionState.code}/requirements/derive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requirementIds }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.error('derive events failed:', body || `HTTP ${res.status}`);
+        return;
+      }
+
+      const data = await res.json() as {
+        results: Array<{
+          requirementId: string;
+          events: Array<{ name: string; aggregate: string; trigger: string; confidence: string; payload: unknown[]; integration: { direction: string } }>;
+          assumptions: unknown[];
+        }>;
+      };
+
+      // Log derivation results for downstream consumers
+      console.log('[requirements] derivation complete:', data.results.length, 'requirement(s) processed,',
+        data.results.reduce((sum, r) => sum + r.events.length, 0), 'event(s) derived');
+    } catch (err) {
+      console.error('derive events error:', (err as Error).message);
     }
   }
 

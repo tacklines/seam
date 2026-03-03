@@ -29,6 +29,7 @@ function makeSession(overrides: Partial<ActiveSession> = {}): ActiveSession {
     workItemDependencies: [],
     ownershipMap: [],
     resolutions: [],
+    requirements: [],
     ...overrides,
   };
 }

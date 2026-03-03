@@ -8,6 +8,7 @@ import type {
   WorkItemDependency,
   OwnershipAssignment,
   ConflictResolution,
+  Requirement,
 } from '../schema/types.js';
 import type { Confidence, Direction } from '../schema/types.js';
 import { saveSessionIdentity, clearSessionIdentity } from '../lib/session-identity-persistence.js';
@@ -35,6 +36,7 @@ export interface ActiveSession {
   workItemDependencies: WorkItemDependency[];
   ownershipMap: OwnershipAssignment[];
   resolutions: ConflictResolution[];
+  requirements: Requirement[];
 }
 
 export interface SessionState {
@@ -199,6 +201,38 @@ class Store {
     this.state = {
       ...this.state,
       sessionState: { ...this.state.sessionState, session },
+    };
+    this.notify({ type: 'session-updated' });
+  }
+
+  addRequirement(requirement: Requirement) {
+    if (!this.state.sessionState) return;
+    const session = this.state.sessionState.session;
+    this.state = {
+      ...this.state,
+      sessionState: {
+        ...this.state.sessionState,
+        session: {
+          ...session,
+          requirements: [...session.requirements, requirement],
+        },
+      },
+    };
+    this.notify({ type: 'session-updated' });
+  }
+
+  removeRequirement(requirementId: string) {
+    if (!this.state.sessionState) return;
+    const session = this.state.sessionState.session;
+    this.state = {
+      ...this.state,
+      sessionState: {
+        ...this.state.sessionState,
+        session: {
+          ...session,
+          requirements: session.requirements.filter(r => r.id !== requirementId),
+        },
+      },
     };
     this.notify({ type: 'session-updated' });
   }
