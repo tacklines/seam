@@ -1814,6 +1814,73 @@ async function main(): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
+  // Phase I — Spark tools (Requirements)
+  // -------------------------------------------------------------------------
+
+  // Tool: submit_requirement
+  server.registerTool(
+    'submit_requirement',
+    {
+      description: 'Submit a high-level requirement or goal for the session. Used during the Spark phase to capture what the system should do before event modeling begins.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        participantId: z.string().describe('Participant submitting the requirement'),
+        statement: z.string().describe('Plain-language requirement statement'),
+        tags: z.array(z.string()).optional().describe('Optional tags for categorization'),
+      },
+    },
+    ({ sessionCode, participantId, statement, tags }) => {
+      const session = sessionStore.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      if (!session.participants.has(participantId)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Participant not found in session' }) }],
+          isError: true,
+        };
+      }
+      const requirement = sessionStore.addRequirement(sessionCode, participantId, statement, tags);
+      if (!requirement) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Failed to submit requirement — session may be closed' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ requirementId: requirement.id }) }],
+      };
+    }
+  );
+
+  // Tool: list_requirements
+  server.registerTool(
+    'list_requirements',
+    {
+      description: 'List all requirements submitted to a session.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+      },
+    },
+    ({ sessionCode }) => {
+      const session = sessionStore.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const requirements = sessionStore.getRequirements(sessionCode);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ requirements }) }],
+      };
+    }
+  );
+
+  // -------------------------------------------------------------------------
   // Scoped tools — only registered when --session/--user are provided
   // -------------------------------------------------------------------------
 

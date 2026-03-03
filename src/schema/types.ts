@@ -429,6 +429,23 @@ export interface Draft {
 }
 
 /**
+ * A high-level requirement or goal declared during the Spark phase.
+ * Requirements capture what the system should do before any event modeling begins.
+ */
+export interface Requirement {
+  /** Unique identifier for the requirement */
+  id: string;
+  /** Participant who submitted this requirement */
+  participantId: string;
+  /** Plain-language statement of the requirement */
+  statement: string;
+  /** Optional tags for categorization (e.g., "must-have", "performance") */
+  tags: string[];
+  /** ISO 8601 timestamp when the requirement was submitted */
+  createdAt: string;
+}
+
+/**
  * Agent autonomy level for the current session.
  * Controls how much agents can do without explicit human approval.
  */
