@@ -1066,6 +1066,7 @@ export const messages: Record<string, string> = {
   'presence.viewingMultiple': '{{names}} are viewing',
 
   // ---------------------------------------------------------------------------
+<<<<<<< HEAD
   // derivation-review-panel
   // ---------------------------------------------------------------------------
   'derivationReview.heading': 'Review Suggested Events',
@@ -1078,6 +1079,18 @@ export const messages: Record<string, string> = {
   'derivationReview.confidence.possible': 'Possible',
   'derivationReview.eventListLabel': 'Suggested events for {{requirement}}',
   'derivationReview.allDismissed': 'All suggestions dismissed.',
+
+  // requirements-panel
+  // ---------------------------------------------------------------------------
+  'requirements.heading': 'Requirements ({{count}})',
+  'requirements.eventCount': '{{count}} events',
+  'requirements.eventCountSingular': '1 event',
+  'requirements.needsDerivation': 'Needs derivation',
+  'requirements.status.draft': 'Draft',
+  'requirements.status.active': 'Active',
+  'requirements.status.fulfilled': 'Fulfilled',
+  'requirements.status.deferred': 'Deferred',
+  'requirements.empty': 'No requirements yet. Add a requirement to get started.',
 
   // ---------------------------------------------------------------------------
   // glossary — plain-language definitions for DDD / boundary negotiation terms
