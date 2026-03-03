@@ -5,6 +5,7 @@ import type {
   DelegationLevel,
   SessionConfig,
   CandidateEventsFile,
+  RequirementStatus,
 } from "../../schema/types.js";
 
 // ---------------------------------------------------------------------------
@@ -321,6 +322,19 @@ export const ApprovalDecidedSchema = baseEventSchema.extend({
 export type ApprovalDecided = z.infer<typeof ApprovalDecidedSchema>;
 
 // ---------------------------------------------------------------------------
+// Requirement derivation events
+// ---------------------------------------------------------------------------
+
+export const DerivedEventsAcceptedSchema = baseEventSchema.extend({
+  type: z.literal("DerivedEventsAccepted"),
+  requirementId: z.string(),
+  participantId: z.string(),
+  eventNames: z.array(z.string()),
+  newStatus: z.enum(["draft", "active", "completed"]) satisfies z.ZodType<RequirementStatus>,
+});
+export type DerivedEventsAccepted = z.infer<typeof DerivedEventsAcceptedSchema>;
+
+// ---------------------------------------------------------------------------
 // Presence / activity events (real-time collaboration awareness)
 // ---------------------------------------------------------------------------
 
@@ -333,7 +347,7 @@ export const ActivityPulsedSchema = baseEventSchema.extend({
 export type ActivityPulsed = z.infer<typeof ActivityPulsedSchema>;
 
 // ---------------------------------------------------------------------------
-// Discriminated union — all 28 domain events
+// Discriminated union — all 29 domain events
 // ---------------------------------------------------------------------------
 
 export const DomainEventSchema = z.discriminatedUnion("type", [
@@ -365,6 +379,7 @@ export const DomainEventSchema = z.discriminatedUnion("type", [
   ApprovalRequestedSchema,
   ApprovalDecidedSchema,
   ActivityPulsedSchema,
+  DerivedEventsAcceptedSchema,
 ]);
 
 export type DomainEvent = z.infer<typeof DomainEventSchema>;
@@ -404,4 +419,5 @@ export const DOMAIN_EVENT_TYPES: readonly DomainEventType[] = [
   "ApprovalRequested",
   "ApprovalDecided",
   "ActivityPulsed",
+  "DerivedEventsAccepted",
 ] as const;

@@ -26,6 +26,7 @@ function makeSession(code = 'ABCDEF', jam: JamArtifacts | null = null): Session 
     workItems: [],
     workItemDependencies: [],
     drafts: [],
+    requirements: [],
   };
 }
 

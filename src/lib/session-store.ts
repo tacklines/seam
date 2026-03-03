@@ -17,6 +17,7 @@ import {
   WorkItem,
   WorkItemDependency,
   Draft,
+  Requirement,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -68,6 +69,7 @@ export interface Session {
   workItems: WorkItem[];
   workItemDependencies: WorkItemDependency[];
   drafts: Draft[];
+  requirements: Requirement[];
 }
 
 export interface SerializedSession {
@@ -86,6 +88,7 @@ export interface SerializedSession {
   workItems: WorkItem[];
   workItemDependencies: WorkItemDependency[];
   drafts: Draft[];
+  requirements: Requirement[];
 }
 
 function generateCode(): string {
@@ -118,6 +121,7 @@ export function serializeSession(session: Session): SerializedSession {
     workItems: session.workItems,
     workItemDependencies: session.workItemDependencies,
     drafts: session.drafts,
+    requirements: session.requirements,
   };
 }
 
@@ -138,6 +142,7 @@ export function deserializeSession(serialized: SerializedSession): Session {
     workItems: serialized.workItems ?? [],
     workItemDependencies: serialized.workItemDependencies ?? [],
     drafts: serialized.drafts ?? [],
+    requirements: serialized.requirements ?? [],
   };
 }
 
@@ -181,6 +186,7 @@ export class SessionStore {
       workItems: [],
       workItemDependencies: [],
       drafts: [],
+      requirements: [],
     };
 
     this.sessions.set(code, session);
@@ -552,6 +558,34 @@ export class SessionStore {
       }
       return true;
     });
+  }
+
+  addRequirement(code: string, requirement: Requirement): Requirement | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    session.requirements.push(requirement);
+    return requirement;
+  }
+
+  updateRequirement(code: string, requirementId: string, updates: Partial<Requirement>): Requirement | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    const req = session.requirements.find((r) => r.id === requirementId);
+    if (!req) return null;
+    Object.assign(req, updates, { updatedAt: new Date().toISOString() });
+    return req;
+  }
+
+  getRequirements(code: string): Requirement[] {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return [];
+    return session.requirements;
+  }
+
+  getRequirement(code: string, requirementId: string): Requirement | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    return session.requirements.find((r) => r.id === requirementId) ?? null;
   }
 
   loadSessions(sessions: Map<string, Session>): void {

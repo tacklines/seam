@@ -837,10 +837,11 @@ describe("DOMAIN_EVENT_TYPES", () => {
     "ApprovalRequested",
     "ApprovalDecided",
     "ActivityPulsed",
+    "DerivedEventsAccepted",
   ];
 
-  it("contains all 28 event types", () => {
-    expect(DOMAIN_EVENT_TYPES).toHaveLength(28);
+  it("contains all 29 event types", () => {
+    expect(DOMAIN_EVENT_TYPES).toHaveLength(29);
   });
 
   it("contains every expected type", () => {

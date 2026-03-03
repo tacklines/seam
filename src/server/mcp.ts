@@ -5,7 +5,7 @@ import { sessionStore, eventStore } from './store.js';
 import { parseAndValidate } from '../lib/yaml-validator-server.js';
 import { computePrepStatus, computeSessionStatus } from '../lib/prep-completeness.js';
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
-import { serializeSession } from '../lib/session-store.js';
+import { serializeSession, generateId } from '../lib/session-store.js';
 import { compareFiles } from '../lib/comparison.js';
 import { DraftService } from '../contexts/draft/draft-service.js';
 import { ArtifactService } from '../contexts/artifact/artifact-service.js';
@@ -19,6 +19,8 @@ import {
   deriveOverallStatus,
 } from '../lib/integration-heuristics.js';
 import { suggestEventsHeuristic } from '../lib/event-suggestions.js';
+import { deriveFromRequirements } from '../lib/requirement-derivation.js';
+import type { DerivedEventsAccepted } from '../contexts/session/domain-events.js';
 
 // ---------------------------------------------------------------------------
 // Module-level progress store for report_progress (Phase VI — Build)
@@ -1138,6 +1140,132 @@ async function main(): Promise<void> {
       const events = suggestEventsHeuristic(description, existingEvents ?? []);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ events }) }],
+      };
+    }
+  );
+
+  // Tool: derive_events
+  server.registerTool(
+    'derive_events',
+    {
+      description:
+        'Derive candidate domain events from natural-language requirements. ' +
+        'Returns heuristic suggestions grouped by requirement, filtered against existing session events.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        requirementIds: z.array(z.string()).describe('IDs of requirements to derive events from'),
+      },
+    },
+    ({ sessionCode, requirementIds }) => {
+      const session = sessionStore.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      const requirements = sessionStore.getRequirements(sessionCode);
+      const requestedReqs = requirements.filter((r) => requirementIds.includes(r.id));
+
+      // Validate all requested IDs exist
+      const foundIds = new Set(requestedReqs.map((r) => r.id));
+      const missingIds = requirementIds.filter((id) => !foundIds.has(id));
+      if (missingIds.length > 0) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ error: `Requirement IDs not found: ${missingIds.join(', ')}` }),
+          }],
+          isError: true,
+        };
+      }
+
+      // Collect existing domain events from all submissions
+      const existingEvents = session.submissions.flatMap((s) => s.data.domain_events);
+
+      const suggestions = deriveFromRequirements(requestedReqs, existingEvents);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ suggestions }) }],
+      };
+    }
+  );
+
+  // Tool: accept_derived_events
+  server.registerTool(
+    'accept_derived_events',
+    {
+      description:
+        'Accept derived events for a requirement — records the accepted event names ' +
+        'on the requirement and transitions its status to active if it was draft.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        participantId: z.string().describe('Participant accepting the events'),
+        requirementId: z.string().describe('ID of the requirement to update'),
+        eventNames: z.array(z.string()).describe('Names of derived events to accept'),
+      },
+    },
+    ({ sessionCode, participantId, requirementId, eventNames }) => {
+      const session = sessionStore.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      if (!session.participants.has(participantId)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Participant not in session' }) }],
+          isError: true,
+        };
+      }
+
+      const requirement = sessionStore.getRequirement(sessionCode, requirementId);
+      if (!requirement) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ error: `Requirement "${requirementId}" not found` }),
+          }],
+          isError: true,
+        };
+      }
+
+      // Merge accepted events (deduplicate)
+      const existingSet = new Set(requirement.derivedEvents);
+      for (const name of eventNames) {
+        existingSet.add(name);
+      }
+      const newDerivedEvents = [...existingSet];
+
+      // Transition status to active if currently draft
+      const newStatus = requirement.status === 'draft' ? 'active' : requirement.status;
+
+      sessionStore.updateRequirement(sessionCode, requirementId, {
+        derivedEvents: newDerivedEvents,
+        status: newStatus,
+      });
+
+      // Emit domain event
+      if (eventStore) {
+        eventStore.append(session.code, {
+          type: 'DerivedEventsAccepted',
+          eventId: generateId(),
+          sessionCode: session.code,
+          timestamp: new Date().toISOString(),
+          requirementId,
+          participantId,
+          eventNames,
+          newStatus,
+        } satisfies DerivedEventsAccepted);
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ submittedCount: eventNames.length }),
+        }],
       };
     }
   );

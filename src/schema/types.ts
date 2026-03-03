@@ -428,6 +428,30 @@ export interface Draft {
   publishedAt: string | null;
 }
 
+/** Status of a requirement in its lifecycle */
+export type RequirementStatus = 'draft' | 'active' | 'completed';
+
+/**
+ * A natural-language requirement that can be used to derive candidate domain events.
+ * Requirements serve as the bridge between stakeholder needs and domain modeling.
+ */
+export interface Requirement {
+  /** Unique identifier for the requirement */
+  id: string;
+  /** Human-readable requirement text */
+  text: string;
+  /** Participant who submitted this requirement */
+  participantId: string;
+  /** Lifecycle status */
+  status: RequirementStatus;
+  /** Names of domain events derived from this requirement */
+  derivedEvents: string[];
+  /** ISO timestamp when this requirement was created */
+  createdAt: string;
+  /** ISO timestamp when this requirement was last updated */
+  updatedAt: string;
+}
+
 /**
  * Agent autonomy level for the current session.
  * Controls how much agents can do without explicit human approval.
