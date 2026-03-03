@@ -1066,7 +1066,6 @@ export const messages: Record<string, string> = {
   'presence.viewingMultiple': '{{names}} are viewing',
 
   // ---------------------------------------------------------------------------
-<<<<<<< HEAD
   // derivation-review-panel
   // ---------------------------------------------------------------------------
   'derivationReview.heading': 'Review Suggested Events',
