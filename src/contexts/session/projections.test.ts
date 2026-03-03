@@ -78,7 +78,7 @@ const artifactSubmitted = evt<DomainEvent>({
   artifactId: "art-1",
   participantId: "p-bob",
   fileName: "alice-prep.yaml",
-  artifactType: "storm-prep",
+  artifactType: "candidate-events",
   version: 1,
 });
 
@@ -90,7 +90,7 @@ const artifactSubmittedV2 = evt<DomainEvent>({
   artifactId: "art-2",
   participantId: "p-bob",
   fileName: "bob-prep.yaml",
-  artifactType: "storm-prep",
+  artifactType: "candidate-events",
   version: 1,
 });
 
@@ -306,7 +306,7 @@ describe("ArtifactTimelineProjection", () => {
         artifactId: "art-1",
         participantId: "p-bob",
         fileName: "alice-prep.yaml",
-        type: "storm-prep",
+        type: "candidate-events",
         version: 1,
         timestamp: "2026-02-28T10:20:00.000Z",
       });

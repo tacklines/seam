@@ -41,7 +41,7 @@ function makeEvent(
     artifactId: "art-1",
     participantId: "p-1",
     fileName: "file.yaml",
-    artifactType: "storm-prep",
+    artifactType: "candidate-events",
     version: 1,
     ...overrides,
   } as DomainEvent;
