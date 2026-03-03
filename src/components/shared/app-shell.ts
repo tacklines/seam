@@ -36,6 +36,8 @@ import { connectSession } from '../../state/session-connection.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 import { resetAllTips } from '../../lib/first-run.js';
+import { deriveFromRequirements } from '../../lib/requirement-derivation.js';
+import { syncRequirementToServer, removeRequirementFromServer } from '../../lib/requirement-sync.js';
 
 const API_BASE = 'http://localhost:3002';
 
@@ -814,7 +816,7 @@ export class AppShell extends LitElement {
               `;
             })()}
             ${(() => {
-              const reqs = this.appState.sessionState?.session?.requirements ?? [];
+              const reqs = this.appState.requirements;
               return reqs.length > 0 ? html`
                 <sl-divider></sl-divider>
                 <requirements-panel
@@ -858,7 +860,7 @@ export class AppShell extends LitElement {
             <spark-canvas
               ?collapsed=${this._sparkCollapsed}
               session-code="${this.appState.sessionState?.code ?? ''}"
-              .requirements=${this.appState.sessionState?.session?.requirements ?? []}
+              .requirements=${this.appState.requirements}
               @spark-submit=${this._onSparkSubmit}
               @requirement-added=${this._onRequirementAdded}
               @requirement-removed=${this._onRequirementRemoved}
@@ -1340,86 +1342,80 @@ export class AppShell extends LitElement {
   }
 
   private async _onRequirementAdded(e: CustomEvent<{ text: string }>) {
+    const text = e.detail.text;
     const sessionState = this.appState.sessionState;
-    if (!sessionState) return;
 
-    try {
-      const res = await fetch(`${API_BASE}/api/sessions/${sessionState.code}/requirements`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          participantId: sessionState.participantId,
-          statement: e.detail.text,
-        }),
-      });
+    // Create requirement locally first
+    const localReq: import('../../schema/types.js').Requirement = {
+      id: crypto.randomUUID(),
+      statement: text,
+      authorId: sessionState?.participantId ?? 'local',
+      status: 'draft',
+      priority: 0,
+      tags: [],
+      derivedEvents: [],
+      derivedAssumptions: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    store.addRequirement(localReq);
 
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        console.error('requirement submit failed:', body || `HTTP ${res.status}`);
-        return;
+    // Sync to server in background if session connected
+    if (sessionState) {
+      const result = await syncRequirementToServer(
+        sessionState.code,
+        sessionState.participantId,
+        text,
+      );
+      if (result?.requirement) {
+        store.updateRequirementId(localReq.id, result.requirement.id);
       }
-
-      const data = await res.json() as { requirement: import('../../schema/types.js').Requirement };
-      store.addRequirement(data.requirement);
-    } catch (err) {
-      console.error('requirement submit error:', (err as Error).message);
     }
   }
 
   private _onRequirementRemoved(e: CustomEvent<{ id: string }>) {
+    const id = e.detail.id;
+    store.removeRequirement(id);
+
+    // Sync to server in background if session connected
     const sessionState = this.appState.sessionState;
-    if (!sessionState) return;
-    store.removeRequirement(e.detail.id);
+    if (sessionState) {
+      removeRequirementFromServer(sessionState.code, id);
+    }
   }
 
-  private async _onDeriveEventsRequested(e: CustomEvent<{ requirements: import('../../schema/types.js').Requirement[] }>) {
-    const sessionState = this.appState.sessionState;
-    if (!sessionState) return;
+  private _onDeriveEventsRequested(e: CustomEvent<{ requirements: import('../../schema/types.js').Requirement[] }>) {
+    const requirements = e.detail.requirements;
+    if (requirements.length === 0) return;
 
-    const requirementIds = e.detail.requirements.map(r => r.id);
-    if (requirementIds.length === 0) return;
+    // Get existing event names from loaded files for dedup
+    const existingEvents = this.appState.files
+      .flatMap(f => f.data.domain_events ?? [])
+      .map(ev => ev.name);
 
-    try {
-      const res = await fetch(`${API_BASE}/api/sessions/${sessionState.code}/requirements/derive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requirementIds }),
-      });
+    // Run derivation locally (pure function)
+    const results = deriveFromRequirements(
+      requirements.map(r => ({ id: r.id, statement: r.statement })),
+      existingEvents,
+    );
 
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        console.error('derive events failed:', body || `HTTP ${res.status}`);
-        return;
-      }
+    // Map to suggestion groups for the review panel
+    const reqMap = new Map(requirements.map(r => [r.id, r]));
+    const suggestions = results
+      .filter(r => r.events.length > 0)
+      .map(r => ({
+        requirementId: r.requirementId,
+        requirementText: reqMap.get(r.requirementId)?.statement ?? '',
+        events: r.events.map(ev => ({
+          name: ev.name,
+          description: `${ev.aggregate} — ${ev.trigger}`,
+          confidence: ev.confidence,
+          trigger: ev.trigger,
+          stateChange: ev.aggregate,
+        })),
+      }));
 
-      const data = await res.json() as {
-        results: Array<{
-          requirementId: string;
-          events: Array<{ name: string; aggregate: string; trigger: string; confidence: string; payload: unknown[]; integration: { direction: string } }>;
-          assumptions: unknown[];
-        }>;
-      };
-
-      // Map DerivationResult[] to DerivationSuggestionGroup[] for the review panel
-      const reqMap = new Map(e.detail.requirements.map(r => [r.id, r]));
-      const suggestions = data.results
-        .filter(r => r.events.length > 0)
-        .map(r => ({
-          requirementId: r.requirementId,
-          requirementText: reqMap.get(r.requirementId)?.statement ?? '',
-          events: r.events.map(ev => ({
-            name: ev.name,
-            description: `${ev.aggregate} — ${ev.trigger}`,
-            confidence: ev.confidence,
-            trigger: ev.trigger,
-            stateChange: ev.aggregate,
-          })),
-        }));
-
-      store.setDerivationSuggestions(suggestions);
-    } catch (err) {
-      console.error('derive events error:', (err as Error).message);
-    }
+    store.setDerivationSuggestions(suggestions);
   }
 
   private async _onEventsAccepted(e: CustomEvent<{ selections: Array<{ requirementId: string; eventNames: string[] }> }>) {

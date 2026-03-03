@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { ActiveSession, AppStateEvent } from './app-state.js';
+import type { Requirement } from '../schema/types.js';
 
 // We import Store via the module but re-instantiate for test isolation.
 // The store singleton is exported, but we test the Store class behaviour
@@ -126,6 +127,128 @@ describe('Store — session state', () => {
     it('is safe to call when no session is active', () => {
       expect(() => store.clearSession()).not.toThrow();
       expect(store.get().sessionState).toBeNull();
+    });
+  });
+});
+
+const makeRequirement = (overrides: Partial<Requirement> = {}): Requirement => ({
+  id: 'req-1',
+  statement: 'Users can register',
+  authorId: 'local',
+  status: 'draft',
+  priority: 0,
+  tags: [],
+  derivedEvents: [],
+  derivedAssumptions: [],
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  ...overrides,
+});
+
+describe('Store — requirements (local-first)', () => {
+  beforeEach(() => {
+    store.clearSession();
+    // Clear all requirements
+    for (const r of store.get().requirements) {
+      store.removeRequirement(r.id);
+    }
+  });
+
+  describe('addRequirement', () => {
+    it('works without a session', () => {
+      expect(store.get().sessionState).toBeNull();
+      store.addRequirement(makeRequirement());
+      expect(store.get().requirements).toHaveLength(1);
+      expect(store.get().requirements[0].statement).toBe('Users can register');
+    });
+
+    it('emits requirements-changed event', () => {
+      const events: AppStateEvent[] = [];
+      const unsub = store.subscribe(e => events.push(e));
+      store.addRequirement(makeRequirement());
+      unsub();
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('requirements-changed');
+    });
+  });
+
+  describe('removeRequirement', () => {
+    it('works without a session', () => {
+      store.addRequirement(makeRequirement({ id: 'r1' }));
+      store.removeRequirement('r1');
+      expect(store.get().requirements).toHaveLength(0);
+    });
+
+    it('is a no-op for unknown IDs', () => {
+      store.addRequirement(makeRequirement({ id: 'keep' }));
+      store.removeRequirement('unknown');
+      expect(store.get().requirements).toHaveLength(1);
+    });
+  });
+
+  describe('updateRequirementId', () => {
+    it('swaps the ID while preserving other fields', () => {
+      store.addRequirement(makeRequirement({ id: 'local-uuid', statement: 'Keep this' }));
+      store.updateRequirementId('local-uuid', 'server-id');
+      expect(store.get().requirements).toHaveLength(1);
+      expect(store.get().requirements[0].id).toBe('server-id');
+      expect(store.get().requirements[0].statement).toBe('Keep this');
+    });
+
+    it('emits requirements-changed event', () => {
+      store.addRequirement(makeRequirement({ id: 'old' }));
+      const events: AppStateEvent[] = [];
+      const unsub = store.subscribe(e => events.push(e));
+      store.updateRequirementId('old', 'new');
+      unsub();
+      expect(events[0].type).toBe('requirements-changed');
+    });
+  });
+
+  describe('setSession — requirement merge', () => {
+    it('merges server requirements that are not already local', () => {
+      store.addRequirement(makeRequirement({ id: 'local-1', statement: 'Local req' }));
+
+      const serverReq = makeRequirement({ id: 'server-1', statement: 'Server req' });
+      store.setSession('CODE', 'p1', makeSession('CODE'));
+      // Now update with a session that has requirements
+      store.updateSession({ ...makeSession('CODE'), requirements: [serverReq] });
+
+      const ids = store.get().requirements.map(r => r.id);
+      expect(ids).toContain('local-1');
+      expect(ids).toContain('server-1');
+    });
+
+    it('deduplicates by statement text', () => {
+      store.addRequirement(makeRequirement({ id: 'local-1', statement: 'Same statement' }));
+
+      const serverReq = makeRequirement({ id: 'server-1', statement: 'Same statement' });
+      store.setSession('CODE', 'p1', { ...makeSession('CODE'), requirements: [serverReq] });
+
+      expect(store.get().requirements).toHaveLength(1);
+      expect(store.get().requirements[0].id).toBe('local-1');
+    });
+
+    it('deduplicates by id', () => {
+      store.addRequirement(makeRequirement({ id: 'same-id', statement: 'Local text' }));
+
+      const serverReq = makeRequirement({ id: 'same-id', statement: 'Server text' });
+      store.setSession('CODE', 'p1', { ...makeSession('CODE'), requirements: [serverReq] });
+
+      expect(store.get().requirements).toHaveLength(1);
+    });
+  });
+
+  describe('clearSession — requirement persistence', () => {
+    it('preserves local requirements when session is cleared', () => {
+      store.addRequirement(makeRequirement({ id: 'r1' }));
+      store.addRequirement(makeRequirement({ id: 'r2', statement: 'Second' }));
+
+      store.setSession('CODE', 'p1', makeSession('CODE'));
+      store.clearSession();
+
+      expect(store.get().sessionState).toBeNull();
+      expect(store.get().requirements).toHaveLength(2);
     });
   });
 });

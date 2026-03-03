@@ -74,6 +74,7 @@ export interface AppState {
   fileManagerOpen: boolean;
   sessionState: SessionState | null;
   derivationSuggestions: DerivationSuggestionGroup[];
+  requirements: Requirement[];
 }
 
 export type AppStateEvent =
@@ -88,7 +89,8 @@ export type AppStateEvent =
   | { type: 'session-connected'; code: string; participantId: string }
   | { type: 'session-updated' }
   | { type: 'session-disconnected' }
-  | { type: 'derivation-suggestions-changed' };
+  | { type: 'derivation-suggestions-changed' }
+  | { type: 'requirements-changed' };
 
 type Listener = (event: AppStateEvent) => void;
 
@@ -109,6 +111,7 @@ class Store {
     fileManagerOpen: false,
     sessionState: null,
     derivationSuggestions: [],
+    requirements: [],
   };
 
   private listeners = new Set<Listener>();
@@ -210,50 +213,76 @@ class Store {
   }
 
   setSession(code: string, participantId: string, session: ActiveSession) {
-    this.state = { ...this.state, sessionState: { code, participantId, session } };
+    // Merge server requirements into local requirements
+    const localStatements = new Set(this.state.requirements.map(r => r.statement));
+    const localIds = new Set(this.state.requirements.map(r => r.id));
+    const newFromServer = (session.requirements ?? []).filter(
+      r => !localIds.has(r.id) && !localStatements.has(r.statement),
+    );
+    const mergedRequirements = newFromServer.length > 0
+      ? [...this.state.requirements, ...newFromServer]
+      : this.state.requirements;
+
+    this.state = {
+      ...this.state,
+      sessionState: { code, participantId, session },
+      requirements: mergedRequirements,
+    };
     saveSessionIdentity(code, participantId);
     this.notify({ type: 'session-connected', code, participantId });
+    if (newFromServer.length > 0) {
+      this.notify({ type: 'requirements-changed' });
+    }
   }
 
   updateSession(session: ActiveSession) {
     if (!this.state.sessionState) return;
+
+    // Merge server requirements into local requirements
+    const localStatements = new Set(this.state.requirements.map(r => r.statement));
+    const localIds = new Set(this.state.requirements.map(r => r.id));
+    const newFromServer = (session.requirements ?? []).filter(
+      r => !localIds.has(r.id) && !localStatements.has(r.statement),
+    );
+    const mergedRequirements = newFromServer.length > 0
+      ? [...this.state.requirements, ...newFromServer]
+      : this.state.requirements;
+
     this.state = {
       ...this.state,
       sessionState: { ...this.state.sessionState, session },
+      requirements: mergedRequirements,
     };
     this.notify({ type: 'session-updated' });
+    if (newFromServer.length > 0) {
+      this.notify({ type: 'requirements-changed' });
+    }
   }
 
   addRequirement(requirement: Requirement) {
-    if (!this.state.sessionState) return;
-    const session = this.state.sessionState.session;
     this.state = {
       ...this.state,
-      sessionState: {
-        ...this.state.sessionState,
-        session: {
-          ...session,
-          requirements: [...session.requirements, requirement],
-        },
-      },
+      requirements: [...this.state.requirements, requirement],
     };
-    this.notify({ type: 'session-updated' });
+    this.notify({ type: 'requirements-changed' });
   }
 
   removeRequirement(requirementId: string) {
-    if (!this.state.sessionState) return;
-    const session = this.state.sessionState.session;
     this.state = {
       ...this.state,
-      sessionState: {
-        ...this.state.sessionState,
-        session: {
-          ...session,
-          requirements: session.requirements.filter(r => r.id !== requirementId),
-        },
-      },
+      requirements: this.state.requirements.filter(r => r.id !== requirementId),
     };
-    this.notify({ type: 'session-updated' });
+    this.notify({ type: 'requirements-changed' });
+  }
+
+  updateRequirementId(oldId: string, newId: string) {
+    this.state = {
+      ...this.state,
+      requirements: this.state.requirements.map(r =>
+        r.id === oldId ? { ...r, id: newId } : r,
+      ),
+    };
+    this.notify({ type: 'requirements-changed' });
   }
 
   clearSession() {
