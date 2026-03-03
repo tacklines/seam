@@ -10,7 +10,7 @@ Orient a new session by reading persistent state.
 
 1. Read `memory/MEMORY.md` for project context
 2. Read `memory/sessions/last.md` for previous session state
-3. Run `bd ready` to see available work
+3. Run `tk ready` to see available work
 4. Run `git status` and `git log --oneline -5` for repo state
 5. Summarize: what was done last, what is ready now, any blockers
 

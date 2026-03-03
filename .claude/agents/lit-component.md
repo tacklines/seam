@@ -1,7 +1,7 @@
 ---
 name: lit-component
 description: Use when creating a new Lit web component or significantly modifying an existing one in src/components/. Not for pure logic changes in lib/.
-tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm run dev:*), Bash(npx tsc --noEmit:*), Bash(npm test:*), Bash(npm run test:e2e:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(tk:*), Bash(npm run dev:*), Bash(npx tsc --noEmit:*), Bash(npm test:*), Bash(npm run test:e2e:*)
 model: sonnet
 permissionMode: default
 ---
@@ -165,7 +165,7 @@ This replaces "check it in the browser manually" with reproducible, tool-assiste
 ## Knowledge Transfer
 
 **Before starting work:**
-1. If a bead ID is provided, run `bd show <id>` for task context
+1. If a task ID is provided, run `tk show <id>` for task context
 2. Understand what data the component will display and where it comes from
 
 **After completing work:**

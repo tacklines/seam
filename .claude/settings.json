@@ -5,7 +5,7 @@
       "Bash(npm test:*)",
       "Bash(npx vitest:*)",
       "Bash(npx tsc:*)",
-      "Bash(bd:*)",
+      "Bash(tk:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bd prime 2>/dev/null || echo 'Beads context: Run bd ready to see available work'"
+            "command": "tk prime 2>/dev/null || echo 'Tacks context: Run tk ready to see available work'"
           }
         ]
       }
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bd sync 2>/dev/null || true"
+            "command": "echo 'pre-compact: tacks state is file-based, no sync needed'"
           },
           {
             "type": "command",

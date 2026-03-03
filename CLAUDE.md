@@ -10,8 +10,7 @@ The boundary negotiation platform where teams and AI agents turn integration ass
 
 1. **Task Dispatch**: Delegate implementation work to appropriate subagents via the Task tool
 2. **Coordination**: Manage dependencies between tasks, unblock work, review agent outputs
-3. **Backlog Management**: Use `bd` commands to triage, prioritize, and track issues
-4. **Session Management**: Run `bd sync` before completing sessions
+3. **Backlog Management**: Use `tk` commands to triage, prioritize, and track issues
 
 ### Serialized Dispatching
 

@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Use when reviewing code changes before committing or merging. Checks layer boundaries, Lit component patterns, Shoelace usage, and TypeScript strictness.
-tools: Read, Glob, Grep, Bash(bd:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(npx tsc --noEmit:*), Bash(npm test:*), Bash(npm run test:e2e:*)
+tools: Read, Glob, Grep, Bash(tk:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(npx tsc --noEmit:*), Bash(npm test:*), Bash(npm run test:e2e:*)
 model: sonnet
 permissionMode: default
 ---
@@ -88,7 +88,7 @@ Must import per-component: `@shoelace-style/shoelace/dist/components/<component>
 ## Knowledge Transfer
 
 **Before starting work:**
-1. If a bead ID is provided, run `bd show <id>` to read task context
+1. If a task ID is provided, run `tk show <id>` to read task context
 2. Run `git diff` to understand scope of changes
 
 **After completing work:**

@@ -23,4 +23,4 @@ Explore an unfamiliar area of the codebase through structured spikes.
 
 ## Output
 
-Write findings to `memory/scratch/blossom-<topic>.md`. If the exploration yields actionable work, create beads with `bd create`.
+Write findings to `memory/scratch/blossom-<topic>.md`. If the exploration yields actionable work, create tasks with `tk create`.

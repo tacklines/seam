@@ -1,7 +1,7 @@
 ---
 name: debugger
 description: Use when diagnosing a bug or unexpected behavior in the app. Traces through lib logic, store mutations, component rendering, and schema validation.
-tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm test:*), Bash(npm run test:e2e:*), Bash(npx tsc --noEmit:*), Bash(npm run build:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(tk:*), Bash(npm test:*), Bash(npm run test:e2e:*), Bash(npx tsc --noEmit:*), Bash(npm run build:*)
 model: sonnet
 permissionMode: default
 ---
@@ -113,7 +113,7 @@ Workflow for visual bugs:
 ## Knowledge Transfer
 
 **Before starting work:**
-1. If a bead ID is provided, run `bd show <id>` for bug details
+1. If a task ID is provided, run `tk show <id>` for bug details
 2. Ask for reproduction steps if not provided
 
 **After completing work:**
@@ -121,7 +121,7 @@ Report to orchestrator:
 - Root cause (which layer, which function, what went wrong)
 - The fix applied
 - Whether a regression test was added
-- Any related issues discovered (file as new beads if significant)
+- Any related issues discovered (file as new tacks if significant)
 
 ## Quality Checklist
 

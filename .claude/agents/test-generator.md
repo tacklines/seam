@@ -1,7 +1,7 @@
 ---
 name: test-generator
 description: Use when tests need to be written or updated for src/lib/ pure functions, src/schema/ validation logic, or e2e/ Playwright tests for component behavior.
-tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm test:*), Bash(npm run test:e2e:*), Bash(npx tsc --noEmit:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(tk:*), Bash(npm test:*), Bash(npm run test:e2e:*), Bash(npx tsc --noEmit:*)
 model: sonnet
 permissionMode: default
 ---
@@ -145,7 +145,7 @@ When testing YAML validation via `parseAndValidate`:
 ## Knowledge Transfer
 
 **Before starting work:**
-1. If a bead ID is provided, run `bd show <id>` for context
+1. If a task ID is provided, run `tk show <id>` for context
 2. Read the source file being tested
 
 **After completing work:**

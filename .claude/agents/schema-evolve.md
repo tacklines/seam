@@ -1,7 +1,7 @@
 ---
 name: schema-evolve
 description: Use when the candidate-events JSON Schema or TypeScript types need to change. Schema changes cascade to validation, types, lib functions, and components.
-tools: Read, Write, Edit, Glob, Grep, Bash(bd:*), Bash(npm test:*), Bash(npx tsc --noEmit:*), Bash(npm run build:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(tk:*), Bash(npm test:*), Bash(npx tsc --noEmit:*), Bash(npm run build:*)
 model: sonnet
 permissionMode: default
 ---
@@ -110,7 +110,7 @@ When changing the schema, check EVERY item:
 ## Knowledge Transfer
 
 **Before starting work:**
-1. If a bead ID is provided, run `bd show <id>` for context on why the schema is changing
+1. If a task ID is provided, run `tk show <id>` for context on why the schema is changing
 2. Understand whether this is a backward-compatible addition or a breaking change
 
 **After completing work:**

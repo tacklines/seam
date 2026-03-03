@@ -13,8 +13,8 @@ CLAUDE.local.md
 # Memory scratch (ephemeral)
 memory/scratch/
 
-# Beads issue tracker (local only)
-.beads/
+# Tacks issue tracker (local sqlite)
+.tacks/
 
 # Playwright
 test-results/
