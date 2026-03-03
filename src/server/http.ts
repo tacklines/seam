@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { serializeSession } from '../lib/session-store.js';
 import { sessionStore as store, eventStore } from './store.js';
-import { createWebSocketServer } from './websocket.js';
+import { createWebSocketServer, broadcastRequirements } from './websocket.js';
 import { A2ATaskStore, createA2AHandlers, isA2ARoute, parseA2ABody, buildAgentCard } from './a2a.js';
 import { presenceTracker } from './presence.js';
 import type { CandidateEventsFile } from '../schema/types.js';
@@ -372,6 +372,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 403, { error: 'Participant not in session' });
         return;
       }
+      broadcastRequirements(code.toUpperCase(), store.getRequirements(code));
       sendJson(res, 201, { requirement });
       return;
     }
@@ -427,6 +428,7 @@ const server = http.createServer(async (req, res) => {
         derivedEvents: merged,
         status: existing.status === 'draft' ? 'active' : existing.status,
       });
+      broadcastRequirements(code.toUpperCase(), store.getRequirements(code));
       sendJson(res, 200, { requirement });
       return;
     }

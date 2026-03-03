@@ -17,7 +17,7 @@
 
 import { store } from './app-state.js';
 import type { SessionParticipant, SessionSubmission } from './app-state.js';
-import type { EventPriority, Vote, WorkItem, WorkItemDependency, OwnershipAssignment, ConflictResolution } from '../schema/types.js';
+import type { EventPriority, Vote, WorkItem, WorkItemDependency, OwnershipAssignment, ConflictResolution, Requirement } from '../schema/types.js';
 
 const WS_BASE = (typeof process !== 'undefined' && (process.env as Record<string, string>)['VITE_WS_URL'])
   ? (process.env as Record<string, string>)['VITE_WS_URL']
@@ -128,11 +128,16 @@ function openSocket(code: string): void {
           assignedBy?: string;
         };
         sessionCode?: string;
+        requirements?: Requirement[];
         message?: string;
       };
 
       if (msg.type === 'event' && msg.event) {
         handleDomainEvent(msg.event);
+      }
+
+      if (msg.type === 'requirements_updated' && msg.requirements) {
+        handleRequirementsUpdate(msg.requirements);
       }
     } catch {
       // ignore malformed messages
@@ -346,4 +351,19 @@ function handleDomainEvent(event: {
     });
     return;
   }
+}
+
+
+/**
+ * Handle a requirements_updated broadcast from the server.
+ * Replaces the local requirements list with the authoritative server state.
+ */
+function handleRequirementsUpdate(requirements: Requirement[]): void {
+  const current = store.get().sessionState;
+  if (!current) return;
+
+  store.updateSession({
+    ...current.session,
+    requirements,
+  });
 }

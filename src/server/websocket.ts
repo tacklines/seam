@@ -11,6 +11,7 @@
  *   Server → Client: { type: "joined", sessionCode: string }
  *   Server → Client: { type: "event", event: DomainEvent }
  *   Server → Client: { type: "presence_update", sessionCode: string, presence: PresenceInfo[] }
+ *   Server → Client: { type: "requirements_updated", sessionCode: string, requirements: Requirement[] }
  *   Server → Client: { type: "error", message: string }
  *   Server → Client: { type: "pong" } (heartbeat response)
  */
@@ -21,6 +22,7 @@ import type { EventStore } from '../contexts/session/event-store.js';
 import type { DomainEvent } from '../contexts/session/domain-events.js';
 import type { PresenceInfo } from './presence.js';
 import { presenceTracker } from './presence.js';
+import type { Requirement } from '../schema/types.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,10 +34,11 @@ export interface ClientMessage {
 }
 
 export interface ServerMessage {
-  type: 'connected' | 'joined' | 'event' | 'presence_update' | 'error' | 'pong';
+  type: 'connected' | 'joined' | 'event' | 'presence_update' | 'requirements_updated' | 'error' | 'pong';
   sessionCode?: string;
   event?: DomainEvent;
   presence?: PresenceInfo[];
+  requirements?: Requirement[];
   message?: string;
 }
 
@@ -43,6 +46,33 @@ export interface ServerMessage {
 interface ClientState {
   sessionCode: string | null;
   isAlive: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Session-scoped broadcast — populated by createWebSocketServer
+// ---------------------------------------------------------------------------
+
+/** Map from WebSocket to per-client state, shared with the broadcast helper. */
+let _clients: Map<WebSocket, ClientState> | null = null;
+
+/**
+ * Broadcast the full requirements list to all WebSocket clients in a session.
+ * Called from HTTP handlers after requirement mutations so every participant
+ * sees the latest state without polling.
+ */
+export function broadcastRequirements(sessionCode: string, requirements: Requirement[]): void {
+  if (!_clients) return;
+  const msg: ServerMessage = { type: 'requirements_updated', sessionCode, requirements };
+  const serialized = JSON.stringify(msg);
+
+  for (const [ws, state] of _clients) {
+    if (
+      state.sessionCode === sessionCode &&
+      ws.readyState === WebSocket.OPEN
+    ) {
+      ws.send(serialized);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +94,7 @@ export function createWebSocketServer(
 
   // Map from WebSocket to per-client state (session membership + liveness)
   const clients = new Map<WebSocket, ClientState>();
+  _clients = clients;
 
   // Subscribe to the EventStore once; forward to all clients in the matching session
   const unsubscribeFromStore = es.subscribe((event: DomainEvent) => {
