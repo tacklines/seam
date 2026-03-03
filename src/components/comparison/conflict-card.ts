@@ -5,6 +5,7 @@ import type { Overlap } from '../../lib/comparison.js';
 import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
+import '../shared/domain-tooltip.js';
 
 /** Finds the first event matching `name` within a loaded file */
 function findEvent(file: LoadedFile, name: string): DomainEvent | undefined {
@@ -313,24 +314,24 @@ export class ConflictCard extends LitElement {
     const diffClass = side === 'left' ? 'diff-left' : 'diff-right';
     return html`
       <div class="field-row ${aggDiff ? diffClass : ''}">
-        <strong>${t('conflictCard.aggregate')}</strong> <span class="mono">${e.aggregate}</span>
+        <strong><domain-tooltip term="aggregate">${t('conflictCard.aggregate')}</domain-tooltip></strong> <span class="mono">${e.aggregate}</span>
       </div>
       <div class="field-row ${trigDiff ? diffClass : ''}">
-        <strong>${t('conflictCard.trigger')}</strong> ${e.trigger}
+        <strong><domain-tooltip term="trigger">${t('conflictCard.trigger')}</domain-tooltip></strong> ${e.trigger}
       </div>
       ${e.state_change
         ? html`<div class="field-row ${stateDiff ? diffClass : ''}">
-            <strong>${t('conflictCard.state')}</strong> ${e.state_change}
+            <strong><domain-tooltip term="state-change">${t('conflictCard.state')}</domain-tooltip></strong> ${e.state_change}
           </div>`
         : stateDiff
-          ? html`<div class="field-row ${diffClass}"><strong>${t('conflictCard.state')}</strong> <em>${t('conflictCard.none')}</em></div>`
+          ? html`<div class="field-row ${diffClass}"><strong><domain-tooltip term="state-change">${t('conflictCard.state')}</domain-tooltip></strong> <em>${t('conflictCard.none')}</em></div>`
           : nothing}
       ${e.integration.channel
         ? html`<div class="field-row ${chanDiff ? diffClass : ''}">
-            <strong>${t('conflictCard.channel')}</strong> ${e.integration.channel}
+            <strong><domain-tooltip term="channel">${t('conflictCard.channel')}</domain-tooltip></strong> ${e.integration.channel}
           </div>`
         : chanDiff
-          ? html`<div class="field-row ${diffClass}"><strong>${t('conflictCard.channel')}</strong> <em>${t('conflictCard.none')}</em></div>`
+          ? html`<div class="field-row ${diffClass}"><strong><domain-tooltip term="channel">${t('conflictCard.channel')}</domain-tooltip></strong> <em>${t('conflictCard.none')}</em></div>`
           : nothing}
     `;
   }
@@ -343,7 +344,7 @@ export class ConflictCard extends LitElement {
     if (e.payload.length === 0) return nothing;
     const diffClass = side === 'left' ? 'diff-left' : 'diff-right';
     return html`
-      <div class="field-row"><strong>${t('conflictCard.payload')}</strong></div>
+      <div class="field-row"><strong><domain-tooltip term="payload">${t('conflictCard.payload')}</domain-tooltip></strong></div>
       <ul class="payload-list">
         ${e.payload.map((p) => {
           const key = `${p.field}:${p.type}`;

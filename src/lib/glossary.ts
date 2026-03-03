@@ -52,4 +52,20 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     term: 'Contract',
     definition: "A formal agreement about an event's shape and meaning. Contracts prevent miscommunication between teams.",
   },
+  'payload': {
+    term: 'Payload',
+    definition: 'The data this event carries — the fields and values recorded when the event happened.',
+  },
+  'channel': {
+    term: 'Channel',
+    definition: 'How this event gets delivered to other systems — for example, a message queue, REST call, or event stream.',
+  },
+  'trigger': {
+    term: 'Trigger',
+    definition: 'What caused this event to happen — a user action, a scheduled job, or another event.',
+  },
+  'state-change': {
+    term: 'State Change',
+    definition: 'The difference this event made — what changed in the system after this event was recorded.',
+  },
 };

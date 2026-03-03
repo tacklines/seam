@@ -1066,6 +1066,10 @@ export const messages: Record<string, string> = {
   'glossary.overlap': 'When two people describe the same event differently. Overlaps are opportunities for alignment, not errors.',
   'glossary.conflict': 'A disagreement about how something should work. Conflicts are valuable — they reveal hidden complexity.',
   'glossary.contract': "A formal agreement about an event's shape and meaning. Contracts prevent miscommunication between teams.",
+  'glossary.payload': 'The data this event carries — the fields and values recorded when the event happened.',
+  'glossary.channel': 'How this event gets delivered to other systems — for example, a message queue, REST call, or event stream.',
+  'glossary.trigger': 'What caused this event to happen — a user action, a scheduled job, or another event.',
+  'glossary.state-change': 'The difference this event made — what changed in the system after this event was recorded.',
 };
 
 /**
