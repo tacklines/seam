@@ -513,6 +513,18 @@ export const messages: Record<string, string> = {
   'spark-canvas.col-event': 'What happened?',
   'spark-canvas.col-aggregate': 'To what?',
   'spark-canvas.col-trigger': 'Triggered by?',
+  'spark-canvas.mode-events': 'Events',
+  'spark-canvas.mode-requirements': 'Requirements',
+
+  // ---------------------------------------------------------------------------
+  // requirements-input
+  // ---------------------------------------------------------------------------
+  'requirements-input.heading': 'What does your system need to do?',
+  'requirements-input.placeholder': 'Type a new requirement...',
+  'requirements-input.derive-events': 'Derive Events',
+  'requirements-input.delete-label': 'Delete requirement {{index}}',
+  'requirements-input.empty-state': 'Start by describing what your system needs to do. Type a requirement below and press Enter.',
+  'requirements-input.count': '{{count}} requirement{{count}} captured',
 
   // ---------------------------------------------------------------------------
   // draft-editor

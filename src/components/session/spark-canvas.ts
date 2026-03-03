@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { t } from '../../lib/i18n.js';
-import type { CandidateEventsFile, DomainEvent } from '../../schema/types.js';
+import type { CandidateEventsFile, DomainEvent, Requirement } from '../../schema/types.js';
 import { suggestEventsHeuristic } from '../../lib/event-suggestions.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -14,6 +14,8 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
 import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
 import '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
+
+import './requirements-input.js';
 
 /** A single row in the spark canvas representing one domain event candidate. */
 export interface SparkRow {
@@ -492,8 +494,17 @@ export class SparkCanvas extends LitElement {
   /** Current session code (empty for solo mode). */
   @property({ type: String, attribute: 'session-code' }) sessionCode = '';
 
+  /** Current participant ID. */
+  @property({ type: String, attribute: 'participant-id' }) participantId = '';
+
+  /** Requirements list passed down for the requirements input mode. */
+  @property({ type: Array }) requirements: Requirement[] = [];
+
   /** When true, shows as a compact "Add more events" bar. */
   @property({ type: Boolean }) collapsed = false;
+
+  /** Which input mode is active: 'requirements' (default) or 'events'. */
+  @state() private _inputMode: 'requirements' | 'events' = 'requirements';
 
   @state() private _rows: SparkRow[] = [makeEmptyRow()];
   @state() private _selectedTemplate = 'blank';
@@ -762,6 +773,7 @@ export class SparkCanvas extends LitElement {
 
   private _renderCanvas() {
     const filledRows = this._rows.filter((r) => r.eventName.trim()).length;
+    const isRequirementsMode = this._inputMode === 'requirements';
 
     return html`
       <div class="canvas" role="region" aria-label="${t('spark-canvas.title')}">
@@ -769,71 +781,99 @@ export class SparkCanvas extends LitElement {
         <div class="canvas-header">
           <h2 class="canvas-title">${t('spark-canvas.title')}</h2>
           <div class="header-controls">
-            <!-- Quick Start template selector -->
-            <sl-select
-              value=${this._selectedTemplate}
-              size="small"
-              aria-label="${t('spark-canvas.template-label')}"
-              style="min-width: 180px;"
-              @sl-change=${this._onTemplateChange}
-            >
-              <sl-option value="blank">${t('spark-canvas.template-blank')}</sl-option>
-              <sl-option value="ecommerce">${t('spark-canvas.template-ecommerce')}</sl-option>
-              <sl-option value="auth">${t('spark-canvas.template-auth')}</sl-option>
-              <sl-option value="payment">${t('spark-canvas.template-payment')}</sl-option>
-              <sl-option value="subscription">${t('spark-canvas.template-subscription')}</sl-option>
-            </sl-select>
-
-            <!-- Canvas / YAML toggle -->
-            <div class="view-toggle" role="group" aria-label="View mode">
+            <!-- Input mode toggle: Requirements / Events -->
+            <div class="view-toggle" role="group" aria-label="Input mode">
               <button
-                class="view-btn ${this._viewMode === 'canvas' ? 'active' : ''}"
+                class="view-btn ${isRequirementsMode ? 'active' : ''}"
                 type="button"
-                aria-pressed="${this._viewMode === 'canvas'}"
-                @click=${() => {
-                  if (this._viewMode === 'yaml') this._switchToCanvas();
-                }}
-              >${t('spark-canvas.view-canvas')}</button>
+                aria-pressed="${isRequirementsMode}"
+                @click=${() => { this._inputMode = 'requirements'; }}
+              >${t('spark-canvas.mode-requirements')}</button>
               <button
-                class="view-btn ${this._viewMode === 'yaml' ? 'active' : ''}"
+                class="view-btn ${!isRequirementsMode ? 'active' : ''}"
                 type="button"
-                aria-pressed="${this._viewMode === 'yaml'}"
-                @click=${() => {
-                  if (this._viewMode === 'canvas') this._switchToYaml();
-                }}
-              >${t('spark-canvas.view-yaml')}</button>
+                aria-pressed="${!isRequirementsMode}"
+                @click=${() => { this._inputMode = 'events'; }}
+              >${t('spark-canvas.mode-events')}</button>
             </div>
 
-            <!-- AI Assist button -->
-            <sl-tooltip content="${t('spark-canvas.ai-assist')}">
-              <sl-button size="small" variant="neutral" @click=${this._openAiDialog}>
-                <sl-icon slot="prefix" name="stars" aria-hidden="true"></sl-icon>
-                ${t('spark-canvas.ai-assist')}
-              </sl-button>
-            </sl-tooltip>
+            ${!isRequirementsMode ? html`
+              <!-- Quick Start template selector (events mode only) -->
+              <sl-select
+                value=${this._selectedTemplate}
+                size="small"
+                aria-label="${t('spark-canvas.template-label')}"
+                style="min-width: 180px;"
+                @sl-change=${this._onTemplateChange}
+              >
+                <sl-option value="blank">${t('spark-canvas.template-blank')}</sl-option>
+                <sl-option value="ecommerce">${t('spark-canvas.template-ecommerce')}</sl-option>
+                <sl-option value="auth">${t('spark-canvas.template-auth')}</sl-option>
+                <sl-option value="payment">${t('spark-canvas.template-payment')}</sl-option>
+                <sl-option value="subscription">${t('spark-canvas.template-subscription')}</sl-option>
+              </sl-select>
+
+              <!-- Canvas / YAML toggle -->
+              <div class="view-toggle" role="group" aria-label="View mode">
+                <button
+                  class="view-btn ${this._viewMode === 'canvas' ? 'active' : ''}"
+                  type="button"
+                  aria-pressed="${this._viewMode === 'canvas'}"
+                  @click=${() => {
+                    if (this._viewMode === 'yaml') this._switchToCanvas();
+                  }}
+                >${t('spark-canvas.view-canvas')}</button>
+                <button
+                  class="view-btn ${this._viewMode === 'yaml' ? 'active' : ''}"
+                  type="button"
+                  aria-pressed="${this._viewMode === 'yaml'}"
+                  @click=${() => {
+                    if (this._viewMode === 'canvas') this._switchToYaml();
+                  }}
+                >${t('spark-canvas.view-yaml')}</button>
+              </div>
+
+              <!-- AI Assist button -->
+              <sl-tooltip content="${t('spark-canvas.ai-assist')}">
+                <sl-button size="small" variant="neutral" @click=${this._openAiDialog}>
+                  <sl-icon slot="prefix" name="stars" aria-hidden="true"></sl-icon>
+                  ${t('spark-canvas.ai-assist')}
+                </sl-button>
+              </sl-tooltip>
+            ` : nothing}
           </div>
         </div>
 
-        <!-- Body: Canvas or YAML -->
-        ${this._viewMode === 'canvas' ? this._renderGrid() : this._renderYaml()}
+        <!-- Body: Requirements mode or Events mode (Canvas/YAML) -->
+        ${isRequirementsMode
+          ? html`
+            <requirements-input
+              .requirements=${this.requirements}
+              session-code="${this.sessionCode}"
+              participant-id="${this.participantId}"
+            ></requirements-input>
+          `
+          : this._viewMode === 'canvas' ? this._renderGrid() : this._renderYaml()}
 
-        <!-- Footer -->
-        <div class="canvas-footer">
-          <div class="canvas-footer-left">
-            <span class="row-count-badge" aria-live="polite">
-              ${filledRows} event${filledRows !== 1 ? 's' : ''} captured
-            </span>
+        <!-- Footer (events mode only) -->
+        ${!isRequirementsMode ? html`
+          <div class="canvas-footer">
+            <div class="canvas-footer-left">
+              <span class="row-count-badge" aria-live="polite">
+                ${filledRows} event${filledRows !== 1 ? 's' : ''} captured
+              </span>
+            </div>
+            <sl-button
+              variant="primary"
+              ?disabled=${filledRows === 0}
+              aria-label="${t('spark-canvas.submit')} (${filledRows} event${filledRows !== 1 ? 's' : ''})"
+              @click=${this._handleSubmit}
+            >
+              <sl-icon slot="prefix" name="cloud-arrow-up" aria-hidden="true"></sl-icon>
+              ${t('spark-canvas.submit')}
+            </sl-button>
           </div>
-          <sl-button
-            variant="primary"
-            ?disabled=${filledRows === 0}
-            aria-label="${t('spark-canvas.submit')} (${filledRows} event${filledRows !== 1 ? 's' : ''})"
-            @click=${this._handleSubmit}
-          >
-            <sl-icon slot="prefix" name="cloud-arrow-up" aria-hidden="true"></sl-icon>
-            ${t('spark-canvas.submit')}
-          </sl-button>
-        </div>
+        ` : nothing}
       </div>
     `;
   }
