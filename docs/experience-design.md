@@ -105,6 +105,12 @@ Rules:
 - The last line is always an empty placeholder with muted text
 - The "Derive Events" button triggers event suggestion from the requirement set
 
+**Input mode toggle**: The requirements input supports two modes via pill buttons above the text field:
+- **Plain text** (default): Free-form sentence describing what the system needs to do
+- **Jobs-to-be-Done**: Structured JTBD format — "When [situation], I want to [motivation], so I can [outcome]." Three labeled fields guide the author. On submit, the three fields are combined into a single JTBD statement that becomes the requirement text.
+
+JTBD mode helps teams articulate *why* a requirement matters, not just *what* is needed. The resulting requirement text carries full context through the derivation pipeline.
+
 Requirements mode passes the Technologically Inept Test: a product manager who has never heard of Event Storming can type "We need offline support" and produce useful output. The platform derives the technical rigor; the participant supplies the intent.
 
 For agents: `submit_requirement` via MCP produces the same result. A human typing in the canvas and an agent calling the tool both emit `RequirementSubmitted` domain events.
@@ -258,7 +264,11 @@ A **Priority View** tab appears when the session has at least one artifact with 
 
 The Priority View has two modes, toggled by a switch in the view header:
 
-**Board mode** (default): A three-column kanban layout — **Must Have**, **Should Have**, **Could Have**. Event cards from the card-view appear as draggable tiles. Drag an event between columns to set its priority. Each card shows a small composite score badge.
+**Board mode** (default): A four-column kanban layout — **Must Have**, **Should Have**, **Could Have**, **Won't Have**. Event cards from the card-view appear as draggable tiles. Drag an event between columns to set its priority. Each card shows a small composite score badge.
+
+The **Won't Have** column is the explicit fourth tier of MoSCoW: things that are consciously deferred from this timebox but are not forgotten. The column header is visually distinguished (red/muted) to make the decision visible.
+
+**Capacity warning**: When Must Have events exceed 60% of the total event count (with at least 3 events in the view), an amber banner appears: "Must Have exceeds 60% of your timebox — consider moving some to Should Have." This is the MoSCoW 60% heuristic from the original method. The banner is dismissible per session.
 
 The composite score is computed from three signals:
 - Confidence level (CONFIRMED = 3, LIKELY = 2, POSSIBLE = 1)
@@ -314,12 +324,17 @@ The Breakdown Editor shows:
 
 **Work items list.** Each work item is a card with:
 - Title (editable inline)
+- Type chip selector: **Story** / **Task** / **Spike** (optional — aligns with story-map vocabulary)
 - Description (expandable textarea)
 - Acceptance criteria (bullet list, add with Enter)
+- Cross-cutting concern templates: `+O11y`, `+A11y`, `+Security`, `+i18n` buttons that pre-populate acceptance criteria with standard checks for observability, accessibility, security, and internationalization
 - Complexity (T-shirt sizing: S / M / L / XL, shown as colored badges)
 - Linked events (which events from this aggregate the work item addresses — shown as small tags)
+- **INVEST quality checklist** (collapsible): A self-evaluation checklist with six criteria — Independent, Negotiable, Valuable, Estimable, Small, Testable — each with a short hint. Checkboxes are local UI state; they help the author verify quality before submitting, not persisted as data.
 
 Add a new work item with the "+" button or by pressing `N`.
+
+Work items should follow **vertical slicing** principles: each item crosses all system layers end-to-end, is independently deployable, and has testable acceptance criteria. The INVEST checklist and cross-cutting templates guide this without enforcing it.
 
 **Coverage matrix.** A compact grid below the work items list. Rows are events in the aggregate, columns are work items. A filled cell means the work item addresses that event. Empty cells in the events column are highlighted amber — these are events with no work item covering them.
 
