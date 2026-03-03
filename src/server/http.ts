@@ -588,7 +588,23 @@ const server = http.createServer(async (req, res) => {
     }
 
     // GET /api/sessions/:code/contracts — Get contracts
+    // POST /api/sessions/:code/contracts — Load contracts
     const contractsMatch = url.match(/^\/api\/sessions\/([^/]+)\/contracts$/);
+    if (method === 'POST' && contractsMatch) {
+      const code = contractsMatch[1];
+      const body = await parseBody(req) as { bundle?: unknown };
+      if (!body.bundle) {
+        sendJson(res, 400, { error: 'bundle is required' });
+        return;
+      }
+      const result = store.loadContracts(code, body.bundle as import('../schema/types.js').ContractBundle);
+      if (!result) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      sendJson(res, 200, { success: true, eventContracts: result.eventContracts.length, boundaryContracts: result.boundaryContracts.length });
+      return;
+    }
     if (method === 'GET' && contractsMatch) {
       const code = contractsMatch[1];
       const session = store.getSession(code);
@@ -597,6 +613,57 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       sendJson(res, 200, { contracts: session.contracts });
+      return;
+    }
+
+    // POST /api/sessions/:code/integration-report — Load integration report
+    const integrationReportPostMatch = url.match(/^\/api\/sessions\/([^/]+)\/integration-report$/);
+    if (method === 'POST' && integrationReportPostMatch) {
+      const code = integrationReportPostMatch[1];
+      const body = await parseBody(req) as { report?: unknown };
+      if (!body.report) {
+        sendJson(res, 400, { error: 'report is required' });
+        return;
+      }
+      const result = store.loadIntegrationReport(code, body.report as import('../schema/types.js').IntegrationReport);
+      if (!result) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      sendJson(res, 200, { success: true, overallStatus: result.overallStatus, checkCount: result.checks.length });
+      return;
+    }
+
+    // PUT /api/sessions/:code/config — Update session config
+    const sessionConfigMatch = url.match(/^\/api\/sessions\/([^/]+)\/config$/);
+    if (method === 'PUT' && sessionConfigMatch) {
+      const code = sessionConfigMatch[1];
+      const body = await parseBody(req) as { config?: unknown; changedBy?: string };
+      if (!body.config) {
+        sendJson(res, 400, { error: 'config is required' });
+        return;
+      }
+      try {
+        const updatedConfig = store.updateSessionConfig(code, body.config as import('../schema/types.js').SessionConfig, body.changedBy);
+        sendJson(res, 200, { config: updatedConfig });
+      } catch {
+        sendJson(res, 404, { error: `Session not found: ${code}` });
+      }
+      return;
+    }
+
+    // GET /api/sessions/:code/requirements/:reqId/coverage — Get coverage for a requirement
+    const requirementCoverageMatch = url.match(/^\/api\/sessions\/([^/]+)\/requirements\/([^/]+)\/coverage$/);
+    if (method === 'GET' && requirementCoverageMatch) {
+      const code = requirementCoverageMatch[1];
+      const reqId = requirementCoverageMatch[2];
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const coverage = store.getRequirementCoverage(code, reqId);
+      sendJson(res, 200, { coverage });
       return;
     }
 

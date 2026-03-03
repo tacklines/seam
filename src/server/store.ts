@@ -6,10 +6,10 @@ const DATA_PATH = process.env.SESSION_DATA_PATH ?? './data/sessions.json';
 
 const persistence = new SessionPersistence(DATA_PATH);
 
-/** Shared singleton EventStore used by both the HTTP server and MCP server. */
+/** EventStore singleton used by the HTTP server (MCP server accesses state via HTTP API). */
 export const eventStore = new EventStore();
 
-/** Shared singleton SessionStore used by both the HTTP server and MCP server. */
+/** SessionStore singleton used by the HTTP server (MCP server accesses state via HTTP API). */
 export const sessionStore = new SessionStore();
 
 // Load persisted sessions on startup

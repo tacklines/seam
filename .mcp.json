@@ -2,7 +2,10 @@
   "mcpServers": {
     "seam": {
       "command": "npx",
-      "args": ["tsx", "src/server/mcp.ts"]
+      "args": ["tsx", "src/server/mcp.ts"],
+      "env": {
+        "SESSION_SERVER_URL": "http://localhost:3002"
+      }
     }
   }
 }

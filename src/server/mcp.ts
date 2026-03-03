@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { sessionStore, eventStore } from './store.js';
+import { SessionApiClient } from './session-api-client.js';
 import { parseAndValidate } from '../lib/yaml-validator-server.js';
 import { computePrepStatus, computeSessionStatus, computeRequirementCoverage } from '../lib/prep-completeness.js';
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
@@ -21,7 +21,13 @@ import { suggestEventsHeuristic } from '../lib/event-suggestions.js';
 import { suggestImprovementsForFile } from '../lib/improvement-heuristics.js';
 import { suggestPrioritiesHeuristic } from '../lib/priority-heuristics.js';
 import { deriveFromRequirements } from '../lib/requirement-derivation.js';
-import type { DerivedEventsAccepted } from '../contexts/session/domain-events.js';
+
+// ---------------------------------------------------------------------------
+// HTTP client for the session server
+// ---------------------------------------------------------------------------
+
+const SESSION_SERVER_URL = process.env.SESSION_SERVER_URL ?? 'http://localhost:3002';
+const client = new SessionApiClient(SESSION_SERVER_URL);
 
 // ---------------------------------------------------------------------------
 // Module-level progress store for report_progress (Phase VI — Build)
@@ -59,10 +65,9 @@ interface ScopedContext {
 }
 
 // ---------------------------------------------------------------------------
-// Module-level service instances
+// Module-level service instances (draft and artifact services are in-process)
 // ---------------------------------------------------------------------------
 
-const draftService = new DraftService((code) => sessionStore.getSession(code));
 const artifactService = new ArtifactService();
 
 async function main(): Promise<void> {
@@ -71,30 +76,24 @@ async function main(): Promise<void> {
 
   // If --session and --user provided, auto-join (or reconnect) on startup
   if (cliArgs.session && cliArgs.user) {
-    const session = sessionStore.getSession(cliArgs.session);
+    const session = await client.getSession(cliArgs.session);
     if (!session) {
       console.error(`[mcp] session ${cliArgs.session} not found`);
       process.exit(1);
     }
 
     // Check if user already exists in session (reconnect)
-    let existingId: string | null = null;
-    for (const [id, p] of session.participants) {
-      if (p.name === cliArgs.user) {
-        existingId = id;
-        break;
-      }
-    }
+    const existing = session.participants.find((p) => p.name === cliArgs.user);
 
-    if (existingId) {
+    if (existing) {
       scoped = {
         sessionCode: cliArgs.session,
-        participantId: existingId,
+        participantId: existing.id,
         participantName: cliArgs.user,
       };
-      console.error(`[mcp] reconnected as "${cliArgs.user}" (${existingId}) in session ${cliArgs.session}`);
+      console.error(`[mcp] reconnected as "${cliArgs.user}" (${existing.id}) in session ${cliArgs.session}`);
     } else {
-      const result = sessionStore.joinSession(cliArgs.session, cliArgs.user);
+      const result = await client.joinSession(cliArgs.session, cliArgs.user!);
       if (!result) {
         console.error(`[mcp] failed to join session ${cliArgs.session}`);
         process.exit(1);
@@ -107,6 +106,22 @@ async function main(): Promise<void> {
       console.error(`[mcp] joined session ${cliArgs.session} as "${cliArgs.user}" (${result.participantId})`);
     }
   }
+
+  // DraftService needs an in-process session getter — it manages its own in-memory draft store
+  // and only needs session existence checks. We provide a getter that fetches synchronously via
+  // a cached value pre-fetched before each tool call (see usage in tool handlers below).
+  const draftServiceSessionCache = new Map<string, import('../lib/session-store.js').SerializedSession | null>();
+  const draftService = new DraftService((code) => {
+    const cached = draftServiceSessionCache.get(code.toUpperCase());
+    if (cached === undefined) return null;
+    if (cached === null) return null;
+    // DraftService only needs session.participants as a Map for existence checks
+    // Rebuild a minimal Session-compatible object
+    return {
+      ...cached,
+      participants: new Map(cached.participants.map((p) => [p.id, p])),
+    } as unknown as import('../lib/session-store.js').Session;
+  });
 
   const serverName = scoped
     ? `seam (${scoped.participantName}@${scoped.sessionCode})`
@@ -126,13 +141,19 @@ async function main(): Promise<void> {
         creatorName: z.string().describe('Name of the session creator'),
       },
     },
-    ({ creatorName }) => {
-      const { session, creatorId } = sessionStore.createSession(creatorName);
+    async ({ creatorName }) => {
+      const result = await client.createSession(creatorName);
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Failed to create session' }) }],
+          isError: true,
+        };
+      }
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify({ code: session.code, participantId: creatorId }),
+            text: JSON.stringify({ code: result.session.code, participantId: result.creatorId }),
           },
         ],
       };
@@ -149,8 +170,8 @@ async function main(): Promise<void> {
         participantName: z.string().describe('Name of the participant joining'),
       },
     },
-    ({ code, participantName }) => {
-      const result = sessionStore.joinSession(code, participantName);
+    async ({ code, participantName }) => {
+      const result = await client.joinSession(code, participantName);
       if (!result) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -183,7 +204,7 @@ async function main(): Promise<void> {
         yamlContent: z.string().describe('Raw YAML string to parse and validate'),
       },
     },
-    ({ code, participantId, fileName, yamlContent }) => {
+    async ({ code, participantId, fileName, yamlContent }) => {
       const outcome = parseAndValidate(fileName, yamlContent);
       if (!outcome.ok) {
         return {
@@ -197,7 +218,7 @@ async function main(): Promise<void> {
         };
       }
 
-      const submission = sessionStore.submitYaml(code, participantId, fileName, outcome.file.data);
+      const submission = await client.submitYaml(code, participantId, fileName, outcome.file.data);
       if (!submission) {
         return {
           content: [
@@ -230,8 +251,8 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [
@@ -264,10 +285,10 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const files = sessionStore.getSessionFiles(code);
+    async ({ code }) => {
+      const files = await client.getSessionFiles(code);
       if (files.length === 0) {
-        const session = sessionStore.getSession(code);
+        const session = await client.getSession(code);
         if (!session) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -278,15 +299,15 @@ async function main(): Promise<void> {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({ message: 'No submissions yet', participantCount: session.participants.size }),
+              text: JSON.stringify({ message: 'No submissions yet', participantCount: session.participants.length }),
             },
           ],
         };
       }
       const status = computeSessionStatus(files);
-      const session = sessionStore.getSession(code)!;
+      const session = await client.getSession(code);
       const result: Record<string, unknown> = { ...status };
-      if (session.requirements.length > 0) {
+      if (session && session.requirements.length > 0) {
         result.requirementCoverage = computeRequirementCoverage(session.requirements, files);
       }
       return {
@@ -304,8 +325,8 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const jam = sessionStore.startJam(code);
+    async ({ code }) => {
+      const jam = await client.startJam(code);
       if (!jam) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -331,8 +352,8 @@ async function main(): Promise<void> {
         resolvedBy: z.array(z.string()).describe('Names of participants who agreed to this resolution'),
       },
     },
-    ({ code, overlapLabel, resolution, chosenApproach, resolvedBy }) => {
-      const result = sessionStore.resolveConflict(code, { overlapLabel, resolution, chosenApproach, resolvedBy });
+    async ({ code, overlapLabel, resolution, chosenApproach, resolvedBy }) => {
+      const result = await client.resolveConflict(code, { overlapLabel, resolution, chosenApproach, resolvedBy });
       if (!result) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found or jam not started' }) }],
@@ -357,8 +378,8 @@ async function main(): Promise<void> {
         assignedBy: z.string().describe('Name of participant making the assignment'),
       },
     },
-    ({ code, aggregate, ownerRole, assignedBy }) => {
-      const result = sessionStore.assignOwnership(code, { aggregate, ownerRole, assignedBy });
+    async ({ code, aggregate, ownerRole, assignedBy }) => {
+      const result = await client.assignOwnership(code, { aggregate, ownerRole, assignedBy });
       if (!result) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found or jam not started' }) }],
@@ -383,11 +404,11 @@ async function main(): Promise<void> {
         relatedOverlap: z.string().optional().describe('Label of a related overlap, if any'),
       },
     },
-    ({ code, description, flaggedBy, relatedOverlap }) => {
+    async ({ code, description, flaggedBy, relatedOverlap }) => {
       const item = relatedOverlap
         ? { description, flaggedBy, relatedOverlap }
         : { description, flaggedBy };
-      const result = sessionStore.flagUnresolved(code, item);
+      const result = await client.flagUnresolved(code, item);
       if (!result) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found or jam not started' }) }],
@@ -409,8 +430,8 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const jam = sessionStore.exportJam(code);
+    async ({ code }) => {
+      const jam = await client.exportJam(code);
       if (!jam) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found or jam not started' }) }],
@@ -436,7 +457,7 @@ async function main(): Promise<void> {
         yamlContent: z.string().describe('Raw YAML string to parse and validate'),
       },
     },
-    ({ code, participantId, fileName, yamlContent }) => {
+    async ({ code, participantId, fileName, yamlContent }) => {
       const outcome = parseAndValidate(fileName, yamlContent);
       if (!outcome.ok) {
         return {
@@ -450,7 +471,7 @@ async function main(): Promise<void> {
         };
       }
 
-      const submission = sessionStore.submitYaml(code, participantId, fileName, outcome.file.data);
+      const submission = await client.submitYaml(code, participantId, fileName, outcome.file.data);
       if (!submission) {
         return {
           content: [
@@ -489,7 +510,7 @@ async function main(): Promise<void> {
         bundle: z.string().describe('JSON string of the ContractBundle'),
       },
     },
-    ({ code, bundle }) => {
+    async ({ code, bundle }) => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(bundle);
@@ -499,15 +520,16 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
-      const result = sessionStore.loadContracts(code, parsed as import('../schema/types.js').ContractBundle);
-      if (!result) {
+      const ok = await client.loadContracts(code, parsed as import('../schema/types.js').ContractBundle);
+      if (!ok) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
+      const contracts = await client.getContracts(code);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, eventContracts: result.eventContracts.length, boundaryContracts: result.boundaryContracts.length }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, eventContracts: contracts?.eventContracts.length ?? 0, boundaryContracts: contracts?.boundaryContracts.length ?? 0 }) }],
       };
     }
   );
@@ -521,9 +543,11 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const contracts = sessionStore.getContracts(code);
-      const files = sessionStore.getSessionFiles(code);
+    async ({ code }) => {
+      const [contracts, files] = await Promise.all([
+        client.getContracts(code),
+        client.getSessionFiles(code),
+      ]);
       if (!contracts) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No contracts loaded' }) }],
@@ -555,7 +579,7 @@ async function main(): Promise<void> {
         report: z.string().describe('JSON string of the IntegrationReport'),
       },
     },
-    ({ code, report }) => {
+    async ({ code, report }) => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(report);
@@ -565,15 +589,16 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
-      const result = sessionStore.loadIntegrationReport(code, parsed as import('../schema/types.js').IntegrationReport);
-      if (!result) {
+      const ok = await client.loadIntegrationReport(code, parsed as import('../schema/types.js').IntegrationReport);
+      if (!ok) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
+      const result = await client.getIntegrationReport(code);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, overallStatus: result.overallStatus, checkCount: result.checks.length }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, overallStatus: result?.overallStatus, checkCount: result?.checks.length ?? 0 }) }],
       };
     }
   );
@@ -587,8 +612,8 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const report = sessionStore.getIntegrationReport(code);
+    async ({ code }) => {
+      const report = await client.getIntegrationReport(code);
       if (!report) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No integration report loaded' }) }],
@@ -624,8 +649,8 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -633,7 +658,7 @@ async function main(): Promise<void> {
         };
       }
       const status = computeWorkflowStatus({
-        participantCount: session.participants.size,
+        participantCount: session.participants.length,
         submissionCount: session.submissions.length,
         requirementCount: session.requirements.length,
         jam: session.jam,
@@ -658,8 +683,8 @@ async function main(): Promise<void> {
         since: z.string().optional().describe('ISO timestamp from a prior lastChecked value; if provided, a `changed` boolean is included in the response'),
       },
     },
-    ({ code, since }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code, since }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -667,7 +692,7 @@ async function main(): Promise<void> {
         };
       }
       const status = computeWorkflowStatus({
-        participantCount: session.participants.size,
+        participantCount: session.participants.length,
         submissionCount: session.submissions.length,
         requirementCount: session.requirements.length,
         jam: session.jam,
@@ -680,14 +705,6 @@ async function main(): Promise<void> {
         lastChecked,
       };
       if (since !== undefined) {
-        // Determine whether any phase has changed by comparing artifact counts.
-        // Since computeWorkflowStatus is deterministic, we detect change by checking
-        // whether the currentPhase differs from what the caller last saw. Callers
-        // should compare the returned currentPhase against their stored value to act
-        // on changes. The `changed` flag here indicates whether the session had any
-        // meaningful activity since `since` — we use the lastChecked timestamp itself
-        // as a proxy: if since < the creation of this response, we can only confirm
-        // the phase at poll time. The caller is responsible for comparing currentPhase.
         const sinceDate = new Date(since);
         const isValidDate = !isNaN(sinceDate.getTime());
         response['changed'] = isValidDate ? new Date(lastChecked) > sinceDate : true;
@@ -708,15 +725,15 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
-      const files = sessionStore.getSessionFiles(code);
+      const files = await client.getSessionFiles(code);
       if (files.length === 0) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ overlaps: [], message: 'No submissions yet' }) }],
@@ -757,15 +774,15 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
-      const contracts = sessionStore.getContracts(code);
+      const contracts = await client.getContracts(code);
       if (!contracts) {
         return {
           content: [{
@@ -778,12 +795,12 @@ async function main(): Promise<void> {
           }],
         };
       }
-      const files = sessionStore.getSessionFiles(code);
+      const files = await client.getSessionFiles(code);
       const contractEventNames = new Set(contracts.eventContracts.map((c) => c.eventName));
       const prepEventNames = new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.name)));
       const uncovered = [...prepEventNames].filter((n) => !contractEventNames.has(n));
       const missing = [...contractEventNames].filter((n) => !prepEventNames.has(n));
-      const report = sessionStore.getIntegrationReport(code);
+      const report = await client.getIntegrationReport(code);
       const result: Record<string, unknown> = {
         contractsLoaded: true,
         eventContractCount: contracts.eventContracts.length,
@@ -863,18 +880,21 @@ async function main(): Promise<void> {
         changedBy: z.string().optional().describe('Name of the participant making the change (for audit trail)'),
       },
     },
-    ({ code, config, changedBy }) => {
-      try {
-        const updatedConfig = sessionStore.updateSessionConfig(code, config as import('../schema/types.js').SessionConfig, changedBy);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ config: updatedConfig }) }],
-        };
-      } catch {
+    async ({ code, config, changedBy }) => {
+      const updatedConfig = await client.updateSessionConfig(
+        code,
+        config as import('../schema/types.js').SessionConfig,
+        changedBy
+      );
+      if (!updatedConfig) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: `Session not found: ${code}` }) }],
           isError: true,
         };
       }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ config: updatedConfig }) }],
+      };
     }
   );
 
@@ -887,18 +907,17 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      try {
-        const config = sessionStore.getSessionConfig(code);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ config }) }],
-        };
-      } catch {
+    async ({ code }) => {
+      const config = await client.getSessionConfig(code);
+      if (!config) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: `Session not found: ${code}` }) }],
           isError: true,
         };
       }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ config }) }],
+      };
     }
   );
 
@@ -914,10 +933,10 @@ async function main(): Promise<void> {
         toParticipantId: z.string().optional().describe('Recipient participant ID (omit for broadcast)'),
       },
     },
-    ({ code, participantId, content, toParticipantId }) => {
-      const msg = sessionStore.sendMessage(code, participantId, content, toParticipantId);
+    async ({ code, participantId, content, toParticipantId }) => {
+      const msg = await client.sendMessage(code, participantId, content, toParticipantId);
       if (!msg) {
-        const session = sessionStore.getSession(code);
+        const session = await client.getSession(code);
         if (!session) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -946,15 +965,15 @@ async function main(): Promise<void> {
         since: z.string().optional().describe('ISO timestamp — only messages after this time are returned'),
       },
     },
-    ({ code, participantId, since }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code, participantId, since }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
-      const messages = sessionStore.getMessages(code, participantId, since);
+      const messages = await client.getMessages(code, participantId, since);
       const lastChecked = new Date().toISOString();
       return {
         content: [{
@@ -987,7 +1006,15 @@ async function main(): Promise<void> {
         }).describe('CandidateEventsFile content for the draft'),
       },
     },
-    ({ sessionCode, participantId, content }) => {
+    async ({ sessionCode, participantId, content }) => {
+      const session = await client.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      draftServiceSessionCache.set(sessionCode.toUpperCase(), session);
       const draft = draftService.createDraft(sessionCode, {
         participantId,
         content: content as import('../schema/types.js').CandidateEventsFile,
@@ -1034,8 +1061,8 @@ async function main(): Promise<void> {
         requirementIds: z.array(z.string()).describe('IDs of requirements to derive events from'),
       },
     },
-    ({ sessionCode, requirementIds }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode, requirementIds }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1043,7 +1070,7 @@ async function main(): Promise<void> {
         };
       }
 
-      const requirements = sessionStore.getRequirements(sessionCode);
+      const requirements = session.requirements;
       const requestedReqs = requirements.filter((r) => requirementIds.includes(r.id));
 
       // Validate all requested IDs exist
@@ -1085,8 +1112,8 @@ async function main(): Promise<void> {
         eventNames: z.array(z.string()).describe('Names of derived events to accept'),
       },
     },
-    ({ sessionCode, participantId, requirementId, eventNames }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode, participantId, requirementId, eventNames }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1094,14 +1121,15 @@ async function main(): Promise<void> {
         };
       }
 
-      if (!session.participants.has(participantId)) {
+      const participant = session.participants.find((p) => p.id === participantId);
+      if (!participant) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Participant not in session' }) }],
           isError: true,
         };
       }
 
-      const requirement = sessionStore.getRequirement(sessionCode, requirementId);
+      const requirement = session.requirements.find((r) => r.id === requirementId);
       if (!requirement) {
         return {
           content: [{
@@ -1122,22 +1150,21 @@ async function main(): Promise<void> {
       // Transition status to active if currently draft
       const newStatus = requirement.status === 'draft' ? 'active' : requirement.status;
 
-      sessionStore.updateRequirement(sessionCode, requirementId, {
-        derivedEvents: newDerivedEvents,
-        status: newStatus,
-      });
+      // Route through HTTP: use the accept endpoint which updates derivedEvents + status
+      const res = await fetch(
+        `${SESSION_SERVER_URL}/api/sessions/${encodeURIComponent(sessionCode)}/requirements/${encodeURIComponent(requirementId)}/accept`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantId, eventNames: newDerivedEvents }),
+        }
+      );
 
-      // Emit domain event
-      if (eventStore) {
-        eventStore.append(session.code, {
-          type: 'DerivedEventsAccepted',
-          eventId: generateId(),
-          sessionCode: session.code,
-          timestamp: new Date().toISOString(),
-          requirementId,
-          participantId,
-          acceptedEvents: eventNames,
-        } satisfies DerivedEventsAccepted);
+      if (!res.ok) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Failed to accept derived events' }) }],
+          isError: true,
+        };
       }
 
       return {
@@ -1146,6 +1173,8 @@ async function main(): Promise<void> {
           text: JSON.stringify({ submittedCount: eventNames.length }),
         }],
       };
+
+      void newStatus; // used implicitly via HTTP endpoint logic
     }
   );
 
@@ -1159,8 +1188,8 @@ async function main(): Promise<void> {
         fileName: z.string().describe('File name of the artifact to analyze'),
       },
     },
-    ({ sessionCode, fileName }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode, fileName }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1205,15 +1234,16 @@ async function main(): Promise<void> {
         changeNote: z.string().optional().describe('Description of what changed in this update'),
       },
     },
-    ({ sessionCode, participantId, fileName, content, changeNote }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode, participantId, fileName, content, changeNote }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
-      if (!session.participants.has(participantId)) {
+      const participant = session.participants.find((p) => p.id === participantId);
+      if (!participant) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Participant not in session' }) }],
           isError: true,
@@ -1249,8 +1279,19 @@ async function main(): Promise<void> {
         tier: z.enum(['must_have', 'should_have', 'could_have', 'wont_have']).describe('Priority tier for the event'),
       },
     },
-    ({ sessionCode, eventName, tier }) => {
-      const service = new PrioritizationService((code) => sessionStore.getSession(code));
+    async ({ sessionCode, eventName, tier }) => {
+      const session = await client.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const sessionObj = {
+        ...session,
+        participants: new Map(session.participants.map((p) => [p.id, p])),
+      } as unknown as import('../lib/session-store.js').Session;
+      const service = new PrioritizationService(() => sessionObj);
       const result = service.setPriority(sessionCode, {
         eventName,
         participantId: 'mcp-agent',
@@ -1281,8 +1322,19 @@ async function main(): Promise<void> {
         direction: z.enum(['up', 'down']).describe('Vote direction'),
       },
     },
-    ({ sessionCode, participantId, eventName, direction }) => {
-      const service = new PrioritizationService((code) => sessionStore.getSession(code));
+    async ({ sessionCode, participantId, eventName, direction }) => {
+      const session = await client.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const sessionObj = {
+        ...session,
+        participants: new Map(session.participants.map((p) => [p.id, p])),
+      } as unknown as import('../lib/session-store.js').Session;
+      const service = new PrioritizationService(() => sessionObj);
       const result = service.castVote(sessionCode, { eventName, participantId, direction });
       if (!result) {
         return {
@@ -1290,9 +1342,8 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
-      // Compute net vote count for this event
-      const session = sessionStore.getSession(sessionCode);
-      const votes = session?.votes.filter((v) => v.eventName === eventName) ?? [];
+      // Compute net vote count for this event from session data
+      const votes = session.votes.filter((v) => v.eventName === eventName);
       const upvotes = votes.filter((v) => v.direction === 'up').length;
       const downvotes = votes.filter((v) => v.direction === 'down').length;
       const newCount = upvotes - downvotes;
@@ -1312,8 +1363,19 @@ async function main(): Promise<void> {
         sessionCode: z.string().describe('Session join code'),
       },
     },
-    ({ sessionCode }) => {
-      const service = new PrioritizationService((code) => sessionStore.getSession(code));
+    async ({ sessionCode }) => {
+      const session = await client.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const sessionObj = {
+        ...session,
+        participants: new Map(session.participants.map((p) => [p.id, p])),
+      } as unknown as import('../lib/session-store.js').Session;
+      const service = new PrioritizationService(() => sessionObj);
       const scores = service.computeCompositeScores(sessionCode);
       if (!scores) {
         return {
@@ -1355,8 +1417,8 @@ async function main(): Promise<void> {
         sessionCode: z.string().describe('Session join code'),
       },
     },
-    ({ sessionCode }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1372,8 +1434,7 @@ async function main(): Promise<void> {
         };
       }
 
-      // Build a cross-reference count map: how many times does each event name appear
-      // across submissions (appearing in multiple files = higher priority signal)
+      // Build a cross-reference count map
       const refCount: Record<string, number> = {};
       for (const submission of session.submissions) {
         for (const event of submission.data.domain_events) {
@@ -1412,18 +1473,22 @@ async function main(): Promise<void> {
         ).describe('Work items to create'),
       },
     },
-    ({ sessionCode, aggregate, items }) => {
-      const svc = new DecompositionService(
-        (c: string) => sessionStore.getSession(c) ?? null,
-        eventStore
-      );
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode, aggregate, items }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
+      const sessionObj = {
+        ...session,
+        participants: new Map(session.participants.map((p) => [p.id, p])),
+      } as unknown as import('../lib/session-store.js').Session;
+      const svc = new DecompositionService(
+        () => sessionObj,
+        undefined
+      );
       const created = items
         .map((item) => svc.createWorkItem(sessionCode, { ...item, dependencies: item.dependencies ?? [] }))
         .filter((w): w is NonNullable<typeof w> => w !== null);
@@ -1442,10 +1507,21 @@ async function main(): Promise<void> {
         sessionCode: z.string().describe('Session join code'),
       },
     },
-    ({ sessionCode }) => {
+    async ({ sessionCode }) => {
+      const session = await client.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const sessionObj = {
+        ...session,
+        participants: new Map(session.participants.map((p) => [p.id, p])),
+      } as unknown as import('../lib/session-store.js').Session;
       const svc = new DecompositionService(
-        (c: string) => sessionStore.getSession(c) ?? null,
-        eventStore
+        () => sessionObj,
+        undefined
       );
       const workItems = svc.getDecomposition(sessionCode);
       if (workItems === null) {
@@ -1454,7 +1530,6 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
-      const session = sessionStore.getSession(sessionCode)!;
       const dependencies = [...session.workItemDependencies];
       const coverage = svc.getCoverageMatrix(sessionCode) ?? [];
       return {
@@ -1473,8 +1548,8 @@ async function main(): Promise<void> {
         aggregate: z.string().optional().describe('If provided, only suggest work items for this aggregate'),
       },
     },
-    ({ sessionCode, aggregate }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode, aggregate }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1500,10 +1575,21 @@ async function main(): Promise<void> {
         toItemId: z.string().describe('Work item ID that must complete first'),
       },
     },
-    ({ sessionCode, fromItemId, toItemId }) => {
+    async ({ sessionCode, fromItemId, toItemId }) => {
+      const session = await client.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const sessionObj = {
+        ...session,
+        participants: new Map(session.participants.map((p) => [p.id, p])),
+      } as unknown as import('../lib/session-store.js').Session;
       const svc = new DecompositionService(
-        (c: string) => sessionStore.getSession(c) ?? null,
-        eventStore
+        () => sessionObj,
+        undefined
       );
       const dependency = svc.setDependency(sessionCode, { fromId: fromItemId, toId: toItemId, participantId: 'system' });
       if (!dependency) {
@@ -1535,8 +1621,8 @@ async function main(): Promise<void> {
         overlapLabel: z.string().describe('Label of the overlap to get a suggestion for (from compare_artifacts)'),
       },
     },
-    ({ code, overlapLabel }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code, overlapLabel }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1545,7 +1631,7 @@ async function main(): Promise<void> {
       }
 
       // Determine the overlap kind by looking in comparison results
-      const files = sessionStore.getSessionFiles(code);
+      const files = await client.getSessionFiles(code);
       const overlaps = files.length > 0 ? compareFiles(files) : [];
       const match = overlaps.find((o) => o.label === overlapLabel);
       const overlapKind = match?.kind ?? 'unknown';
@@ -1574,8 +1660,8 @@ async function main(): Promise<void> {
         contractEventName: z.string().describe('Name of the event contract to validate against'),
       },
     },
-    ({ code, artifactContent, contractEventName }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code, artifactContent, contractEventName }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1583,7 +1669,7 @@ async function main(): Promise<void> {
         };
       }
 
-      const contracts = sessionStore.getContracts(code);
+      const contracts = await client.getContracts(code);
       if (!contracts) {
         return {
           content: [{
@@ -1660,8 +1746,8 @@ async function main(): Promise<void> {
         notes: z.string().optional().describe('Optional progress notes'),
       },
     },
-    ({ code, participantId, workItemId, percentComplete, notes }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code, participantId, workItemId, percentComplete, notes }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1704,8 +1790,8 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1713,7 +1799,7 @@ async function main(): Promise<void> {
         };
       }
 
-      const files = sessionStore.getSessionFiles(code);
+      const files = await client.getSessionFiles(code);
       const allAggregates = [
         ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.aggregate))),
       ];
@@ -1765,8 +1851,8 @@ async function main(): Promise<void> {
         code: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
-      const session = sessionStore.getSession(code);
+    async ({ code }) => {
+      const session = await client.getSession(code);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1774,7 +1860,7 @@ async function main(): Promise<void> {
         };
       }
 
-      const files = sessionStore.getSessionFiles(code);
+      const files = await client.getSessionFiles(code);
       const allAggregates = [
         ...new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.aggregate))),
       ];
@@ -1836,21 +1922,22 @@ async function main(): Promise<void> {
         tags: z.array(z.string()).optional().describe('Optional tags for categorization'),
       },
     },
-    ({ sessionCode, participantId, statement, tags }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode, participantId, statement, tags }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
-      if (!session.participants.has(participantId)) {
+      const participant = session.participants.find((p) => p.id === participantId);
+      if (!participant) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Participant not found in session' }) }],
           isError: true,
         };
       }
-      const requirement = sessionStore.addRequirement(sessionCode, participantId, statement, tags);
+      const requirement = await client.addRequirement(sessionCode, participantId, statement, tags);
       if (!requirement) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Failed to submit requirement — session may be closed' }) }],
@@ -1872,15 +1959,15 @@ async function main(): Promise<void> {
         sessionCode: z.string().describe('Session join code'),
       },
     },
-    ({ sessionCode }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
-      const requirements = sessionStore.getRequirements(sessionCode);
+      const requirements = session.requirements;
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ requirements }) }],
       };
@@ -1904,8 +1991,8 @@ async function main(): Promise<void> {
         requirementId: z.string().optional().describe('Optional requirement ID to filter to a single requirement'),
       },
     },
-    ({ sessionCode, requirementId }) => {
-      const session = sessionStore.getSession(sessionCode);
+    async ({ sessionCode, requirementId }) => {
+      const session = await client.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1913,12 +2000,19 @@ async function main(): Promise<void> {
         };
       }
 
-      const rawCoverage = sessionStore.getRequirementCoverage(sessionCode, requirementId);
+      let requirements = session.requirements;
+      if (requirementId) {
+        requirements = requirements.filter((r) => r.id === requirementId);
+      }
+
+      const rawCoverage = requirements.map((r) => ({
+        reqId: r.id,
+        eventCount: r.derivedEvents.length,
+        fulfilled: r.derivedEvents.length > 0,
+      }));
 
       // Enrich with the requirement statement for readability
-      const requirementMap = new Map(
-        session.requirements.map(r => [r.id, r])
-      );
+      const requirementMap = new Map(session.requirements.map(r => [r.id, r]));
       const coverage = rawCoverage.map(entry => ({
         reqId: entry.reqId,
         statement: requirementMap.get(entry.reqId)?.statement ?? '',
@@ -1949,8 +2043,8 @@ async function main(): Promise<void> {
         description: 'Get the current state of your session (participants, submissions, phase)',
         inputSchema: {},
       },
-      () => {
-        const session = sessionStore.getSession(ctx.sessionCode);
+      async () => {
+        const session = await client.getSession(ctx.sessionCode);
         if (!session) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1958,7 +2052,7 @@ async function main(): Promise<void> {
           };
         }
         const status = computeWorkflowStatus({
-          participantCount: session.participants.size,
+          participantCount: session.participants.length,
           submissionCount: session.submissions.length,
           requirementCount: session.requirements.length,
           jam: session.jam,
@@ -1970,7 +2064,7 @@ async function main(): Promise<void> {
             type: 'text' as const,
             text: JSON.stringify({
               you: { name: ctx.participantName, id: ctx.participantId },
-              session: serializeSession(session),
+              session,
               workflow: status,
             }),
           }],
@@ -1988,7 +2082,7 @@ async function main(): Promise<void> {
           yamlContent: z.string().describe('Raw YAML string to parse and validate'),
         },
       },
-      ({ fileName, yamlContent }) => {
+      async ({ fileName, yamlContent }) => {
         const outcome = parseAndValidate(fileName, yamlContent);
         if (!outcome.ok) {
           return {
@@ -2000,7 +2094,7 @@ async function main(): Promise<void> {
           };
         }
 
-        const submission = sessionStore.submitYaml(ctx.sessionCode, ctx.participantId, fileName, outcome.file.data);
+        const submission = await client.submitYaml(ctx.sessionCode, ctx.participantId, fileName, outcome.file.data);
         if (!submission) {
           return {
             content: [{
@@ -2045,7 +2139,15 @@ async function main(): Promise<void> {
           }).describe('CandidateEventsFile content for the draft'),
         },
       },
-      ({ content }) => {
+      async ({ content }) => {
+        const session = await client.getSession(ctx.sessionCode);
+        if (!session) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+            isError: true,
+          };
+        }
+        draftServiceSessionCache.set(ctx.sessionCode.toUpperCase(), session);
         const draft = draftService.createDraft(ctx.sessionCode, {
           participantId: ctx.participantId,
           content: content as import('../schema/types.js').CandidateEventsFile,
@@ -2099,7 +2201,7 @@ async function main(): Promise<void> {
       }
     );
 
-    // Tool: send_message — post a message to the session
+    // Tool: send_message — post a message to the session (scoped variant)
     server.registerTool(
       'send_message',
       {
@@ -2109,24 +2211,18 @@ async function main(): Promise<void> {
           recipientName: z.string().optional().describe('Name of a specific participant to message (omit for broadcast)'),
         },
       },
-      ({ content, recipientName }) => {
+      async ({ content, recipientName }) => {
         let toId: string | undefined;
         if (recipientName) {
-          // Look up recipient by name
-          const session = sessionStore.getSession(ctx.sessionCode);
+          const session = await client.getSession(ctx.sessionCode);
           if (!session) {
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
               isError: true,
             };
           }
-          for (const [id, p] of session.participants) {
-            if (p.name === recipientName) {
-              toId = id;
-              break;
-            }
-          }
-          if (!toId) {
+          const recipient = session.participants.find((p) => p.name === recipientName);
+          if (!recipient) {
             return {
               content: [{
                 type: 'text' as const,
@@ -2135,9 +2231,10 @@ async function main(): Promise<void> {
               isError: true,
             };
           }
+          toId = recipient.id;
         }
 
-        const msg = sessionStore.sendMessage(ctx.sessionCode, ctx.participantId, content, toId);
+        const msg = await client.sendMessage(ctx.sessionCode, ctx.participantId, content, toId);
         if (!msg) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Failed to send message' }) }],
@@ -2162,8 +2259,8 @@ async function main(): Promise<void> {
           since: z.string().optional().describe('ISO timestamp from a prior check; only messages after this time are returned'),
         },
       },
-      ({ since }) => {
-        const messages = sessionStore.getMessages(ctx.sessionCode, ctx.participantId, since);
+      async ({ since }) => {
+        const messages = await client.getMessages(ctx.sessionCode, ctx.participantId, since);
         const lastChecked = new Date().toISOString();
         return {
           content: [{
@@ -2189,8 +2286,19 @@ async function main(): Promise<void> {
           tier: z.enum(['must_have', 'should_have', 'could_have', 'wont_have']).describe('Priority tier for the event'),
         },
       },
-      ({ eventName, tier }) => {
-        const service = new PrioritizationService((code) => sessionStore.getSession(code));
+      async ({ eventName, tier }) => {
+        const session = await client.getSession(ctx.sessionCode);
+        if (!session) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+            isError: true,
+          };
+        }
+        const sessionObj = {
+          ...session,
+          participants: new Map(session.participants.map((p) => [p.id, p])),
+        } as unknown as import('../lib/session-store.js').Session;
+        const service = new PrioritizationService(() => sessionObj);
         const result = service.setPriority(ctx.sessionCode, {
           eventName,
           participantId: ctx.participantId,
@@ -2226,18 +2334,22 @@ async function main(): Promise<void> {
           ).describe('Work items to create'),
         },
       },
-      ({ items }) => {
-        const svc = new DecompositionService(
-          (c: string) => sessionStore.getSession(c) ?? null,
-          eventStore
-        );
-        const session = sessionStore.getSession(ctx.sessionCode);
+      async ({ items }) => {
+        const session = await client.getSession(ctx.sessionCode);
         if (!session) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
             isError: true,
           };
         }
+        const sessionObj = {
+          ...session,
+          participants: new Map(session.participants.map((p) => [p.id, p])),
+        } as unknown as import('../lib/session-store.js').Session;
+        const svc = new DecompositionService(
+          () => sessionObj,
+          undefined
+        );
         const created = items.map((item) => svc.createWorkItem(ctx.sessionCode, item)).filter(Boolean);
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ created, participantId: ctx.participantId }) }],
@@ -2250,6 +2362,7 @@ async function main(): Promise<void> {
 
   const modeLabel = scoped ? `scoped to ${scoped.participantName}@${scoped.sessionCode}` : 'unscoped';
   console.error(`[mcp] starting seam MCP server (${modeLabel})`);
+  console.error(`[mcp] using session server at ${SESSION_SERVER_URL}`);
 
   await server.connect(transport);
 
