@@ -10,6 +10,8 @@ import { compareFiles } from '../lib/comparison.js';
 import { suggestResolutionHeuristic } from '../lib/integration-heuristics.js';
 import { deriveFromRequirements } from '../lib/requirement-derivation.js';
 import type { Requirement } from '../schema/types.js';
+import { DecompositionService } from '../contexts/decomposition/decomposition-service.js';
+import { suggestDecomposition } from '../lib/decomposition-heuristics.js';
 
 const PORT = Number(process.env.PORT ?? 3002);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
@@ -17,6 +19,12 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
 // A2A task store and handlers (singleton, shared with HTTP request handling)
 const a2aTaskStore = new A2ATaskStore();
 const a2aHandlers = createA2AHandlers(a2aTaskStore, store);
+
+// Decomposition service (Phase IV — Slice)
+const decompositionSvc = new DecompositionService(
+  (code: string) => store.getSession(code) ?? null,
+  eventStore
+);
 
 function addCorsHeaders(res: ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
@@ -428,6 +436,112 @@ const server = http.createServer(async (req, res) => {
         status: existing.status === 'draft' ? 'active' : existing.status,
       });
       sendJson(res, 200, { requirement });
+      return;
+    }
+
+    // POST /api/sessions/:code/work-items/dependencies — Set a dependency (before work-items GET/POST)
+    const workItemsDepsMatch = url.match(/^\/api\/sessions\/([^/]+)\/work-items\/dependencies$/);
+    if (method === 'POST' && workItemsDepsMatch) {
+      const code = workItemsDepsMatch[1];
+      const body = await parseBody(req) as { fromItemId?: string; toItemId?: string };
+      if (typeof body.fromItemId !== 'string' || typeof body.toItemId !== 'string') {
+        sendJson(res, 400, { error: 'fromItemId and toItemId are required' });
+        return;
+      }
+      const dependency = decompositionSvc.setDependency(code, {
+        fromId: body.fromItemId,
+        toId: body.toItemId,
+        participantId: 'system',
+      });
+      if (!dependency) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      sendJson(res, 200, { dependency });
+      return;
+    }
+
+    // POST /api/sessions/:code/work-items — Create work items (batch)
+    // GET /api/sessions/:code/work-items — Get decomposition with coverage matrix
+    const workItemsCreateMatch = url.match(/^\/api\/sessions\/([^/]+)\/work-items$/);
+    if (method === 'POST' && workItemsCreateMatch) {
+      const code = workItemsCreateMatch[1];
+      const body = await parseBody(req) as {
+        aggregate?: string;
+        items?: Array<{
+          title?: string;
+          description?: string;
+          acceptanceCriteria?: string[];
+          complexity?: string;
+          linkedEvents?: string[];
+          dependencies?: string[];
+        }>;
+      };
+      if (typeof body.aggregate !== 'string' || !Array.isArray(body.items) || body.items.length === 0) {
+        sendJson(res, 400, { error: 'aggregate and items array are required' });
+        return;
+      }
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const created = [];
+      const itemIds = [];
+      for (const item of body.items) {
+        if (!item.title || !item.description || !item.complexity || !item.linkedEvents) {
+          sendJson(res, 400, { error: 'Each item requires title, description, complexity, and linkedEvents' });
+          return;
+        }
+        const workItem = decompositionSvc.createWorkItem(code, {
+          title: item.title,
+          description: item.description,
+          acceptanceCriteria: item.acceptanceCriteria ?? [],
+          complexity: item.complexity as 'S' | 'M' | 'L' | 'XL',
+          linkedEvents: item.linkedEvents,
+          dependencies: item.dependencies ?? [],
+        });
+        if (!workItem) {
+          sendJson(res, 404, { error: 'Session not found' });
+          return;
+        }
+        created.push(workItem);
+        itemIds.push(workItem.id);
+      }
+      sendJson(res, 201, { aggregate: body.aggregate, created, itemIds });
+      return;
+    }
+
+    // GET /api/sessions/:code/work-items — Get decomposition with coverage matrix
+    if (method === 'GET' && workItemsCreateMatch) {
+      const code = workItemsCreateMatch[1];
+      const workItems = decompositionSvc.getDecomposition(code);
+      if (workItems === null) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const coverage = decompositionSvc.getCoverageMatrix(code) ?? [];
+      const session = store.getSession(code);
+      const dependencies = session?.workItemDependencies ?? [];
+      sendJson(res, 200, { workItems, dependencies, coverage });
+      return;
+    }
+
+    // GET /api/sessions/:code/decomposition-suggestions — Get decomposition suggestions
+    const suggestionsMatch = url.match(/^\/api\/sessions\/([^/]+)\/decomposition-suggestions$/);
+    if (method === 'GET' && suggestionsMatch) {
+      const code = suggestionsMatch[1];
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const urlObj = new URL(url, `http://localhost:${PORT}`);
+      const aggregateFilter = urlObj.searchParams.get('aggregate') ?? undefined;
+      const files = store.getSessionFiles(code);
+      const allEvents = files.flatMap((f) => f.data.domain_events);
+      const suggestions = suggestDecomposition(allEvents, aggregateFilter);
+      sendJson(res, 200, { suggestions });
       return;
     }
 
