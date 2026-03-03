@@ -1391,7 +1391,7 @@ async function main(): Promise<void> {
     {
       description: 'Batch-create work items from an aggregate decomposition. Returns all created work items with their assigned IDs.',
       inputSchema: {
-        code: z.string().describe('Session join code'),
+        sessionCode: z.string().describe('Session join code'),
         aggregate: z.string().describe('Aggregate these work items belong to'),
         items: z.array(
           z.object({
@@ -1405,12 +1405,12 @@ async function main(): Promise<void> {
         ).describe('Work items to create'),
       },
     },
-    ({ code, aggregate, items }) => {
+    ({ sessionCode, aggregate, items }) => {
       const svc = new DecompositionService(
         (c: string) => sessionStore.getSession(c) ?? null,
         eventStore
       );
-      const session = sessionStore.getSession(code);
+      const session = sessionStore.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1418,7 +1418,7 @@ async function main(): Promise<void> {
         };
       }
       const created = items
-        .map((item) => svc.createWorkItem(code, { ...item, dependencies: item.dependencies ?? [] }))
+        .map((item) => svc.createWorkItem(sessionCode, { ...item, dependencies: item.dependencies ?? [] }))
         .filter((w): w is NonNullable<typeof w> => w !== null);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ aggregate, created, itemIds: created.map(w => w.id) }) }],
@@ -1432,24 +1432,24 @@ async function main(): Promise<void> {
     {
       description: 'Get all work items and their dependency graph, plus a coverage matrix showing which domain events are covered.',
       inputSchema: {
-        code: z.string().describe('Session join code'),
+        sessionCode: z.string().describe('Session join code'),
       },
     },
-    ({ code }) => {
+    ({ sessionCode }) => {
       const svc = new DecompositionService(
         (c: string) => sessionStore.getSession(c) ?? null,
         eventStore
       );
-      const workItems = svc.getDecomposition(code);
+      const workItems = svc.getDecomposition(sessionCode);
       if (workItems === null) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
           isError: true,
         };
       }
-      const session = sessionStore.getSession(code)!;
+      const session = sessionStore.getSession(sessionCode)!;
       const dependencies = [...session.workItemDependencies];
-      const coverage = svc.getCoverageMatrix(code) ?? [];
+      const coverage = svc.getCoverageMatrix(sessionCode) ?? [];
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ workItems, dependencies, coverage }) }],
       };
@@ -1462,12 +1462,12 @@ async function main(): Promise<void> {
     {
       description: 'Generate heuristic suggestions for decomposing domain events into vertical slice work items. Optionally filter to a single aggregate.',
       inputSchema: {
-        code: z.string().describe('Session join code'),
+        sessionCode: z.string().describe('Session join code'),
         aggregate: z.string().optional().describe('If provided, only suggest work items for this aggregate'),
       },
     },
-    ({ code, aggregate }) => {
-      const session = sessionStore.getSession(code);
+    ({ sessionCode, aggregate }) => {
+      const session = sessionStore.getSession(sessionCode);
       if (!session) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
@@ -1488,17 +1488,17 @@ async function main(): Promise<void> {
     {
       description: 'Set a dependency between two work items. Idempotent: repeated calls with the same fromItemId+toItemId return the existing record.',
       inputSchema: {
-        code: z.string().describe('Session join code'),
+        sessionCode: z.string().describe('Session join code'),
         fromItemId: z.string().describe('Work item ID that depends on toItemId'),
         toItemId: z.string().describe('Work item ID that must complete first'),
       },
     },
-    ({ code, fromItemId, toItemId }) => {
+    ({ sessionCode, fromItemId, toItemId }) => {
       const svc = new DecompositionService(
         (c: string) => sessionStore.getSession(c) ?? null,
         eventStore
       );
-      const dependency = svc.setDependency(code, { fromId: fromItemId, toId: toItemId, participantId: 'system' });
+      const dependency = svc.setDependency(sessionCode, { fromId: fromItemId, toId: toItemId, participantId: 'system' });
       if (!dependency) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
