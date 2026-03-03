@@ -431,22 +431,6 @@ export interface Draft {
 }
 
 /**
- * A plain-language requirement captured during the Spark phase.
- * Requirements are the lowest-friction entry point — users type what the system
- * needs to do, and later derive domain events from them.
- */
-export interface Requirement {
-  /** Unique identifier for the requirement */
-  id: string;
-  /** Plain-language description of what the system needs to do */
-  text: string;
-  /** Participant who authored this requirement */
-  participantId: string;
-  /** ISO 8601 timestamp when the requirement was created */
-  createdAt: string;
-}
-
-/**
  * Agent autonomy level for the current session.
  * Controls how much agents can do without explicit human approval.
  */

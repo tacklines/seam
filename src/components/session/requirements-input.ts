@@ -229,7 +229,7 @@ export class RequirementsInput extends LitElement {
         ${this.requirements.map((req, idx) => html`
           <li class="requirement-item" role="listitem">
             <span class="requirement-number" aria-hidden="true">${idx + 1}</span>
-            <span class="requirement-text">${req.text}</span>
+            <span class="requirement-text">${req.statement}</span>
             <span class="delete-btn">
               <sl-icon-button
                 name="x-circle"
