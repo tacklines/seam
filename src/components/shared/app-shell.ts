@@ -600,7 +600,9 @@ export class AppShell extends LitElement {
       if (this._soloMode) {
         // Solo mode: full-screen drop zone
         return html`
-          <file-drop-zone mode="hero"></file-drop-zone>
+          <help-tip tip-key="fileDrop" message=${t('helpTip.fileDrop')} ?active=${true}>
+            <file-drop-zone mode="hero"></file-drop-zone>
+          </help-tip>
           ${this._renderPasteToast()}
           ${this._renderShortcutReference()}
           ${this._renderSettingsDialog()}
@@ -1269,10 +1271,20 @@ export class AppShell extends LitElement {
 
     const selector = phaseToSelector[e.detail.phase];
     if (selector) {
+      // Double rAF ensures child components have rendered after the tab switch
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       const target =
         this.renderRoot.querySelector(selector) ??
         this.renderRoot.querySelector(`sl-tab-panel[name="${tab}"]`);
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      if (target) {
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        target.scrollIntoView({
+          behavior: prefersReducedMotion ? 'instant' : 'smooth',
+          block: 'start',
+        });
+      }
     }
   }
 
