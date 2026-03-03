@@ -1,4 +1,14 @@
-import type { LoadedFile, Participant, ParticipantType } from '../schema/types.js';
+import type {
+  LoadedFile,
+  Participant,
+  ParticipantType,
+  EventPriority,
+  Vote,
+  WorkItem,
+  WorkItemDependency,
+  OwnershipAssignment,
+  ConflictResolution,
+} from '../schema/types.js';
 import type { Confidence, Direction } from '../schema/types.js';
 
 export type ViewMode = 'cards' | 'flow' | 'comparison' | 'priority' | 'breakdown' | 'agreements' | 'contracts' | 'integration';
@@ -18,6 +28,12 @@ export interface ActiveSession {
   createdAt: string;
   participants: SessionParticipant[];
   submissions: SessionSubmission[];
+  priorities: EventPriority[];
+  votes: Vote[];
+  workItems: WorkItem[];
+  workItemDependencies: WorkItemDependency[];
+  ownershipMap: OwnershipAssignment[];
+  resolutions: ConflictResolution[];
 }
 
 export interface SessionState {

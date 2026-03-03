@@ -23,6 +23,12 @@ function makeSession(overrides: Partial<ActiveSession> = {}): ActiveSession {
     createdAt: '2026-01-01T00:00:00Z',
     participants: [],
     submissions: [],
+    priorities: [],
+    votes: [],
+    workItems: [],
+    workItemDependencies: [],
+    ownershipMap: [],
+    resolutions: [],
     ...overrides,
   };
 }

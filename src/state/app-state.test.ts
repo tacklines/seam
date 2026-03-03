@@ -17,6 +17,12 @@ const makeSession = (code = 'ABC123'): ActiveSession => ({
   createdAt: '2026-01-01T00:00:00Z',
   participants: [{ id: 'p1', name: 'Alice', joinedAt: '2026-01-01T00:00:00Z' }],
   submissions: [],
+  priorities: [],
+  votes: [],
+  workItems: [],
+  workItemDependencies: [],
+  ownershipMap: [],
+  resolutions: [],
 });
 
 describe('Store — session state', () => {

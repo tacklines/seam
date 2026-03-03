@@ -17,6 +17,7 @@
 
 import { store } from './app-state.js';
 import type { SessionParticipant, SessionSubmission } from './app-state.js';
+import type { EventPriority, Vote, WorkItem, WorkItemDependency, OwnershipAssignment, ConflictResolution } from '../schema/types.js';
 
 const WS_BASE = (typeof process !== 'undefined' && (process.env as Record<string, string>)['VITE_WS_URL'])
   ? (process.env as Record<string, string>)['VITE_WS_URL']
@@ -97,13 +98,34 @@ function openSocket(code: string): void {
         event?: {
           type: string;
           sessionCode?: string;
+          // ParticipantJoined
           participantId?: string;
           participantName?: string;
           participantType?: string;
+          // ArtifactSubmitted
           artifactId?: string;
           fileName?: string;
           artifactType?: string;
           version?: number;
+          // PrioritySet
+          eventName?: string;
+          tier?: 'must_have' | 'should_have' | 'could_have';
+          // VoteCast
+          direction?: 'up' | 'down';
+          // WorkItemCreated
+          aggregate?: string;
+          workItem?: WorkItem;
+          // DependencySet
+          fromItemId?: string;
+          toItemId?: string;
+          // ResolutionRecorded
+          overlapLabel?: string;
+          resolution?: string;
+          chosenApproach?: string;
+          resolvedBy?: string[];
+          // OwnershipAssigned
+          ownerRole?: string;
+          assignedBy?: string;
         };
         sessionCode?: string;
         message?: string;
@@ -146,13 +168,34 @@ function scheduleReconnect(code: string): void {
 function handleDomainEvent(event: {
   type: string;
   sessionCode?: string;
+  // ParticipantJoined
   participantId?: string;
   participantName?: string;
   participantType?: string;
+  // ArtifactSubmitted
   artifactId?: string;
   fileName?: string;
   artifactType?: string;
   version?: number;
+  // PrioritySet
+  eventName?: string;
+  tier?: 'must_have' | 'should_have' | 'could_have';
+  // VoteCast
+  direction?: 'up' | 'down';
+  // WorkItemCreated
+  aggregate?: string;
+  workItem?: WorkItem;
+  // DependencySet
+  fromItemId?: string;
+  toItemId?: string;
+  // ResolutionRecorded
+  overlapLabel?: string;
+  resolution?: string;
+  chosenApproach?: string;
+  resolvedBy?: string[];
+  // OwnershipAssigned
+  ownerRole?: string;
+  assignedBy?: string;
 }): void {
   const current = store.get().sessionState;
 
@@ -190,6 +233,117 @@ function handleDomainEvent(event: {
         submissions: [...current.session.submissions, submission],
       });
     }
+    return;
+  }
+
+  if (event.type === 'PrioritySet') {
+    if (!current) return;
+    const priority: EventPriority = {
+      eventName: event.eventName ?? '',
+      participantId: event.participantId ?? '',
+      tier: event.tier ?? 'should_have',
+      setAt: new Date().toISOString(),
+    };
+    // Replace existing priority for same participant + event, or append
+    const existing = current.session.priorities.filter(
+      (p) => !(p.participantId === priority.participantId && p.eventName === priority.eventName)
+    );
+    store.updateSession({
+      ...current.session,
+      priorities: [...existing, priority],
+    });
+    return;
+  }
+
+  if (event.type === 'VoteCast') {
+    if (!current) return;
+    const vote: Vote = {
+      participantId: event.participantId ?? '',
+      eventName: event.eventName ?? '',
+      direction: event.direction ?? 'up',
+      castAt: new Date().toISOString(),
+    };
+    // Replace existing vote for same participant + event, or append
+    const existing = current.session.votes.filter(
+      (v) => !(v.participantId === vote.participantId && v.eventName === vote.eventName)
+    );
+    store.updateSession({
+      ...current.session,
+      votes: [...existing, vote],
+    });
+    return;
+  }
+
+  if (event.type === 'WorkItemCreated') {
+    if (!current) return;
+    if (!event.workItem) return;
+    const already = current.session.workItems.find((w) => w.id === event.workItem!.id);
+    if (!already) {
+      store.updateSession({
+        ...current.session,
+        workItems: [...current.session.workItems, event.workItem],
+      });
+    }
+    return;
+  }
+
+  if (event.type === 'DependencySet') {
+    if (!current) return;
+    const dependency: WorkItemDependency = {
+      fromId: event.fromItemId ?? '',
+      toId: event.toItemId ?? '',
+      participantId: event.participantId ?? '',
+      setAt: new Date().toISOString(),
+    };
+    const already = current.session.workItemDependencies.find(
+      (d) => d.fromId === dependency.fromId && d.toId === dependency.toId
+    );
+    if (!already) {
+      store.updateSession({
+        ...current.session,
+        workItemDependencies: [...current.session.workItemDependencies, dependency],
+      });
+    }
+    return;
+  }
+
+  if (event.type === 'ResolutionRecorded') {
+    if (!current) return;
+    const resolution: ConflictResolution = {
+      overlapLabel: event.overlapLabel ?? '',
+      resolution: event.resolution ?? '',
+      chosenApproach: event.chosenApproach ?? '',
+      resolvedBy: event.resolvedBy ?? [],
+      resolvedAt: new Date().toISOString(),
+    };
+    const already = current.session.resolutions.find(
+      (r) => r.overlapLabel === resolution.overlapLabel
+    );
+    if (!already) {
+      store.updateSession({
+        ...current.session,
+        resolutions: [...current.session.resolutions, resolution],
+      });
+    }
+    return;
+  }
+
+  if (event.type === 'OwnershipAssigned') {
+    if (!current) return;
+    const assignment: OwnershipAssignment = {
+      aggregate: event.aggregate ?? '',
+      ownerRole: event.ownerRole ?? '',
+      assignedBy: event.assignedBy ?? '',
+      assignedAt: new Date().toISOString(),
+    };
+    // Replace existing ownership for same aggregate, or append
+    const existing = current.session.ownershipMap.filter(
+      (o) => o.aggregate !== assignment.aggregate
+    );
+    store.updateSession({
+      ...current.session,
+      ownershipMap: [...existing, assignment],
+    });
     return;
   }
 }
