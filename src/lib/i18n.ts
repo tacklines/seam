@@ -264,6 +264,13 @@ export const messages: Record<string, string> = {
   'lobby.urlJoinAutoTitle': 'Joining session…',
   'lobby.urlJoinAutoSubtitle': 'Detected session invite link. Joining automatically.',
   'lobby.submission.success': 'Files uploaded! Loading your session...',
+  'lobby.howItWorks.heading': 'How it works',
+  'lobby.howItWorks.step1.title': 'Share what your system does',
+  'lobby.howItWorks.step1.description': 'Describe the events and data your piece of the system handles — what it sends, what it receives, and when.',
+  'lobby.howItWorks.step2.title': 'See where things connect',
+  'lobby.howItWorks.step2.description': 'Seam compares everyone\'s pieces side by side and shows you exactly where they overlap or conflict.',
+  'lobby.howItWorks.step3.title': 'Agree on the boundaries',
+  'lobby.howItWorks.step3.description': 'Lock in decisions about who owns what before anyone writes a line of code.',
 
   // ---------------------------------------------------------------------------
   // error-boundary

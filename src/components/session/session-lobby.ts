@@ -138,6 +138,80 @@ export class SessionLobby extends LitElement {
       text-decoration: underline;
     }
 
+    /* ── How it works ── */
+    .how-it-works {
+      width: 100%;
+      max-width: 48rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .how-it-works-heading {
+      font-size: var(--sl-font-size-small);
+      font-weight: var(--sl-font-weight-semibold);
+      color: var(--sl-color-neutral-400);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      text-align: center;
+      margin: 0 0 1.25rem;
+    }
+
+    .how-it-works-steps {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 600px) {
+      .how-it-works-steps {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .hiw-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 1.25rem 1rem;
+      background: rgba(99, 102, 241, 0.04);
+      border: 1px solid rgba(99, 102, 241, 0.1);
+      border-radius: var(--sl-border-radius-large);
+    }
+
+    .hiw-step sl-icon {
+      font-size: 1.75rem;
+      color: var(--sl-color-primary-500);
+      margin-bottom: 0.625rem;
+    }
+
+    .hiw-step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 50%;
+      background: var(--sl-color-primary-100);
+      color: var(--sl-color-primary-700);
+      font-size: 0.7rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .hiw-step-title {
+      font-size: var(--sl-font-size-medium);
+      font-weight: var(--sl-font-weight-semibold);
+      color: var(--sl-color-neutral-800);
+      margin: 0 0 0.375rem;
+    }
+
+    .hiw-step-desc {
+      font-size: var(--sl-font-size-small);
+      color: var(--sl-color-neutral-500);
+      line-height: 1.55;
+      margin: 0;
+    }
+
     /* ── Flow states (creating / joining) ── */
     .flow-container {
       display: flex;
@@ -602,6 +676,30 @@ export class SessionLobby extends LitElement {
         <sl-icon name="people-fill" class="landing-icon"></sl-icon>
         <h1>${t('lobby.heroTitle')}</h1>
         <p class="subtitle">${t('lobby.heroSubtitle')}</p>
+
+        <section class="how-it-works" aria-labelledby="hiw-heading">
+          <p class="how-it-works-heading" id="hiw-heading">${t('lobby.howItWorks.heading')}</p>
+          <div class="how-it-works-steps">
+            <div class="hiw-step">
+              <span class="hiw-step-number" aria-hidden="true">1</span>
+              <sl-icon name="file-earmark-text" aria-hidden="true"></sl-icon>
+              <p class="hiw-step-title">${t('lobby.howItWorks.step1.title')}</p>
+              <p class="hiw-step-desc">${t('lobby.howItWorks.step1.description')}</p>
+            </div>
+            <div class="hiw-step">
+              <span class="hiw-step-number" aria-hidden="true">2</span>
+              <sl-icon name="diagram-3" aria-hidden="true"></sl-icon>
+              <p class="hiw-step-title">${t('lobby.howItWorks.step2.title')}</p>
+              <p class="hiw-step-desc">${t('lobby.howItWorks.step2.description')}</p>
+            </div>
+            <div class="hiw-step">
+              <span class="hiw-step-number" aria-hidden="true">3</span>
+              <sl-icon name="shield-check" aria-hidden="true"></sl-icon>
+              <p class="hiw-step-title">${t('lobby.howItWorks.step3.title')}</p>
+              <p class="hiw-step-desc">${t('lobby.howItWorks.step3.description')}</p>
+            </div>
+          </div>
+        </section>
 
         <div class="landing-options" role="group" aria-label="${t('lobby.sessionOptions')}">
           <div
