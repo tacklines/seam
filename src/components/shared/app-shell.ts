@@ -1422,11 +1422,13 @@ export class AppShell extends LitElement {
     }
   }
 
-  private async _onEventsAccepted(e: CustomEvent) {
+  private async _onEventsAccepted(e: CustomEvent<{ selections: Array<{ requirementId: string; eventNames: string[] }> }>) {
     const sessionState = this.appState.sessionState;
+    const selections = e.detail?.selections ?? [];
 
-    if (sessionState && e.detail?.accepted) {
-      for (const group of e.detail.accepted as Array<{ requirementId: string; eventNames: string[] }>) {
+    // Call server to record accepted events on each requirement
+    if (sessionState && selections.length > 0) {
+      for (const group of selections) {
         try {
           await fetch(`${API_BASE}/api/sessions/${sessionState.code}/requirements/${group.requirementId}/accept`, {
             method: 'POST',
@@ -1440,6 +1442,52 @@ export class AppShell extends LitElement {
           console.error('accept derived events error:', (err as Error).message);
         }
       }
+    }
+
+    // Convert accepted suggestion events into a LoadedFile for the event cards view
+    const suggestions = this.appState.derivationSuggestions;
+    const acceptedNames = new Set(selections.flatMap(s => s.eventNames));
+    const domainEvents: import('../../schema/types.js').DomainEvent[] = [];
+
+    for (const group of suggestions) {
+      for (const ev of group.events) {
+        if (acceptedNames.has(ev.name)) {
+          domainEvents.push({
+            name: ev.name,
+            aggregate: ev.stateChange,
+            trigger: ev.trigger,
+            payload: [],
+            integration: { direction: 'internal' },
+            confidence: (ev.confidence as import('../../schema/types.js').Confidence) ?? 'POSSIBLE',
+            sourceRequirements: [group.requirementId],
+          });
+        }
+      }
+    }
+
+    if (domainEvents.length > 0) {
+      const participant = sessionState?.session?.participants.find(
+        p => p.id === sessionState.participantId
+      );
+      const role = participant?.name ?? 'derived';
+      const file: import('../../schema/types.js').LoadedFile = {
+        filename: 'derived-events.yaml',
+        role,
+        data: {
+          metadata: {
+            role,
+            scope: 'requirements-derivation',
+            goal: 'Events derived from requirements',
+            generated_at: new Date().toISOString(),
+            event_count: domainEvents.length,
+            assumption_count: 0,
+          },
+          domain_events: domainEvents,
+          boundary_assumptions: [],
+        },
+      };
+      store.addFile(file);
+      this._sparkCollapsed = true;
     }
 
     store.clearDerivationSuggestions();
