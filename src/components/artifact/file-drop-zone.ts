@@ -276,7 +276,7 @@ domain_events:
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'storm-prep-template.yaml';
+    a.download = 'perspective-template.yaml';
     a.click();
     URL.revokeObjectURL(url);
   }

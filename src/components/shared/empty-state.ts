@@ -17,7 +17,7 @@ import '@shoelace-style/shoelace/dist/components/button/button.js';
  * <empty-state
  *   icon="inbox"
  *   heading="No events yet"
- *   description="Load storm-prep YAML files to see events here"
+ *   description="Load perspective files to see events here"
  *   actionLabel="Load a file"
  * ></empty-state>
  */

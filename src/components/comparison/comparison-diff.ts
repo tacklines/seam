@@ -223,7 +223,7 @@ export class ComparisonDiff extends LitElement {
     }
   `;
 
-  /** Array of loaded storm-prep files. */
+  /** Array of loaded perspective files. */
   @property({ attribute: false }) files: LoadedFile[] = [];
 
   @state() private _fileAIndex = 0;
