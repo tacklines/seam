@@ -13,7 +13,10 @@ export type HelpTipKey =
   | 'priority-view'
   | 'breakdown-editor'
   | 'integration-dashboard'
-  | 'file-drop';
+  | 'file-drop'
+  | 'spark-canvas'
+  | 'agreements-tab'
+  | 'contracts-tab';
 
 const ALL_TIP_KEYS: HelpTipKey[] = [
   'comparison-view',
@@ -22,6 +25,9 @@ const ALL_TIP_KEYS: HelpTipKey[] = [
   'breakdown-editor',
   'integration-dashboard',
   'file-drop',
+  'spark-canvas',
+  'agreements-tab',
+  'contracts-tab',
 ];
 
 const STORAGE_KEY = 'seam-help-tips-seen';

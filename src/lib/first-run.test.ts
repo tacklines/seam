@@ -170,7 +170,10 @@ describe('getUnseenTips', () => {
     expect(unseen).toContain('breakdown-editor');
     expect(unseen).toContain('integration-dashboard');
     expect(unseen).toContain('file-drop');
-    expect(unseen).toHaveLength(6);
+    expect(unseen).toContain('spark-canvas');
+    expect(unseen).toContain('agreements-tab');
+    expect(unseen).toContain('contracts-tab');
+    expect(unseen).toHaveLength(9);
   });
 
   it('excludes tips that have already been seen', () => {
@@ -191,6 +194,9 @@ describe('getUnseenTips', () => {
       'breakdown-editor',
       'integration-dashboard',
       'file-drop',
+      'spark-canvas',
+      'agreements-tab',
+      'contracts-tab',
     ];
     localStorageMock.getItem.mockReturnValue(JSON.stringify(allKeys));
     expect(getUnseenTips()).toHaveLength(0);
@@ -198,6 +204,6 @@ describe('getUnseenTips', () => {
 
   it('returns all tips when localStorage contains malformed JSON', () => {
     localStorageMock.getItem.mockReturnValueOnce('corrupt');
-    expect(getUnseenTips()).toHaveLength(6);
+    expect(getUnseenTips()).toHaveLength(9);
   });
 });
