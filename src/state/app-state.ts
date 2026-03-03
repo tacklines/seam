@@ -11,6 +11,22 @@ import type {
   Requirement,
 } from '../schema/types.js';
 import type { Confidence, Direction } from '../schema/types.js';
+
+/** A single suggested event within a derivation group. */
+export interface DerivationSuggestedEvent {
+  name: string;
+  description: string;
+  confidence: string;
+  trigger: string;
+  stateChange: string;
+}
+
+/** A group of suggested events derived from a single requirement. */
+export interface DerivationSuggestionGroup {
+  requirementId: string;
+  requirementText: string;
+  events: DerivationSuggestedEvent[];
+}
 import { saveSessionIdentity, clearSessionIdentity } from '../lib/session-identity-persistence.js';
 
 export type ViewMode = 'cards' | 'flow' | 'comparison' | 'priority' | 'breakdown' | 'agreements' | 'contracts' | 'integration';
@@ -57,6 +73,7 @@ export interface AppState {
   sidebarCollapsed: boolean;
   fileManagerOpen: boolean;
   sessionState: SessionState | null;
+  derivationSuggestions: DerivationSuggestionGroup[];
 }
 
 export type AppStateEvent =
@@ -70,7 +87,8 @@ export type AppStateEvent =
   | { type: 'file-manager-toggled' }
   | { type: 'session-connected'; code: string; participantId: string }
   | { type: 'session-updated' }
-  | { type: 'session-disconnected' };
+  | { type: 'session-disconnected' }
+  | { type: 'derivation-suggestions-changed' };
 
 type Listener = (event: AppStateEvent) => void;
 
@@ -90,6 +108,7 @@ class Store {
     sidebarCollapsed: false,
     fileManagerOpen: false,
     sessionState: null,
+    derivationSuggestions: [],
   };
 
   private listeners = new Set<Listener>();
@@ -209,6 +228,16 @@ class Store {
     this.state = { ...this.state, sessionState: null };
     clearSessionIdentity();
     this.notify({ type: 'session-disconnected' });
+  }
+
+  setDerivationSuggestions(suggestions: DerivationSuggestionGroup[]) {
+    this.state = { ...this.state, derivationSuggestions: suggestions };
+    this.notify({ type: 'derivation-suggestions-changed' });
+  }
+
+  clearDerivationSuggestions() {
+    this.state = { ...this.state, derivationSuggestions: [] };
+    this.notify({ type: 'derivation-suggestions-changed' });
   }
 }
 
