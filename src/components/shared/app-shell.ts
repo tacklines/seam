@@ -499,7 +499,7 @@ export class AppShell extends LitElement {
           category: t('shortcuts.category.phases'),
         },
         () => {
-          this.dispatchEvent(
+          this._onPhaseNavigate(
             new CustomEvent('phase-navigate', {
               detail: { phase },
               bubbles: true,
