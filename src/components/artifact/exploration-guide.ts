@@ -271,8 +271,70 @@ export class ExplorationGuide extends LitElement {
     sl-details::part(content) {
       padding: 0 0.75rem;
     }
+
+    /* --- Empty state --- */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 1.5rem 1rem;
+      gap: 1rem;
+    }
+
+    .empty-state-icon {
+      font-size: 2rem;
+      color: var(--sl-color-neutral-400);
+      line-height: 1;
+    }
+
+    .empty-state-heading {
+      font-size: var(--sl-font-size-medium);
+      font-weight: var(--sl-font-weight-semibold);
+      color: var(--sl-color-neutral-700);
+      margin: 0;
+    }
+
+    .empty-state-description {
+      font-size: var(--sl-font-size-small);
+      color: var(--sl-color-neutral-500);
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .empty-state-previews {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+
+    .empty-state-preview {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.625rem;
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--sl-border-radius-medium);
+      background: var(--sl-color-neutral-50);
+    }
+
+    .empty-state-preview-icon {
+      font-size: 1.125rem;
+      color: var(--sl-color-neutral-400);
+      flex-shrink: 0;
+      line-height: 1.4;
+    }
+
+    .empty-state-preview-text {
+      font-size: var(--sl-font-size-x-small);
+      color: var(--sl-color-neutral-500);
+      line-height: 1.4;
+    }
   `;
 
+  @property({ type: Number }) artifactCount = 0;
   @property({ type: Boolean }) compareReady = false;
   @property({ type: Number }) overlapCount = 0;
   @property({ type: Number }) completenessScore = 0;
@@ -580,7 +642,36 @@ export class ExplorationGuide extends LitElement {
     `;
   }
 
+  private _renderEmptyState() {
+    return html`
+      <h2 class="guide-title">${t('explorationGuide.title')}</h2>
+      <div class="empty-state" role="status">
+        <div class="empty-state-icon" aria-hidden="true">&#x1F9ED;</div>
+        <h3 class="empty-state-heading">${t('explorationGuide.empty.title')}</h3>
+        <p class="empty-state-description">${t('explorationGuide.empty.description')}</p>
+        <div class="empty-state-previews">
+          <div class="empty-state-preview">
+            <span class="empty-state-preview-icon" aria-hidden="true">&#x2705;</span>
+            <span class="empty-state-preview-text">${t('explorationGuide.empty.completeness')}</span>
+          </div>
+          <div class="empty-state-preview">
+            <span class="empty-state-preview-icon" aria-hidden="true">&#x2753;</span>
+            <span class="empty-state-preview-text">${t('explorationGuide.empty.prompts')}</span>
+          </div>
+          <div class="empty-state-preview">
+            <span class="empty-state-preview-icon" aria-hidden="true">&#x1F50D;</span>
+            <span class="empty-state-preview-text">${t('explorationGuide.empty.patterns')}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   render() {
+    if (this.artifactCount === 0) {
+      return this._renderEmptyState();
+    }
+
     return html`
       <h2 class="guide-title">${t('explorationGuide.title')}</h2>
 
