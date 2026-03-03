@@ -1483,20 +1483,19 @@ async function main(): Promise<void> {
   server.registerTool(
     'set_dependency',
     {
-      description: 'Set a dependency between two work items. Idempotent: repeated calls with the same fromId+toId return the existing record.',
+      description: 'Set a dependency between two work items. Idempotent: repeated calls with the same fromItemId+toItemId return the existing record.',
       inputSchema: {
         code: z.string().describe('Session join code'),
-        fromId: z.string().describe('Work item ID that depends on toId'),
-        toId: z.string().describe('Work item ID that must complete first'),
-        participantId: z.string().describe('ID of the participant setting the dependency'),
+        fromItemId: z.string().describe('Work item ID that depends on toItemId'),
+        toItemId: z.string().describe('Work item ID that must complete first'),
       },
     },
-    ({ code, fromId, toId, participantId }) => {
+    ({ code, fromItemId, toItemId }) => {
       const svc = new DecompositionService(
         (c: string) => sessionStore.getSession(c) ?? null,
         eventStore
       );
-      const dependency = svc.setDependency(code, { fromId, toId, participantId });
+      const dependency = svc.setDependency(code, { fromId: fromItemId, toId: toItemId, participantId: 'system' });
       if (!dependency) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],

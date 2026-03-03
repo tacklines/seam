@@ -92,12 +92,11 @@ function handleSetDependency(
   store: SessionStore,
   eventStore: EventStore,
   code: string,
-  fromId: string,
-  toId: string,
-  participantId: string
+  fromItemId: string,
+  toItemId: string
 ): McpResult {
   const svc = makeDecompositionService(store, eventStore);
-  const dependency = svc.setDependency(code, { fromId, toId, participantId });
+  const dependency = svc.setDependency(code, { fromId: fromItemId, toId: toItemId, participantId: 'system' });
   if (!dependency) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: 'Session not found' }) }], isError: true };
   }
@@ -506,7 +505,7 @@ describe('set_dependency MCP tool handler', () => {
       const store = new SessionStore();
       const eventStore = new EventStore();
 
-      const result = handleSetDependency(store, eventStore, 'XXXXXX', 'item-1', 'item-2', 'p1');
+      const result = handleSetDependency(store, eventStore, 'XXXXXX', 'item-1', 'item-2');
 
       expect(result.isError).toBe(true);
       const body = JSON.parse(result.content[0].text) as { error: string };
@@ -520,7 +519,7 @@ describe('set_dependency MCP tool handler', () => {
       const eventStore = new EventStore();
       const { session } = store.createSession('Alice');
 
-      const result = handleSetDependency(store, eventStore, session.code, 'item-1', 'item-2', 'p1');
+      const result = handleSetDependency(store, eventStore, session.code, 'item-1', 'item-2');
 
       expect(result.isError).toBeUndefined();
       const body = JSON.parse(result.content[0].text) as {
@@ -528,7 +527,7 @@ describe('set_dependency MCP tool handler', () => {
       };
       expect(body.dependency.fromId).toBe('item-1');
       expect(body.dependency.toId).toBe('item-2');
-      expect(body.dependency.participantId).toBe('p1');
+      expect(body.dependency.participantId).toBe('system');
       expect(body.dependency.setAt).toBeTruthy();
     });
 
@@ -537,14 +536,14 @@ describe('set_dependency MCP tool handler', () => {
       const eventStore = new EventStore();
       const { session } = store.createSession('Alice');
 
-      const first = handleSetDependency(store, eventStore, session.code, 'item-1', 'item-2', 'p1');
-      const second = handleSetDependency(store, eventStore, session.code, 'item-1', 'item-2', 'p2');
+      const first = handleSetDependency(store, eventStore, session.code, 'item-1', 'item-2');
+      const second = handleSetDependency(store, eventStore, session.code, 'item-1', 'item-2');
 
       const firstBody = JSON.parse(first.content[0].text) as { dependency: { setAt: string; participantId: string } };
       const secondBody = JSON.parse(second.content[0].text) as { dependency: { setAt: string; participantId: string } };
       // Second call should return the original record unchanged
       expect(secondBody.dependency.setAt).toBe(firstBody.dependency.setAt);
-      expect(secondBody.dependency.participantId).toBe('p1');
+      expect(secondBody.dependency.participantId).toBe('system');
     });
 
     it('Then emits a DependencySet domain event', () => {
@@ -552,7 +551,7 @@ describe('set_dependency MCP tool handler', () => {
       const eventStore = new EventStore();
       const { session } = store.createSession('Alice');
 
-      handleSetDependency(store, eventStore, session.code, 'item-A', 'item-B', 'p1');
+      handleSetDependency(store, eventStore, session.code, 'item-A', 'item-B');
 
       const events = eventStore.getEvents(session.code);
       const depEvent = events.find((e) => e.type === 'DependencySet');
