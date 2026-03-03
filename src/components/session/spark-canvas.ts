@@ -455,6 +455,38 @@ export class SparkCanvas extends LitElement {
       border: 1px dashed var(--sl-color-neutral-300);
       border-radius: var(--sl-border-radius-medium);
     }
+
+    /* ── Collapse/expand animation wrappers ── */
+    .canvas-wrapper {
+      max-height: 2000px;
+      opacity: 1;
+      overflow: hidden;
+      transition: max-height 300ms ease-in-out, opacity 200ms ease-in-out;
+    }
+
+    .canvas-wrapper.collapsed {
+      max-height: 0;
+      opacity: 0;
+    }
+
+    .collapsed-bar-wrapper {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      transition: max-height 300ms ease-in-out, opacity 200ms ease-in-out 100ms;
+    }
+
+    .collapsed-bar-wrapper.visible {
+      max-height: 60px;
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .canvas-wrapper,
+      .collapsed-bar-wrapper {
+        transition: none;
+      }
+    }
   `;
 
   /** Current session code (empty for solo mode). */
@@ -696,13 +728,18 @@ export class SparkCanvas extends LitElement {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   override render() {
-    if (this.collapsed) {
-      return this._renderCollapsed();
-    }
-    return html`${this._renderCanvas()}${this._renderAiDialog()}`;
+    return html`
+      <div class="canvas-wrapper ${this.collapsed ? 'collapsed' : ''}">
+        ${this._renderCanvas()}
+      </div>
+      <div class="collapsed-bar-wrapper ${this.collapsed ? 'visible' : ''}">
+        ${this._renderCollapsedBar()}
+      </div>
+      ${this._renderAiDialog()}
+    `;
   }
 
-  private _renderCollapsed() {
+  private _renderCollapsedBar() {
     return html`
       <div
         class="collapsed-bar"
