@@ -392,3 +392,42 @@ async fn test_list_tasks_by_filter() {
     ).bind(session_id).fetch_all(&db).await.unwrap();
     assert_eq!(top_level.len(), 5);
 }
+
+#[tokio::test]
+async fn test_delete_task_standalone() {
+    let db = setup_db().await;
+    let (session_id, participant_id) = create_test_session(&db).await;
+
+    let task_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, 'task', 'Delete me', 'open', $3, NOW(), NOW())"
+    )
+    .bind(task_id).bind(session_id).bind(participant_id)
+    .execute(&db).await.unwrap();
+
+    // Verify it exists
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)")
+        .bind(task_id).fetch_one(&db).await.unwrap();
+    assert!(exists);
+
+    // Delete it
+    let result = sqlx::query("DELETE FROM tasks WHERE id = $1")
+        .bind(task_id).execute(&db).await.unwrap();
+    assert_eq!(result.rows_affected(), 1);
+
+    // Verify it's gone
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)")
+        .bind(task_id).fetch_one(&db).await.unwrap();
+    assert!(!exists, "Task should be deleted");
+}
+
+#[tokio::test]
+async fn test_delete_nonexistent_task() {
+    let db = setup_db().await;
+
+    let fake_id = Uuid::new_v4();
+    let result = sqlx::query("DELETE FROM tasks WHERE id = $1")
+        .bind(fake_id).execute(&db).await.unwrap();
+    assert_eq!(result.rows_affected(), 0, "Deleting nonexistent task should affect 0 rows");
+}

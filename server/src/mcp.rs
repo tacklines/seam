@@ -525,6 +525,29 @@ impl SeamMcp {
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Close failed: {e}"))])),
         }
     }
+
+    #[tool(description = "Delete a task and all its children. Use with caution — this is irreversible.")]
+    async fn delete_task(
+        &self,
+        Parameters(params): Parameters<GetTaskParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let task_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+        };
+
+        match sqlx::query("DELETE FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .execute(&self.db)
+            .await
+        {
+            Ok(result) if result.rows_affected() == 0 => {
+                Ok(CallToolResult::error(vec![Content::text("Task not found")]))
+            }
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text("Task deleted")])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Delete failed: {e}"))])),
+        }
+    }
 }
 
 #[tool_handler]
