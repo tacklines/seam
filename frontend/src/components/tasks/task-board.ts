@@ -655,6 +655,7 @@ export class TaskBoard extends LitElement {
           @back=${() => { this._selectedTaskId = null; this._loadTasks(); }}
           @deleted=${() => { this._selectedTaskId = null; this._loadTasks(); }}
           @navigate-task=${(e: CustomEvent) => { this._selectedTaskId = e.detail; }}
+          @create-child=${(e: CustomEvent) => { this._selectedTaskId = null; this._openCreateDialog(e.detail, 'subtask'); }}
         ></task-detail>
       `;
     }

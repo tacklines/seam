@@ -537,9 +537,17 @@ export class TaskDetail extends LitElement {
         }
       </div>
 
-      ${task.children.length > 0 ? html`
-        <div class="children-section">
-          <div class="section-heading">Children (${task.children.length})</div>
+      <div class="children-section">
+        <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
+          <span>Children (${task.children.length})</span>
+          <sl-button size="small" variant="text"
+            @click=${() => this.dispatchEvent(new CustomEvent('create-child', { detail: task.id }))}
+          >
+            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+            Add
+          </sl-button>
+        </div>
+        ${task.children.length > 0 ? html`
           <div class="child-list">
             ${task.children.map(child => html`
               <div class="child-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: child.id }))}>
@@ -551,8 +559,8 @@ export class TaskDetail extends LitElement {
               </div>
             `)}
           </div>
-        </div>
-      ` : nothing}
+        ` : html`<span class="no-description">No child tasks yet</span>`}
+      </div>
 
       <sl-divider></sl-divider>
 
