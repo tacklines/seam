@@ -27,9 +27,18 @@ pub struct UpdateTaskRequest {
     pub title: Option<String>,
     pub description: Option<String>,
     pub status: Option<String>,
-    pub assigned_to: Option<Uuid>,
+    /// None = field absent (keep current), Some(None) = explicitly null (unassign), Some(Some(id)) = assign
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub assigned_to: Option<Option<Uuid>>,
     pub parent_id: Option<Uuid>,
     pub commit_sha: Option<String>,
+}
+
+fn deserialize_optional_field<'de, D>(deserializer: D) -> Result<Option<Option<Uuid>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Some(Option::<Uuid>::deserialize(deserializer)?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -312,7 +321,10 @@ pub async fn update_task(
         TaskStatus::Done => "done",
         TaskStatus::Closed => "closed",
     });
-    let assigned_to = req.assigned_to.or(task.assigned_to);
+    let assigned_to = match req.assigned_to {
+        Some(v) => v,            // explicitly provided (could be Some(id) or None to unassign)
+        None => task.assigned_to, // field absent — keep current
+    };
     let parent_id = req.parent_id.or(task.parent_id);
     let commit_sha = req.commit_sha.as_deref().or(task.commit_sha.as_deref());
 

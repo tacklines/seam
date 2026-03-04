@@ -6,7 +6,7 @@ import {
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
   STATUS_LABELS, STATUS_VARIANTS,
 } from '../../state/task-types.js';
-import type { SessionParticipant } from '../../state/app-state.js';
+import { store, type SessionParticipant } from '../../state/app-state.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -58,6 +58,7 @@ export class TaskDetail extends LitElement {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      cursor: text;
     }
 
     .detail-actions {
@@ -105,6 +106,7 @@ export class TaskDetail extends LitElement {
       background: var(--surface-card);
       border-radius: 6px;
       border: 1px solid var(--border-subtle);
+      cursor: text;
     }
 
     .no-description {
@@ -220,10 +222,25 @@ export class TaskDetail extends LitElement {
   @state() private _error = '';
   @state() private _commentText = '';
   @state() private _commentLoading = false;
+  @state() private _editingTitle = false;
+  @state() private _editingDescription = false;
+
+  private _storeUnsub: (() => void) | null = null;
 
   connectedCallback() {
     super.connectedCallback();
     this._loadTask();
+    this._storeUnsub = store.subscribe((event) => {
+      if (event.type === 'tasks-changed') {
+        this._loadTask();
+      }
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._storeUnsub?.();
+    this._storeUnsub = null;
   }
 
   updated(changed: Map<string, unknown>) {
@@ -256,14 +273,18 @@ export class TaskDetail extends LitElement {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  private async _changeStatus(status: TaskStatus) {
+  private async _updateField(fields: Record<string, unknown>) {
     if (!this._task) return;
     try {
-      await updateTask(this.sessionCode, this._task.id, { status });
+      await updateTask(this.sessionCode, this._task.id, fields);
       await this._loadTask();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to update';
     }
+  }
+
+  private async _changeStatus(status: TaskStatus) {
+    return this._updateField({ status });
   }
 
   private async _handleDelete() {
@@ -319,7 +340,20 @@ export class TaskDetail extends LitElement {
 
         <div class="detail-title-row">
           <sl-icon class="type-icon" name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
-          <h2 class="detail-title">${task.title}</h2>
+          ${this._editingTitle
+            ? html`<sl-input
+                value=${task.title}
+                size="large"
+                style="flex: 1;"
+                @sl-change=${(e: Event) => {
+                  const val = (e.target as HTMLInputElement).value.trim();
+                  if (val && val !== task.title) this._updateField({ title: val });
+                  this._editingTitle = false;
+                }}
+                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingTitle = false; }}
+              ></sl-input>`
+            : html`<h2 class="detail-title" @dblclick=${() => { this._editingTitle = true; }}>${task.title}</h2>`
+          }
         </div>
 
         <div class="detail-actions">
@@ -346,7 +380,24 @@ export class TaskDetail extends LitElement {
         </span>
 
         <span class="meta-label">Assigned</span>
-        <span class="meta-value">${this._getParticipantName(task.assigned_to)}</span>
+        <span class="meta-value">
+          <sl-select size="small" value=${task.assigned_to ?? ''}
+            placeholder="Unassigned"
+            clearable
+            @sl-change=${(e: Event) => {
+              const val = (e.target as HTMLSelectElement).value;
+              this._updateField({ assigned_to: val || null });
+            }}
+            style="max-width: 200px;"
+          >
+            ${this.participants.map(p => html`
+              <sl-option value=${p.id}>
+                <sl-icon slot="prefix" name=${p.participant_type === 'agent' ? 'robot' : 'person-fill'}></sl-icon>
+                ${p.display_name}
+              </sl-option>
+            `)}
+          </sl-select>
+        </span>
 
         <span class="meta-label">Created</span>
         <span class="meta-value">${this._formatDate(task.created_at)}</span>
@@ -364,9 +415,27 @@ export class TaskDetail extends LitElement {
 
       <div class="description-section">
         <div class="section-heading">Description</div>
-        ${task.description
-          ? html`<div class="description-content">${task.description}</div>`
-          : html`<span class="no-description">No description</span>`
+        ${this._editingDescription
+          ? html`<div>
+              <sl-textarea
+                value=${task.description ?? ''}
+                rows="4"
+                resize="auto"
+                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingDescription = false; }}
+              ></sl-textarea>
+              <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                <sl-button size="small" variant="primary" @click=${(e: Event) => {
+                  const textarea = (e.target as HTMLElement).closest('.description-section')?.querySelector('sl-textarea');
+                  const val = (textarea as any)?.value ?? '';
+                  this._updateField({ description: val || null });
+                  this._editingDescription = false;
+                }}>Save</sl-button>
+                <sl-button size="small" @click=${() => { this._editingDescription = false; }}>Cancel</sl-button>
+              </div>
+            </div>`
+          : task.description
+            ? html`<div class="description-content" @dblclick=${() => { this._editingDescription = true; }}>${task.description}</div>`
+            : html`<span class="no-description" @click=${() => { this._editingDescription = true; }}>No description — click to add</span>`
         }
       </div>
 
