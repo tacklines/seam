@@ -15,6 +15,8 @@ export interface TaskView {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  child_count: number;
+  comment_count: number;
 }
 
 export interface TaskSummaryView {

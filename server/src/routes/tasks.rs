@@ -69,6 +69,8 @@ pub struct TaskView {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub child_count: i64,
+    pub comment_count: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -112,6 +114,8 @@ impl From<Task> for TaskView {
             created_at: t.created_at,
             updated_at: t.updated_at,
             closed_at: t.closed_at,
+            child_count: 0,
+            comment_count: 0,
         }
     }
 }
@@ -245,7 +249,39 @@ pub async fn list_tasks(
     let tasks = q.fetch_all(&state.db).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(tasks.into_iter().map(|t| t.into()).collect()))
+    let task_ids: Vec<Uuid> = tasks.iter().map(|t| t.id).collect();
+
+    // Batch-fetch child counts
+    let child_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT parent_id, COUNT(*) FROM tasks WHERE parent_id = ANY($1) GROUP BY parent_id"
+    )
+    .bind(&task_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let child_map: std::collections::HashMap<Uuid, i64> = child_counts.into_iter().collect();
+
+    // Batch-fetch comment counts
+    let comment_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT task_id, COUNT(*) FROM task_comments WHERE task_id = ANY($1) GROUP BY task_id"
+    )
+    .bind(&task_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let comment_map: std::collections::HashMap<Uuid, i64> = comment_counts.into_iter().collect();
+
+    let views: Vec<TaskView> = tasks.into_iter().map(|t| {
+        let id = t.id;
+        let mut view: TaskView = t.into();
+        view.child_count = *child_map.get(&id).unwrap_or(&0);
+        view.comment_count = *comment_map.get(&id).unwrap_or(&0);
+        view
+    }).collect();
+
+    Ok(Json(views))
 }
 
 pub async fn get_task(

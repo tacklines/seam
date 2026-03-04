@@ -253,6 +253,33 @@ export class TaskBoard extends LitElement {
       gap: 0.25rem;
     }
 
+    .kanban-card-counts {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .kanban-card-count {
+      display: flex;
+      align-items: center;
+      gap: 0.15rem;
+      color: var(--text-tertiary);
+    }
+
+    .kanban-card-count sl-icon {
+      font-size: 0.65rem;
+    }
+
+    .kanban-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem 0.5rem;
+      color: var(--text-tertiary);
+      font-size: 0.78rem;
+      font-style: italic;
+    }
+
     @media (max-width: 900px) {
       .kanban {
         grid-template-columns: 1fr;
@@ -333,6 +360,8 @@ export class TaskBoard extends LitElement {
   @state() private _createTitle = '';
   @state() private _createDescription = '';
   @state() private _createParentId = '';
+  @state() private _createAssignee = '';
+  @state() private _createStatus: TaskStatus | '' = '';
   @state() private _createLoading = false;
 
   private _storeUnsub: (() => void) | null = null;
@@ -438,16 +467,23 @@ export class TaskBoard extends LitElement {
     if (!this._createTitle.trim()) return;
     this._createLoading = true;
     try {
-      await createTask(this.sessionCode, {
+      const task = await createTask(this.sessionCode, {
         task_type: this._createType,
         title: this._createTitle.trim(),
         description: this._createDescription.trim() || undefined,
         parent_id: this._createParentId || undefined,
+        assigned_to: this._createAssignee || undefined,
       });
+      // If a non-default status was requested (e.g. from kanban column "+"), update it
+      if (this._createStatus && this._createStatus !== 'open') {
+        await updateTask(this.sessionCode, task.id, { status: this._createStatus });
+      }
       this._showCreateDialog = false;
       this._createTitle = '';
       this._createDescription = '';
       this._createParentId = '';
+      this._createAssignee = '';
+      this._createStatus = '';
       await this._loadTasks();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to create task';
@@ -461,7 +497,14 @@ export class TaskBoard extends LitElement {
     this._createParentId = parentId ?? '';
     this._createTitle = '';
     this._createDescription = '';
+    this._createAssignee = '';
+    this._createStatus = '';
     this._showCreateDialog = true;
+  }
+
+  private _openCreateDialogWithStatus(status: TaskStatus) {
+    this._openCreateDialog();
+    this._createStatus = status;
   }
 
   render() {
@@ -622,6 +665,8 @@ export class TaskBoard extends LitElement {
           <div class="task-meta">
             ${TASK_TYPE_LABELS[task.task_type]}
             ${assignee ? html` &middot; ${assignee}` : nothing}
+            ${task.child_count > 0 ? html` &middot; <sl-icon name="diagram-3" style="font-size: 0.7rem; vertical-align: middle;"></sl-icon> ${task.child_count}` : nothing}
+            ${task.comment_count > 0 ? html` &middot; <sl-icon name="chat-dots" style="font-size: 0.7rem; vertical-align: middle;"></sl-icon> ${task.comment_count}` : nothing}
           </div>
         </div>
 
@@ -682,7 +727,16 @@ export class TaskBoard extends LitElement {
           <div class="kanban-column">
             <div class="kanban-column-header status-${status}">
               <span>${STATUS_LABELS[status]}</span>
-              <sl-badge variant="neutral" pill>${tasksByStatus(status).length}</sl-badge>
+              <span style="display: flex; align-items: center; gap: 0.35rem;">
+                <sl-badge variant="neutral" pill>${tasksByStatus(status).length}</sl-badge>
+                <sl-tooltip content="Add task">
+                  <sl-icon-button
+                    name="plus"
+                    style="font-size: 0.75rem;"
+                    @click=${() => this._openCreateDialogWithStatus(status)}
+                  ></sl-icon-button>
+                </sl-tooltip>
+              </span>
             </div>
             <div class="kanban-cards"
               @dragover=${(e: DragEvent) => {
@@ -698,7 +752,9 @@ export class TaskBoard extends LitElement {
                 this._handleDrop(status);
               }}
             >
-              ${tasksByStatus(status).map(task => this._renderKanbanCard(task))}
+              ${tasksByStatus(status).length === 0
+                ? html`<div class="kanban-empty">No tasks</div>`
+                : tasksByStatus(status).map(task => this._renderKanbanCard(task))}
             </div>
           </div>
         `)}
@@ -735,7 +791,19 @@ export class TaskBoard extends LitElement {
           <span class="kanban-card-title">${task.title}</span>
         </div>
         <div class="kanban-card-footer">
-          <span>${TASK_TYPE_LABELS[task.task_type]}</span>
+          <span class="kanban-card-counts">
+            <span>${TASK_TYPE_LABELS[task.task_type]}</span>
+            ${task.child_count > 0 ? html`
+              <span class="kanban-card-count">
+                <sl-icon name="diagram-3"></sl-icon> ${task.child_count}
+              </span>
+            ` : nothing}
+            ${task.comment_count > 0 ? html`
+              <span class="kanban-card-count">
+                <sl-icon name="chat-dots"></sl-icon> ${task.comment_count}
+              </span>
+            ` : nothing}
+          </span>
           ${assignee ? html`
             <span class="kanban-card-assignee">
               <sl-icon name="person-fill" style="font-size: 0.7rem;"></sl-icon>
@@ -788,6 +856,23 @@ export class TaskBoard extends LitElement {
             @sl-input=${(e: Event) => { this._createDescription = (e.target as HTMLTextAreaElement).value; }}
             rows="3"
           ></sl-textarea>
+
+          ${this.participants.length > 0 ? html`
+            <sl-select
+              label="Assignee"
+              placeholder="Unassigned"
+              clearable
+              value=${this._createAssignee}
+              @sl-change=${(e: Event) => { this._createAssignee = (e.target as HTMLSelectElement).value; }}
+            >
+              ${this.participants.map(p => html`
+                <sl-option value=${p.id}>
+                  <sl-icon slot="prefix" name=${p.participant_type === 'agent' ? 'robot' : 'person-fill'}></sl-icon>
+                  ${p.display_name}
+                </sl-option>
+              `)}
+            </sl-select>
+          ` : nothing}
 
           ${parentCandidates.length > 0 ? html`
             <sl-select
