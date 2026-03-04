@@ -223,6 +223,7 @@ export class SessionLobby extends LitElement {
   // For creating sessions, we need a project ID.
   // TODO: add project selection UI. For now, use a fixed default.
   @state() private _projectId = '';
+  @state() private _sessionName = '';
 
   private _unsubscribe: (() => void) | null = null;
 
@@ -262,7 +263,10 @@ export class SessionLobby extends LitElement {
           'Content-Type': 'application/json',
           ...(token && { 'Authorization': `Bearer ${token}` }),
         },
-        body: JSON.stringify({ project_id: this._projectId || undefined }),
+        body: JSON.stringify({
+          project_id: this._projectId || undefined,
+          name: this._sessionName.trim() || undefined,
+        }),
       });
       if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
       const data = await res.json();
@@ -356,6 +360,13 @@ export class SessionLobby extends LitElement {
           </span>
           <h2>New Session</h2>
           ${this._error ? html`<sl-alert variant="danger" open class="error-msg">${this._error}</sl-alert>` : nothing}
+          <sl-input
+            label="Session Name"
+            placeholder="e.g. Sprint Planning, Bug Triage"
+            value=${this._sessionName}
+            @sl-input=${(e: CustomEvent) => { this._sessionName = (e.target as HTMLInputElement).value; }}
+            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createSession(); }}
+          ></sl-input>
           <sl-button variant="primary" ?loading=${this._loading} @click=${() => void this._createSession()}>
             <sl-icon slot="prefix" name="arrow-right-circle"></sl-icon>
             Create Session
