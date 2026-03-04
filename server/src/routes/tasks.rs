@@ -52,6 +52,7 @@ pub struct ListTasksQuery {
     pub status: Option<String>,
     pub parent_id: Option<String>,
     pub assigned_to: Option<Uuid>,
+    pub search: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -237,6 +238,13 @@ pub async fn list_tasks(
     if let Some(ref at) = query.assigned_to {
         sql.push_str(&format!(" AND assigned_to = ${idx}"));
         bind_values.push(at.to_string());
+        idx += 1;
+    }
+    if let Some(ref search) = query.search {
+        sql.push_str(&format!(
+            " AND (title ILIKE ${idx} OR description ILIKE ${idx})"
+        ));
+        bind_values.push(format!("%{search}%"));
         let _ = idx;
     }
 
