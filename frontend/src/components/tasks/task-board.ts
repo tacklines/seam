@@ -426,6 +426,7 @@ export class TaskBoard extends LitElement {
   @state() private _filterType: TaskType | '' = '';
   @state() private _filterStatus: TaskStatus | '' = '';
   @state() private _searchQuery = '';
+  @state() private _sortBy: 'created' | 'updated' | 'title' | 'type' = 'created';
   private _dragTaskId: string | null = null;
   @state() private _showCreateDialog = false;
   @state() private _showShortcuts = false;
@@ -510,12 +511,33 @@ export class TaskBoard extends LitElement {
   }
 
   private get _filteredTasks(): TaskView[] {
-    if (!this._searchQuery.trim()) return this._tasks;
-    const q = this._searchQuery.toLowerCase();
-    return this._tasks.filter(t =>
-      t.title.toLowerCase().includes(q) ||
-      (t.description?.toLowerCase().includes(q))
-    );
+    let tasks = this._tasks;
+    if (this._searchQuery.trim()) {
+      const q = this._searchQuery.toLowerCase();
+      tasks = tasks.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        (t.description?.toLowerCase().includes(q))
+      );
+    }
+    // Sort
+    const sorted = [...tasks];
+    switch (this._sortBy) {
+      case 'updated':
+        sorted.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+        break;
+      case 'title':
+        sorted.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'type':
+        sorted.sort((a, b) => a.task_type.localeCompare(b.task_type));
+        break;
+      case 'created':
+      default:
+        // Default from API is created_at ASC, show newest first
+        sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        break;
+    }
+    return sorted;
   }
 
   private _showToast(message: string) {
@@ -690,6 +712,19 @@ export class TaskBoard extends LitElement {
             `)}
           </sl-select>
         ` : nothing}
+
+        <sl-select
+          size="small"
+          value=${this._sortBy}
+          style="min-width: 130px;"
+          @sl-change=${(e: Event) => { this._sortBy = (e.target as HTMLSelectElement).value as any; }}
+        >
+          <sl-icon slot="prefix" name="sort-down" style="font-size: 0.85rem;"></sl-icon>
+          <sl-option value="created">Newest</sl-option>
+          <sl-option value="updated">Recently Updated</sl-option>
+          <sl-option value="title">Title A-Z</sl-option>
+          <sl-option value="type">Type</sl-option>
+        </sl-select>
       </div>
 
       ${this._error ? html`
