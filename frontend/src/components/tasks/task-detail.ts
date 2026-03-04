@@ -689,9 +689,15 @@ export class TaskDetail extends LitElement {
 
         <div class="add-comment">
           <sl-textarea
-            placeholder="Add a comment..."
+            placeholder="Add a comment... (Ctrl+Enter to send)"
             value=${this._commentText}
             @sl-input=${(e: Event) => { this._commentText = (e.target as HTMLTextAreaElement).value; }}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && this._commentText.trim()) {
+                e.preventDefault();
+                this._handleAddComment();
+              }
+            }}
             rows="2"
             resize="auto"
           ></sl-textarea>
