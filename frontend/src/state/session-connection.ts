@@ -1,0 +1,98 @@
+import { store, type SessionParticipant } from './app-state.js';
+import { authStore } from './auth-state.js';
+
+const WS_BASE = (import.meta as any).env?.VITE_WS_URL ?? 'ws://localhost:5173/ws';
+
+const INITIAL_BACKOFF_MS = 1_000;
+const MAX_BACKOFF_MS = 30_000;
+const BACKOFF_FACTOR = 2;
+
+let activeSocket: WebSocket | null = null;
+let activeSessionCode: string | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let backoffMs = INITIAL_BACKOFF_MS;
+let intentionalDisconnect = false;
+
+export function connectSession(code: string): void {
+  intentionalDisconnect = false;
+  activeSessionCode = code;
+  backoffMs = INITIAL_BACKOFF_MS;
+  disconnectSession();
+  openSocket(code);
+}
+
+export function disconnectSession(): void {
+  intentionalDisconnect = true;
+  activeSessionCode = null;
+
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  if (activeSocket) {
+    activeSocket.close();
+    activeSocket = null;
+  }
+}
+
+function openSocket(code: string): void {
+  const ws = new WebSocket(WS_BASE);
+  activeSocket = ws;
+
+  ws.addEventListener('open', () => {
+    backoffMs = INITIAL_BACKOFF_MS;
+    const token = authStore.getAccessToken();
+    ws.send(JSON.stringify({ type: 'join', sessionCode: code, ...(token && { token }) }));
+  });
+
+  ws.addEventListener('message', (e: MessageEvent) => {
+    try {
+      const msg = JSON.parse(e.data as string) as {
+        type: string;
+        sessionCode?: string;
+        participant?: SessionParticipant;
+        message?: string;
+      };
+
+      if (msg.type === 'participant_joined' && msg.participant) {
+        const current = store.get().sessionState;
+        if (!current) return;
+        const already = current.session.participants.find((p) => p.id === msg.participant!.id);
+        if (!already) {
+          store.updateSession({
+            ...current.session,
+            participants: [...current.session.participants, msg.participant],
+          });
+        }
+      }
+    } catch {
+      // ignore malformed messages
+    }
+  });
+
+  ws.addEventListener('close', () => {
+    if (activeSocket === ws) {
+      activeSocket = null;
+    }
+    if (!intentionalDisconnect && activeSessionCode) {
+      scheduleReconnect(activeSessionCode);
+    }
+  });
+
+  ws.addEventListener('error', () => {
+    // error is always followed by close
+  });
+}
+
+function scheduleReconnect(code: string): void {
+  if (reconnectTimer !== null) return;
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (!intentionalDisconnect && activeSessionCode === code) {
+      backoffMs = Math.min(backoffMs * BACKOFF_FACTOR, MAX_BACKOFF_MS);
+      openSocket(code);
+    }
+  }, backoffMs);
+}

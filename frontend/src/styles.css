@@ -1,0 +1,51 @@
+@import "tailwindcss";
+@import "@shoelace-style/shoelace/dist/themes/dark.css";
+
+:root {
+  --sl-color-primary-50: #eef2ff;
+  --sl-color-primary-100: #e0e7ff;
+  --sl-color-primary-200: #c7d2fe;
+  --sl-color-primary-300: #a5b4fc;
+  --sl-color-primary-400: #818cf8;
+  --sl-color-primary-500: #6366f1;
+  --sl-color-primary-600: #4f46e5;
+  --sl-color-primary-700: #4338ca;
+  --sl-color-primary-800: #3730a3;
+  --sl-color-primary-900: #312e81;
+  --sl-color-primary-950: #1e1b4b;
+  --sl-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+
+  --surface-0: #0a0c14;
+  --surface-1: #111320;
+  --surface-2: #1a1d2e;
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.12);
+
+  --color-primary-glow: rgba(99, 102, 241, 0.04);
+  --color-primary-glow-hover: rgba(99, 102, 241, 0.1);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
+
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-active: rgba(255, 255, 255, 0.07);
+  --surface-card: #1a1d2e;
+  --surface-card-hover: #1e2130;
+
+  --color-primary: var(--sl-color-primary-500);
+  --color-primary-muted: rgba(99, 102, 241, 0.15);
+  --color-primary-border: rgba(99, 102, 241, 0.4);
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
