@@ -234,6 +234,7 @@ export class TaskDetail extends LitElement {
   @state() private _commentLoading = false;
   @state() private _editingTitle = false;
   @state() private _editingDescription = false;
+  @state() private _confirmDelete = false;
 
   private _storeUnsub: (() => void) | null = null;
 
@@ -281,6 +282,21 @@ export class TaskDetail extends LitElement {
   private _formatDate(iso: string): string {
     const d = new Date(iso);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  private _relativeTime(iso: string): string {
+    const now = Date.now();
+    const then = new Date(iso).getTime();
+    const diff = now - then;
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return this._formatDate(iso);
   }
 
   private async _updateField(fields: Record<string, unknown>) {
@@ -375,7 +391,22 @@ export class TaskDetail extends LitElement {
 
       <div class="meta-grid">
         <span class="meta-label">Type</span>
-        <span class="meta-value">${TASK_TYPE_LABELS[task.task_type]}</span>
+        <span class="meta-value">
+          <sl-select size="small" value=${task.task_type}
+            @sl-change=${(e: Event) => {
+              const val = (e.target as HTMLSelectElement).value;
+              if (val !== task.task_type) this._updateField({ task_type: val });
+            }}
+            style="max-width: 160px;"
+          >
+            ${(['epic', 'story', 'task', 'subtask', 'bug'] as const).map(t => html`
+              <sl-option value=${t}>
+                <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[t]} style="color: ${TASK_TYPE_COLORS[t]}"></sl-icon>
+                ${TASK_TYPE_LABELS[t]}
+              </sl-option>
+            `)}
+          </sl-select>
+        </span>
 
         <span class="meta-label">Status</span>
         <span class="meta-value">
@@ -410,7 +441,20 @@ export class TaskDetail extends LitElement {
         </span>
 
         <span class="meta-label">Created</span>
-        <span class="meta-value">${this._formatDate(task.created_at)}</span>
+        <span class="meta-value">
+          <sl-tooltip content=${this._formatDate(task.created_at)}>
+            <span>${this._relativeTime(task.created_at)}</span>
+          </sl-tooltip>
+        </span>
+
+        ${task.updated_at !== task.created_at ? html`
+          <span class="meta-label">Updated</span>
+          <span class="meta-value">
+            <sl-tooltip content=${this._formatDate(task.updated_at)}>
+              <span>${this._relativeTime(task.updated_at)}</span>
+            </sl-tooltip>
+          </span>
+        ` : nothing}
 
         <span class="meta-label">Commit</span>
         <span class="meta-value">
@@ -428,7 +472,11 @@ export class TaskDetail extends LitElement {
 
         ${task.closed_at ? html`
           <span class="meta-label">Closed</span>
-          <span class="meta-value">${this._formatDate(task.closed_at)}</span>
+          <span class="meta-value">
+            <sl-tooltip content=${this._formatDate(task.closed_at)}>
+              <span>${this._relativeTime(task.closed_at)}</span>
+            </sl-tooltip>
+          </span>
         ` : nothing}
       </div>
 
@@ -486,7 +534,9 @@ export class TaskDetail extends LitElement {
               <div class="comment">
                 <div class="comment-header">
                   <span class="comment-author">${this._getParticipantName(c.author_id)}</span>
-                  <span class="comment-time">${this._formatDate(c.created_at)}</span>
+                  <sl-tooltip content=${this._formatDate(c.created_at)}>
+                    <span class="comment-time">${this._relativeTime(c.created_at)}</span>
+                  </sl-tooltip>
                 </div>
                 <div class="comment-content">${c.content}</div>
               </div>
@@ -517,10 +567,18 @@ export class TaskDetail extends LitElement {
 
       <sl-divider></sl-divider>
 
-      <sl-button variant="danger" size="small" outline @click=${() => this._handleDelete()}>
-        <sl-icon slot="prefix" name="trash"></sl-icon>
-        Delete Task
-      </sl-button>
+      ${this._confirmDelete ? html`
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 0.85rem; color: var(--sl-color-danger-400);">Delete this task?</span>
+          <sl-button variant="danger" size="small" @click=${() => this._handleDelete()}>Yes, delete</sl-button>
+          <sl-button size="small" @click=${() => { this._confirmDelete = false; }}>Cancel</sl-button>
+        </div>
+      ` : html`
+        <sl-button variant="danger" size="small" outline @click=${() => { this._confirmDelete = true; }}>
+          <sl-icon slot="prefix" name="trash"></sl-icon>
+          Delete Task
+        </sl-button>
+      `}
     `;
   }
 }
