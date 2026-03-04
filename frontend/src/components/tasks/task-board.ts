@@ -188,6 +188,12 @@ export class TaskBoard extends LitElement {
       gap: 0.5rem;
       flex: 1;
       min-height: 60px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+
+    .kanban-cards.drag-over {
+      background: rgba(99, 102, 241, 0.08);
     }
 
     .kanban-card {
@@ -195,8 +201,12 @@ export class TaskBoard extends LitElement {
       background: var(--surface-card);
       border: 1px solid var(--border-subtle);
       border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      cursor: grab;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.15s;
+    }
+
+    .kanban-card.dragging {
+      opacity: 0.4;
     }
 
     .kanban-card:hover {
@@ -313,6 +323,7 @@ export class TaskBoard extends LitElement {
   @state() private _viewMode: 'list' | 'board' = 'board';
   @state() private _filterType: TaskType | '' = '';
   @state() private _filterStatus: TaskStatus | '' = '';
+  private _dragTaskId: string | null = null;
   @state() private _showCreateDialog = false;
   @state() private _selectedTaskId: string | null = null;
 
@@ -639,7 +650,20 @@ export class TaskBoard extends LitElement {
               <span>${STATUS_LABELS[status]}</span>
               <sl-badge variant="neutral" pill>${tasksByStatus(status).length}</sl-badge>
             </div>
-            <div class="kanban-cards">
+            <div class="kanban-cards"
+              @dragover=${(e: DragEvent) => {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).classList.add('drag-over');
+              }}
+              @dragleave=${(e: DragEvent) => {
+                (e.currentTarget as HTMLElement).classList.remove('drag-over');
+              }}
+              @drop=${(e: DragEvent) => {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).classList.remove('drag-over');
+                this._handleDrop(status);
+              }}
+            >
               ${tasksByStatus(status).map(task => this._renderKanbanCard(task))}
             </div>
           </div>
@@ -648,12 +672,30 @@ export class TaskBoard extends LitElement {
     `;
   }
 
+  private _handleDrop(newStatus: TaskStatus) {
+    if (!this._dragTaskId) return;
+    const task = this._tasks.find(t => t.id === this._dragTaskId);
+    if (task && task.status !== newStatus) {
+      this._handleStatusChange(task, newStatus);
+    }
+    this._dragTaskId = null;
+  }
+
   private _renderKanbanCard(task: TaskView) {
     const typeColor = TASK_TYPE_COLORS[task.task_type];
     const assignee = this._getParticipantName(task.assigned_to);
 
     return html`
-      <div class="kanban-card" @click=${() => { this._selectedTaskId = task.id; }}>
+      <div
+        class="kanban-card ${this._dragTaskId === task.id ? 'dragging' : ''}"
+        draggable="true"
+        @dragstart=${(e: DragEvent) => {
+          this._dragTaskId = task.id;
+          e.dataTransfer!.effectAllowed = 'move';
+        }}
+        @dragend=${() => { this._dragTaskId = null; this.requestUpdate(); }}
+        @click=${() => { this._selectedTaskId = task.id; }}
+      >
         <div class="kanban-card-header">
           <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
           <span class="kanban-card-title">${task.title}</span>
