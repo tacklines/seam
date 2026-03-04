@@ -633,7 +633,45 @@ impl SeamMcp {
     }
 
     async fn fetch_task_with_comments(&self, id: Uuid) -> Result<serde_json::Value, String> {
-        let mut task_json = self.fetch_task(id).await?;
+        let task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.db)
+            .await
+            .map_err(|e| format!("Database error: {e}"))?
+            .ok_or_else(|| "Task not found".to_string())?;
+
+        let mut task_json = serde_json::json!({
+            "id": task.id,
+            "session_id": task.session_id,
+            "parent_id": task.parent_id,
+            "task_type": serde_json::to_value(&task.task_type).unwrap(),
+            "title": task.title,
+            "description": task.description,
+            "status": serde_json::to_value(&task.status).unwrap(),
+            "assigned_to": task.assigned_to,
+            "created_by": task.created_by,
+            "commit_sha": task.commit_sha,
+            "created_at": task.created_at,
+            "updated_at": task.updated_at,
+            "closed_at": task.closed_at,
+        });
+
+        // Fetch parent if exists
+        if let Some(pid) = task.parent_id {
+            if let Ok(Some(parent)) = sqlx::query_as::<_, Task>("SELECT * FROM tasks WHERE id = $1")
+                .bind(pid)
+                .fetch_optional(&self.db)
+                .await
+            {
+                task_json["parent"] = serde_json::json!({
+                    "id": parent.id,
+                    "task_type": serde_json::to_value(&parent.task_type).unwrap(),
+                    "title": parent.title,
+                    "status": serde_json::to_value(&parent.status).unwrap(),
+                    "assigned_to": parent.assigned_to,
+                });
+            }
+        }
 
         let comments: Vec<TaskComment> = sqlx::query_as(
             "SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at",
