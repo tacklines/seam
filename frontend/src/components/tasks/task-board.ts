@@ -427,6 +427,7 @@ export class TaskBoard extends LitElement {
   @state() private _filterStatus: TaskStatus | '' = '';
   @state() private _searchQuery = '';
   @state() private _sortBy: 'created' | 'updated' | 'title' | 'type' = 'created';
+  @state() private _filterAssignee = '';
   private _dragTaskId: string | null = null;
   @state() private _showCreateDialog = false;
   @state() private _showShortcuts = false;
@@ -518,6 +519,9 @@ export class TaskBoard extends LitElement {
         t.title.toLowerCase().includes(q) ||
         (t.description?.toLowerCase().includes(q))
       );
+    }
+    if (this._filterAssignee) {
+      tasks = tasks.filter(t => t.assigned_to === this._filterAssignee);
     }
     // Sort
     const sorted = [...tasks];
@@ -709,6 +713,25 @@ export class TaskBoard extends LitElement {
           >
             ${(['open', 'in_progress', 'done', 'closed'] as TaskStatus[]).map(s => html`
               <sl-option value=${s}>${STATUS_LABELS[s]}</sl-option>
+            `)}
+          </sl-select>
+        ` : nothing}
+
+        ${this.participants.length > 0 ? html`
+          <sl-select
+            placeholder="All Assignees"
+            size="small"
+            clearable
+            value=${this._filterAssignee}
+            @sl-change=${(e: Event) => {
+              this._filterAssignee = (e.target as HTMLSelectElement).value;
+            }}
+          >
+            ${this.participants.map(p => html`
+              <sl-option value=${p.id}>
+                <sl-icon slot="prefix" name=${p.participant_type === 'agent' ? 'robot' : 'person-fill'}></sl-icon>
+                ${p.display_name}
+              </sl-option>
             `)}
           </sl-select>
         ` : nothing}

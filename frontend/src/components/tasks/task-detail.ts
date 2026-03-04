@@ -221,6 +221,25 @@ export class TaskDetail extends LitElement {
       padding: 0.15rem 0.4rem;
       border-radius: 4px;
     }
+
+    .parent-breadcrumb {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      color: var(--sl-color-primary-400);
+      cursor: pointer;
+      margin-bottom: 0.75rem;
+    }
+
+    .parent-breadcrumb:hover {
+      color: var(--sl-color-primary-300);
+      text-decoration: underline;
+    }
+
+    .parent-breadcrumb sl-icon {
+      font-size: 0.75rem;
+    }
   `;
 
   @property({ type: String, attribute: 'session-code' }) sessionCode = '';
@@ -359,6 +378,15 @@ export class TaskDetail extends LitElement {
         </sl-alert>
       ` : nothing}
 
+      ${task.parent ? html`
+        <div class="parent-breadcrumb"
+          @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: task.parent!.id }))}
+        >
+          <sl-icon name=${TASK_TYPE_ICONS[task.parent.task_type]} style="color: ${TASK_TYPE_COLORS[task.parent.task_type]}"></sl-icon>
+          ${task.parent.title}
+        </div>
+      ` : nothing}
+
       <div class="detail-header">
         <sl-icon-button class="back-btn" name="arrow-left" label="Back"
           @click=${() => this.dispatchEvent(new CustomEvent('back'))}
@@ -439,6 +467,9 @@ export class TaskDetail extends LitElement {
             `)}
           </sl-select>
         </span>
+
+        <span class="meta-label">Creator</span>
+        <span class="meta-value">${this._getParticipantName(task.created_by)}</span>
 
         <span class="meta-label">Created</span>
         <span class="meta-value">

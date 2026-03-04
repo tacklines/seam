@@ -35,6 +35,7 @@ export interface CommentView {
 }
 
 export interface TaskDetailView extends TaskView {
+  parent: TaskSummaryView | null;
   comments: CommentView[];
   children: TaskSummaryView[];
 }

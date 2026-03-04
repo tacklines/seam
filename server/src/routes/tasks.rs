@@ -77,6 +77,7 @@ pub struct TaskView {
 pub struct TaskDetailView {
     #[serde(flatten)]
     pub task: TaskView,
+    pub parent: Option<TaskSummaryView>,
     pub comments: Vec<CommentView>,
     pub children: Vec<TaskSummaryView>,
 }
@@ -295,6 +296,16 @@ pub async fn get_task(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
+    let parent: Option<Task> = if let Some(pid) = task.parent_id {
+        sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+            .bind(pid)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        None
+    };
+
     let comments: Vec<TaskComment> = sqlx::query_as(
         "SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at"
     )
@@ -313,6 +324,13 @@ pub async fn get_task(
 
     Ok(Json(TaskDetailView {
         task: task.into(),
+        parent: parent.map(|p| TaskSummaryView {
+            id: p.id,
+            task_type: p.task_type,
+            title: p.title,
+            status: p.status,
+            assigned_to: p.assigned_to,
+        }),
         comments: comments.into_iter().map(|c| CommentView {
             id: c.id,
             author_id: c.author_id,
