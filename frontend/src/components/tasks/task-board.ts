@@ -287,6 +287,30 @@ export class TaskBoard extends LitElement {
       }
     }
 
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .stat-value {
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
     /* ── Common ── */
     .empty-state {
       display: flex;
@@ -756,6 +780,8 @@ export class TaskBoard extends LitElement {
         </sl-alert>
       ` : nothing}
 
+      ${!this._loading && this._tasks.length > 0 ? this._renderStats() : nothing}
+
       ${this._loading
         ? html`<div class="loading"><sl-spinner style="font-size: 2rem;"></sl-spinner></div>`
         : this._tasks.length === 0
@@ -767,6 +793,24 @@ export class TaskBoard extends LitElement {
       ${this._renderCreateDialog()}
       ${this._renderShortcuts()}
       ${this._toastMessage ? html`<div class="toast">${this._toastMessage}</div>` : nothing}
+    `;
+  }
+
+  private _renderStats() {
+    const tasks = this._tasks;
+    const open = tasks.filter(t => t.status === 'open').length;
+    const inProgress = tasks.filter(t => t.status === 'in_progress').length;
+    const done = tasks.filter(t => t.status === 'done').length;
+    const closed = tasks.filter(t => t.status === 'closed').length;
+
+    return html`
+      <div class="stats-bar">
+        <div class="stat"><span class="stat-value">${tasks.length}</span> total</div>
+        <div class="stat"><span class="stat-value">${open}</span> open</div>
+        <div class="stat"><span class="stat-value">${inProgress}</span> in progress</div>
+        <div class="stat"><span class="stat-value">${done}</span> done</div>
+        ${closed > 0 ? html`<div class="stat"><span class="stat-value">${closed}</span> closed</div>` : nothing}
+      </div>
     `;
   }
 
