@@ -316,9 +316,9 @@ impl SeamMcp {
                 let summary: Vec<serde_json::Value> = tasks.iter().map(|t| {
                     serde_json::json!({
                         "id": t.id,
-                        "task_type": format!("{:?}", t.task_type).to_lowercase(),
+                        "task_type": serde_json::to_value(&t.task_type).unwrap(),
                         "title": t.title,
-                        "status": format!("{:?}", t.status).to_lowercase(),
+                        "status": serde_json::to_value(&t.status).unwrap(),
                         "parent_id": t.parent_id,
                         "assigned_to": t.assigned_to,
                         "created_at": t.created_at,
@@ -595,10 +595,10 @@ impl SeamMcp {
             "id": task.id,
             "session_id": task.session_id,
             "parent_id": task.parent_id,
-            "task_type": format!("{:?}", task.task_type).to_lowercase(),
+            "task_type": serde_json::to_value(&task.task_type).unwrap(),
             "title": task.title,
             "description": task.description,
-            "status": format!("{:?}", task.status).to_lowercase(),
+            "status": serde_json::to_value(&task.status).unwrap(),
             "assigned_to": task.assigned_to,
             "created_by": task.created_by,
             "commit_sha": task.commit_sha,
@@ -640,9 +640,9 @@ impl SeamMcp {
         let child_views: Vec<serde_json::Value> = children.iter().map(|t| {
             serde_json::json!({
                 "id": t.id,
-                "task_type": format!("{:?}", t.task_type).to_lowercase(),
+                "task_type": serde_json::to_value(&t.task_type).unwrap(),
                 "title": t.title,
-                "status": format!("{:?}", t.status).to_lowercase(),
+                "status": serde_json::to_value(&t.status).unwrap(),
                 "assigned_to": t.assigned_to,
             })
         }).collect();
