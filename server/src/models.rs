@@ -166,3 +166,18 @@ pub struct ParticipantView {
     pub sponsor_id: Option<Uuid>,
     pub joined_at: DateTime<Utc>,
 }
+
+// --- Agent API DTOs ---
+
+#[derive(Debug, Deserialize)]
+pub struct AgentJoinRequest {
+    pub code: String,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentJoinResponse {
+    pub session: SessionView,
+    pub participant_id: Uuid,
+    pub sponsor_name: String,
+}

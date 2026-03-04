@@ -113,3 +113,7 @@ test-session:
       -H "Authorization: Bearer $TOKEN" \
       -H "Content-Type: application/json" \
       -d '{}' | jq .
+
+# Run MCP server with an agent code
+mcp code="":
+    cd server && cargo run --bin seam-mcp -- {{code}}

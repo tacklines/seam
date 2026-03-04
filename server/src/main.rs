@@ -61,6 +61,8 @@ async fn main() {
         .route("/api/sessions", post(routes::sessions::create_session))
         .route("/api/sessions/{code}", get(routes::sessions::get_session))
         .route("/api/sessions/{code}/join", post(routes::sessions::join_session))
+        // Agent API
+        .route("/api/agent/join", post(routes::agent::agent_join))
         // WebSocket
         .route("/ws", get(ws::handler::ws_upgrade))
         .layer(cors)

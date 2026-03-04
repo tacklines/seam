@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "seam": {
+      "command": "cargo",
+      "args": ["run", "--bin", "seam-mcp", "--manifest-path", "server/Cargo.toml", "--"],
+      "env": {
+        "DATABASE_URL": "postgres://seam:seam@localhost:5433/seam"
+      }
+    }
+  }
+}

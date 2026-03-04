@@ -3,6 +3,14 @@ name = "seam-server"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "seam-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "seam-mcp"
+path = "src/mcp.rs"
+
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
@@ -23,3 +31,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
 futures = "0.3"
 dashmap = "6"
+rmcp = { version = "1", features = ["server", "transport-io", "macros"] }
+schemars = "1"
+clap = { version = "4", features = ["derive", "env"] }
