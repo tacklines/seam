@@ -43,7 +43,7 @@ export class SessionLobby extends LitElement {
       margin: 0 0 0.5rem;
       font-size: 2.25rem;
       font-weight: 700;
-      color: var(--sl-color-neutral-900);
+      color: var(--text-primary);
       letter-spacing: -0.025em;
       text-align: center;
     }
@@ -51,7 +51,7 @@ export class SessionLobby extends LitElement {
     .landing .subtitle {
       margin: 0 0 2.5rem;
       font-size: 1.125rem;
-      color: var(--sl-color-neutral-500);
+      color: var(--text-secondary);
       max-width: 32rem;
       text-align: center;
       line-height: 1.6;
@@ -72,17 +72,17 @@ export class SessionLobby extends LitElement {
     .option-card {
       cursor: pointer;
       text-align: center;
-      border: 2px solid transparent;
+      border: 1px solid var(--border-subtle);
       border-radius: var(--sl-border-radius-large);
       padding: 1.75rem 1.25rem;
-      background: var(--sl-color-neutral-0);
-      box-shadow: var(--sl-shadow-medium);
+      background: var(--surface-card);
+      box-shadow: var(--shadow-md);
       transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
     }
 
     .option-card:hover {
-      border-color: var(--sl-color-primary-400);
-      box-shadow: var(--sl-shadow-large);
+      border-color: var(--color-primary-border);
+      box-shadow: var(--shadow-lg);
       transform: translateY(-2px);
     }
 
@@ -95,13 +95,13 @@ export class SessionLobby extends LitElement {
     .option-card .option-title {
       font-size: var(--sl-font-size-large);
       font-weight: var(--sl-font-weight-semibold);
-      color: var(--sl-color-neutral-800);
+      color: var(--text-primary);
       margin: 0 0 0.4rem;
     }
 
     .option-card .option-desc {
       font-size: var(--sl-font-size-small);
-      color: var(--sl-color-neutral-500);
+      color: var(--text-tertiary);
       line-height: 1.5;
       margin: 0;
     }
@@ -128,7 +128,7 @@ export class SessionLobby extends LitElement {
       margin: 0 0 1.5rem;
       font-size: var(--sl-font-size-x-large);
       font-weight: var(--sl-font-weight-bold);
-      color: var(--sl-color-neutral-800);
+      color: var(--text-primary);
     }
 
     .flow-card sl-input,
@@ -142,25 +142,25 @@ export class SessionLobby extends LitElement {
       align-items: center;
       gap: 0.3rem;
       font-size: var(--sl-font-size-small);
-      color: var(--sl-color-neutral-500);
+      color: var(--text-tertiary);
       cursor: pointer;
       margin-bottom: 1.5rem;
     }
 
-    .flow-card .back-link:hover { color: var(--sl-color-primary-600); }
+    .flow-card .back-link:hover { color: var(--sl-color-primary-400); }
 
     .join-code-box {
       text-align: center;
       margin: 1.5rem 0;
       padding: 1.5rem;
-      background: var(--sl-color-primary-50);
-      border: 2px solid var(--sl-color-primary-200);
+      background: var(--color-primary-muted);
+      border: 2px solid var(--color-primary-border);
       border-radius: var(--sl-border-radius-large);
     }
 
     .join-code-label {
       font-size: var(--sl-font-size-small);
-      color: var(--sl-color-neutral-500);
+      color: var(--text-tertiary);
       margin-bottom: 0.5rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -170,7 +170,7 @@ export class SessionLobby extends LitElement {
       font-size: 3rem;
       font-weight: 900;
       letter-spacing: 0.2em;
-      color: var(--sl-color-primary-700);
+      color: var(--sl-color-primary-400);
       font-family: var(--sl-font-mono);
       margin: 0.25rem 0 1rem;
     }
@@ -179,8 +179,8 @@ export class SessionLobby extends LitElement {
       text-align: center;
       margin: 1rem 0;
       padding: 1.25rem;
-      background: var(--sl-color-neutral-50);
-      border: 2px dashed var(--sl-color-neutral-300);
+      background: var(--surface-2);
+      border: 2px dashed var(--border-medium);
       border-radius: var(--sl-border-radius-large);
     }
 
@@ -188,14 +188,14 @@ export class SessionLobby extends LitElement {
       font-size: 2rem;
       font-weight: 700;
       letter-spacing: 0.15em;
-      color: var(--sl-color-neutral-700);
+      color: var(--text-primary);
       font-family: var(--sl-font-mono);
       margin: 0.25rem 0 0.75rem;
     }
 
     .agent-code-hint {
       font-size: var(--sl-font-size-small);
-      color: var(--sl-color-neutral-400);
+      color: var(--text-tertiary);
       margin: 0.5rem 0 0;
       line-height: 1.5;
     }
