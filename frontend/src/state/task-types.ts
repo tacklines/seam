@@ -46,6 +46,8 @@ export interface TaskDetailView extends TaskView {
   parent: TaskSummaryView | null;
   comments: CommentView[];
   children: TaskSummaryView[];
+  blocks: TaskSummaryView[];
+  blocked_by: TaskSummaryView[];
 }
 
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {

@@ -78,6 +78,34 @@ export async function deleteTask(sessionCode: string, taskId: string): Promise<v
   }
 }
 
+export async function addDependency(
+  sessionCode: string,
+  blockerId: string,
+  blockedId: string,
+): Promise<unknown> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks/${blockerId}/dependencies`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ blocked_id: blockedId }),
+  });
+  return handleResponse<unknown>(res);
+}
+
+export async function removeDependency(
+  sessionCode: string,
+  blockerId: string,
+  blockedId: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks/${blockerId}/dependencies/${blockedId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+}
+
 export interface ActivityEvent {
   id: string;
   actor_id: string;

@@ -115,6 +115,21 @@ pub struct TaskDetailView {
     pub parent: Option<TaskSummaryView>,
     pub comments: Vec<CommentView>,
     pub children: Vec<TaskSummaryView>,
+    pub blocks: Vec<TaskSummaryView>,
+    pub blocked_by: Vec<TaskSummaryView>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddDependencyRequest {
+    pub blocked_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DependencyView {
+    pub id: Uuid,
+    pub blocker: TaskSummaryView,
+    pub blocked: TaskSummaryView,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -416,6 +431,24 @@ pub async fn get_task(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Fetch tasks this task blocks (this task is the blocker)
+    let blocks: Vec<Task> = sqlx::query_as(
+        "SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocked_id = t.id WHERE d.blocker_id = $1 ORDER BY t.created_at"
+    )
+    .bind(task_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    // Fetch tasks that block this task (this task is blocked)
+    let blocked_by: Vec<Task> = sqlx::query_as(
+        "SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocker_id = t.id WHERE d.blocked_id = $1 ORDER BY t.created_at"
+    )
+    .bind(task_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
     Ok(Json(TaskDetailView {
         task: TaskView::from_task(task, prefix),
         parent: parent.map(|p| task_summary_view(&p, prefix)),
@@ -426,6 +459,8 @@ pub async fn get_task(
             created_at: c.created_at,
         }).collect(),
         children: children.iter().map(|t| task_summary_view(t, prefix)).collect(),
+        blocks: blocks.iter().map(|t| task_summary_view(t, prefix)).collect(),
+        blocked_by: blocked_by.iter().map(|t| task_summary_view(t, prefix)).collect(),
     }))
 }
 
@@ -615,6 +650,11 @@ pub async fn add_comment(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // Extract @mentions and create records
+    let mentioned = extract_and_record_mentions(
+        &state.db, &state.connections, &session, comment_id, task_id, &req.content, participant.id,
+    ).await;
+
     // Record activity
     let task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
         .bind(task_id)
@@ -632,7 +672,7 @@ pub async fn add_comment(
         "comment",
         comment_id,
         &format!("commented on {}", ticket_id),
-        serde_json::json!({ "ticket_id": ticket_id, "preview": &req.content[..req.content.len().min(100)] }),
+        serde_json::json!({ "ticket_id": ticket_id, "preview": &req.content[..req.content.len().min(100)], "mentions": mentioned }),
     ).await;
 
     let view = CommentView {
@@ -643,4 +683,277 @@ pub async fn add_comment(
     };
 
     Ok(Json(view))
+}
+
+// --- Unread mentions endpoints ---
+
+#[derive(Debug, Serialize)]
+pub struct UnreadMentionView {
+    pub id: Uuid,
+    pub comment_id: Uuid,
+    pub task_id: Uuid,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn list_unread_mentions(
+    State(state): State<Arc<AppState>>,
+    Path(session_code): Path<String>,
+    AuthUser(claims): AuthUser,
+) -> Result<Json<Vec<UnreadMentionView>>, StatusCode> {
+    let user = crate::db::upsert_user(&state.db, &claims).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let session = resolve_session_pub(&state.db, &session_code).await?;
+    let participant = resolve_participant(&state.db, session.id, user.id).await?;
+
+    let mentions: Vec<(Uuid, Uuid, Uuid, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        "SELECT id, comment_id, task_id, created_at FROM unread_mentions WHERE participant_id = $1 AND session_id = $2 ORDER BY created_at DESC"
+    )
+    .bind(participant.id)
+    .bind(session.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let views: Vec<UnreadMentionView> = mentions.into_iter().map(|(id, comment_id, task_id, created_at)| {
+        UnreadMentionView { id, comment_id, task_id, created_at }
+    }).collect();
+
+    Ok(Json(views))
+}
+
+pub async fn clear_unread_mentions(
+    State(state): State<Arc<AppState>>,
+    Path(session_code): Path<String>,
+    AuthUser(claims): AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    let user = crate::db::upsert_user(&state.db, &claims).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let session = resolve_session_pub(&state.db, &session_code).await?;
+    let participant = resolve_participant(&state.db, session.id, user.id).await?;
+
+    sqlx::query("DELETE FROM unread_mentions WHERE participant_id = $1 AND session_id = $2")
+        .bind(participant.id)
+        .bind(session.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- Dependency endpoints ---
+
+pub async fn add_dependency(
+    State(state): State<Arc<AppState>>,
+    Path((_session_code, blocker_id)): Path<(String, Uuid)>,
+    AuthUser(claims): AuthUser,
+    Json(req): Json<AddDependencyRequest>,
+) -> Result<Json<DependencyView>, StatusCode> {
+    if blocker_id == req.blocked_id {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Verify both tasks exist and are in the same project
+    let blocker: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        .bind(blocker_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let blocked: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        .bind(req.blocked_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    if blocker.project_id != blocked.project_id {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let project = resolve_project(&state.db, blocker.project_id).await?;
+
+    // Check for circular dependency (blocked_id already blocks blocker_id directly or transitively)
+    let would_cycle: bool = sqlx::query_scalar(
+        "WITH RECURSIVE chain AS (
+            SELECT blocker_id FROM task_dependencies WHERE blocked_id = $1
+            UNION
+            SELECT d.blocker_id FROM task_dependencies d JOIN chain c ON d.blocked_id = c.blocker_id
+        )
+        SELECT EXISTS(SELECT 1 FROM chain WHERE blocker_id = $2)"
+    )
+    .bind(blocker_id)
+    .bind(req.blocked_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if would_cycle {
+        return Err(StatusCode::CONFLICT);
+    }
+
+    let dep_id = Uuid::new_v4();
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "INSERT INTO task_dependencies (id, blocker_id, blocked_id, created_at) VALUES ($1, $2, $3, $4)"
+    )
+    .bind(dep_id)
+    .bind(blocker_id)
+    .bind(req.blocked_id)
+    .bind(now)
+    .execute(&state.db)
+    .await
+    .map_err(|e| {
+        if e.to_string().contains("unique_dependency") {
+            StatusCode::CONFLICT
+        } else {
+            tracing::error!("Failed to add dependency: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
+
+    let prefix = &project.ticket_prefix;
+
+    // Record activity
+    let blocker_ticket = format!("{}-{}", prefix, blocker.ticket_number);
+    let blocked_ticket = format!("{}-{}", prefix, blocked.ticket_number);
+
+    if let Ok(user) = crate::db::upsert_user(&state.db, &claims).await {
+        if let Ok(actor) = sqlx::query_scalar::<_, Uuid>(
+            "SELECT p.id FROM participants p JOIN sessions s ON s.id = p.session_id WHERE s.project_id = $1 AND p.user_id = $2 LIMIT 1"
+        )
+        .bind(project.id)
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await
+        {
+            super::activity::record_activity(
+                &state.db,
+                project.id,
+                blocker.session_id,
+                actor,
+                "dependency_added",
+                "task",
+                blocker_id,
+                &format!("{} now blocks {}", blocker_ticket, blocked_ticket),
+                serde_json::json!({ "blocker_ticket": blocker_ticket, "blocked_ticket": blocked_ticket }),
+            ).await;
+        }
+    }
+
+    Ok(Json(DependencyView {
+        id: dep_id,
+        blocker: task_summary_view(&blocker, prefix),
+        blocked: task_summary_view(&blocked, prefix),
+        created_at: now,
+    }))
+}
+
+pub async fn remove_dependency(
+    State(state): State<Arc<AppState>>,
+    Path((_session_code, blocker_id, blocked_id)): Path<(String, Uuid, Uuid)>,
+    AuthUser(_claims): AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query(
+        "DELETE FROM task_dependencies WHERE blocker_id = $1 AND blocked_id = $2"
+    )
+    .bind(blocker_id)
+    .bind(blocked_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if result.rows_affected() == 0 {
+        Err(StatusCode::NOT_FOUND)
+    } else {
+        Ok(StatusCode::NO_CONTENT)
+    }
+}
+
+/// Extract @mentions from comment text, insert into comment_mentions + unread_mentions,
+/// and send targeted WebSocket notifications to mentioned participants.
+async fn extract_and_record_mentions(
+    db: &sqlx::PgPool,
+    connections: &crate::ws::ConnectionManager,
+    session: &Session,
+    comment_id: Uuid,
+    task_id: Uuid,
+    content: &str,
+    author_id: Uuid,
+) -> Vec<String> {
+    // Extract unique @mention names from the content
+    let mention_re = regex::Regex::new(r"@([\w.\-]+(?:\s[\w.\-]+)?)").unwrap();
+    let mention_names: Vec<String> = mention_re
+        .captures_iter(content)
+        .map(|c| c[1].to_string())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if mention_names.is_empty() {
+        return vec![];
+    }
+
+    // Resolve display names to participant IDs in this session
+    let participants: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, display_name FROM participants WHERE session_id = $1"
+    )
+    .bind(session.id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    let mut mentioned_ids = Vec::new();
+    for (pid, name) in &participants {
+        if *pid == author_id {
+            continue; // Don't mention yourself
+        }
+        let name_lower = name.to_lowercase();
+        for mention in &mention_names {
+            if name_lower == mention.to_lowercase()
+                || name_lower.starts_with(&mention.to_lowercase())
+            {
+                mentioned_ids.push(*pid);
+                break;
+            }
+        }
+    }
+
+    let mut mentioned_names = Vec::new();
+    for pid in &mentioned_ids {
+        // Insert comment_mention
+        let _ = sqlx::query(
+            "INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+        )
+        .bind(comment_id)
+        .bind(pid)
+        .execute(db)
+        .await;
+
+        // Insert unread_mention
+        let _ = sqlx::query(
+            "INSERT INTO unread_mentions (participant_id, comment_id, task_id, session_id) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING"
+        )
+        .bind(pid)
+        .bind(comment_id)
+        .bind(task_id)
+        .bind(session.id)
+        .execute(db)
+        .await;
+
+        // Send targeted WebSocket notification
+        connections.send_to_participant(&session.code, &pid.to_string(), &serde_json::json!({
+            "type": "mentioned",
+            "taskId": task_id.to_string(),
+            "commentId": comment_id.to_string(),
+            "authorId": author_id.to_string(),
+        })).await;
+
+        if let Some(name) = participants.iter().find(|(id, _)| id == pid).map(|(_, n)| n) {
+            mentioned_names.push(name.clone());
+        }
+    }
+
+    mentioned_names
 }

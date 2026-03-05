@@ -80,6 +80,10 @@ async fn main() {
         .route("/api/sessions/{code}/tasks/{task_id}", patch(routes::tasks::update_task))
         .route("/api/sessions/{code}/tasks/{task_id}", delete(routes::tasks::delete_task))
         .route("/api/sessions/{code}/tasks/{task_id}/comments", post(routes::tasks::add_comment))
+        .route("/api/sessions/{code}/tasks/{task_id}/dependencies", post(routes::tasks::add_dependency))
+        .route("/api/sessions/{code}/tasks/{task_id}/dependencies/{blocked_id}", delete(routes::tasks::remove_dependency))
+        .route("/api/sessions/{code}/mentions/unread", get(routes::tasks::list_unread_mentions))
+        .route("/api/sessions/{code}/mentions/unread", delete(routes::tasks::clear_unread_mentions))
         // Notes
         .route("/api/sessions/{code}/notes", get(routes::notes::list_notes))
         .route("/api/sessions/{code}/notes/{slug}", get(routes::notes::get_note))

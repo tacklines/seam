@@ -189,6 +189,22 @@ struct ListQuestionsParams {
     status: Option<String>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct AddDependencyParams {
+    /// The task ID that blocks another task (the blocker)
+    blocker_id: String,
+    /// The task ID that is blocked (the blocked task)
+    blocked_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct RemoveDependencyParams {
+    /// The task ID that blocks another task (the blocker)
+    blocker_id: String,
+    /// The task ID that is blocked
+    blocked_id: String,
+}
+
 // --- MCP Server ---
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
@@ -745,6 +761,11 @@ impl SeamMcp {
         .execute(&self.db)
         .await {
             Ok(_) => {
+                // Extract @mentions and create mention records
+                if let Ok(session_id) = self.require_session().await {
+                    self.extract_mentions(session_id, comment_id, task_id, &params.content, participant_id).await;
+                }
+
                 // Record activity
                 if let (Ok(project_id), Ok(session_id)) = (self.require_project(), self.require_session().await) {
                     let task: Option<Task> = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
@@ -1416,6 +1437,102 @@ impl SeamMcp {
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Delete failed: {e}"))])),
         }
     }
+
+    #[tool(description = "Add a dependency: blocker_id blocks blocked_id. The blocked task cannot be started until the blocker is done. Prevents circular dependencies.")]
+    async fn add_dependency(
+        &self,
+        Parameters(params): Parameters<AddDependencyParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let blocker_id = match Uuid::parse_str(&params.blocker_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocker_id")])),
+        };
+        let blocked_id = match Uuid::parse_str(&params.blocked_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocked_id")])),
+        };
+
+        if blocker_id == blocked_id {
+            return Ok(CallToolResult::error(vec![Content::text("A task cannot block itself")]));
+        }
+
+        // Check for circular dependency
+        let would_cycle: bool = sqlx::query_scalar(
+            "WITH RECURSIVE chain AS (
+                SELECT blocker_id FROM task_dependencies WHERE blocked_id = $1
+                UNION
+                SELECT d.blocker_id FROM task_dependencies d JOIN chain c ON d.blocked_id = c.blocker_id
+            )
+            SELECT EXISTS(SELECT 1 FROM chain WHERE blocker_id = $2)"
+        )
+        .bind(blocker_id)
+        .bind(blocked_id)
+        .fetch_one(&self.db)
+        .await
+        .unwrap_or(false);
+
+        if would_cycle {
+            return Ok(CallToolResult::error(vec![Content::text("Cannot add dependency: would create a cycle")]));
+        }
+
+        match sqlx::query(
+            "INSERT INTO task_dependencies (id, blocker_id, blocked_id, created_at) VALUES ($1, $2, $3, NOW())"
+        )
+        .bind(Uuid::new_v4())
+        .bind(blocker_id)
+        .bind(blocked_id)
+        .execute(&self.db)
+        .await
+        {
+            Ok(_) => {
+                let prefix = self.get_ticket_prefix();
+                // Fetch ticket numbers for the response
+                let blocker_num: Option<i32> = sqlx::query_scalar("SELECT ticket_number FROM tasks WHERE id = $1")
+                    .bind(blocker_id).fetch_optional(&self.db).await.ok().flatten();
+                let blocked_num: Option<i32> = sqlx::query_scalar("SELECT ticket_number FROM tasks WHERE id = $1")
+                    .bind(blocked_id).fetch_optional(&self.db).await.ok().flatten();
+
+                let msg = format!(
+                    "Dependency added: {}-{} blocks {}-{}",
+                    prefix, blocker_num.unwrap_or(0),
+                    prefix, blocked_num.unwrap_or(0),
+                );
+                Ok(CallToolResult::success(vec![Content::text(msg)]))
+            }
+            Err(e) if e.to_string().contains("unique_dependency") => {
+                Ok(CallToolResult::error(vec![Content::text("This dependency already exists")]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed to add dependency: {e}"))])),
+        }
+    }
+
+    #[tool(description = "Remove a dependency between two tasks.")]
+    async fn remove_dependency(
+        &self,
+        Parameters(params): Parameters<RemoveDependencyParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let blocker_id = match Uuid::parse_str(&params.blocker_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocker_id")])),
+        };
+        let blocked_id = match Uuid::parse_str(&params.blocked_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocked_id")])),
+        };
+
+        match sqlx::query("DELETE FROM task_dependencies WHERE blocker_id = $1 AND blocked_id = $2")
+            .bind(blocker_id)
+            .bind(blocked_id)
+            .execute(&self.db)
+            .await
+        {
+            Ok(result) if result.rows_affected() == 0 => {
+                Ok(CallToolResult::error(vec![Content::text("Dependency not found")]))
+            }
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text("Dependency removed")])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+        }
+    }
 }
 
 #[tool_handler]
@@ -1606,8 +1723,46 @@ impl SeamMcp {
             })
         }).collect();
 
+        // Fetch dependencies: tasks this task blocks
+        let blocks: Vec<Task> = sqlx::query_as(
+            "SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocked_id = t.id WHERE d.blocker_id = $1 ORDER BY t.created_at"
+        )
+        .bind(id)
+        .fetch_all(&self.db)
+        .await
+        .unwrap_or_default();
+
+        let blocks_views: Vec<serde_json::Value> = blocks.iter().map(|t| {
+            serde_json::json!({
+                "id": t.id,
+                "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
+                "title": t.title,
+                "status": serde_json::to_value(&t.status).unwrap(),
+            })
+        }).collect();
+
+        // Fetch dependencies: tasks that block this task
+        let blocked_by: Vec<Task> = sqlx::query_as(
+            "SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocker_id = t.id WHERE d.blocked_id = $1 ORDER BY t.created_at"
+        )
+        .bind(id)
+        .fetch_all(&self.db)
+        .await
+        .unwrap_or_default();
+
+        let blocked_by_views: Vec<serde_json::Value> = blocked_by.iter().map(|t| {
+            serde_json::json!({
+                "id": t.id,
+                "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
+                "title": t.title,
+                "status": serde_json::to_value(&t.status).unwrap(),
+            })
+        }).collect();
+
         task_json["comments"] = serde_json::json!(comment_views);
         task_json["children"] = serde_json::json!(child_views);
+        task_json["blocks"] = serde_json::json!(blocks_views);
+        task_json["blocked_by"] = serde_json::json!(blocked_by_views);
         Ok(task_json)
     }
 
@@ -1638,6 +1793,66 @@ impl SeamMcp {
         .await
         {
             eprintln!("[seam-mcp] Failed to record activity: {e}");
+        }
+    }
+
+    async fn extract_mentions(
+        &self,
+        session_id: Uuid,
+        comment_id: Uuid,
+        task_id: Uuid,
+        content: &str,
+        author_id: Uuid,
+    ) {
+        let mention_re = regex::Regex::new(r"@([\w.\-]+(?:\s[\w.\-]+)?)").unwrap();
+        let mention_names: Vec<String> = mention_re
+            .captures_iter(content)
+            .map(|c| c[1].to_string())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        if mention_names.is_empty() {
+            return;
+        }
+
+        let participants: Vec<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, display_name FROM participants WHERE session_id = $1"
+        )
+        .bind(session_id)
+        .fetch_all(&self.db)
+        .await
+        .unwrap_or_default();
+
+        for (pid, name) in &participants {
+            if *pid == author_id {
+                continue;
+            }
+            let name_lower = name.to_lowercase();
+            let matched = mention_names.iter().any(|m| {
+                name_lower == m.to_lowercase() || name_lower.starts_with(&m.to_lowercase())
+            });
+            if !matched {
+                continue;
+            }
+
+            let _ = sqlx::query(
+                "INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+            )
+            .bind(comment_id)
+            .bind(pid)
+            .execute(&self.db)
+            .await;
+
+            let _ = sqlx::query(
+                "INSERT INTO unread_mentions (participant_id, comment_id, task_id, session_id) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING"
+            )
+            .bind(pid)
+            .bind(comment_id)
+            .bind(task_id)
+            .bind(session_id)
+            .execute(&self.db)
+            .await;
         }
     }
 

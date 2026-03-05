@@ -98,7 +98,7 @@ function openSocket(code: string): void {
       }
 
       // Task events — notify task board to refresh
-      if (msg.type === 'task_created' || msg.type === 'task_updated' || msg.type === 'task_deleted' || msg.type === 'comment_added') {
+      if (msg.type === 'task_created' || msg.type === 'task_updated' || msg.type === 'task_deleted' || msg.type === 'comment_added' || msg.type === 'dependency_changed') {
         store.notifyTasksChanged();
       }
 

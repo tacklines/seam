@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
-import { fetchTask, updateTask, deleteTask, addComment, fetchActivity, type ActivityEvent } from '../../state/task-api.js';
+import { fetchTask, fetchTasks, updateTask, deleteTask, addComment, addDependency, removeDependency, fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import {
   type TaskDetailView, type TaskStatus, type TaskType, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -265,6 +265,11 @@ export class TaskDetail extends LitElement {
       color: var(--sl-color-primary-400);
     }
 
+    .description-content .mention {
+      color: var(--sl-color-primary-400);
+      font-weight: 600;
+    }
+
     .description-content p {
       margin: 0 0 0.5rem 0;
     }
@@ -322,6 +327,72 @@ export class TaskDetail extends LitElement {
       flex: 1;
       color: var(--text-primary);
       font-weight: 500;
+    }
+
+    /* ── Dependencies ── */
+    .dep-section {
+      margin-bottom: 1.25rem;
+    }
+
+    .dep-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .dep-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .dep-item:hover {
+      background: var(--surface-card-hover);
+    }
+
+    .dep-item .dep-title {
+      flex: 1;
+      color: var(--text-primary);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dep-item .remove-dep {
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .dep-item:hover .remove-dep {
+      opacity: 1;
+    }
+
+    .blocked-banner {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: rgba(var(--sl-color-warning-500-rgb, 245, 158, 11), 0.1);
+      border: 1px solid var(--sl-color-warning-500);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--sl-color-warning-500);
+      margin-bottom: 1rem;
+    }
+
+    .dep-add-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.5rem;
     }
 
     /* ── Comments ── */
@@ -386,6 +457,12 @@ export class TaskDetail extends LitElement {
     .comment-content pre code {
       background: none;
       padding: 0;
+    }
+
+    .mention {
+      color: var(--sl-color-primary-400);
+      font-weight: 600;
+      cursor: default;
     }
 
     .comment-content p {
@@ -484,6 +561,8 @@ export class TaskDetail extends LitElement {
   @state() private _editingDescription = false;
   @state() private _editingField: string | null = null; // 'type' | 'status' | 'assignee' | 'commit'
   @state() private _activity: ActivityEvent[] = [];
+  @state() private _addingBlocker = false;
+  @state() private _allTasks: { id: string; ticket_id: string; title: string }[] = [];
 
   private _storeUnsub: (() => void) | null = null;
 
@@ -573,6 +652,12 @@ export class TaskDetail extends LitElement {
       /(?<!")(https?:\/\/[^\s<]+)/g,
       '<a href="$1" target="_blank" rel="noopener">$1</a>'
     );
+    // Highlight @mentions
+    escaped = escaped.replace(
+      /@([\w.\-]+(?:\s[\w.\-]+)?)/g,
+      '<span class="mention">@$1</span>'
+    );
+
     escaped = escaped
       .split(/\n{2,}/)
       .filter(p => p.trim())
@@ -769,8 +854,15 @@ export class TaskDetail extends LitElement {
       <!-- Body: main + sidebar -->
       <div class="body-layout">
         <div class="main-column">
+          ${task.blocked_by.length > 0 ? html`
+            <div class="blocked-banner">
+              <sl-icon name="exclamation-triangle-fill"></sl-icon>
+              Blocked by ${task.blocked_by.map(b => b.ticket_id).join(', ')}
+            </div>
+          ` : nothing}
           ${this._renderDescription(task)}
           ${this._renderChildren(task)}
+          ${this._renderDependencies(task)}
           <sl-divider></sl-divider>
           ${this._renderComments(task)}
         </div>
@@ -843,6 +935,131 @@ export class TaskDetail extends LitElement {
     `;
   }
 
+  private async _loadAllTasks() {
+    if (this._allTasks.length > 0) return;
+    try {
+      const tasks = await fetchTasks(this.sessionCode);
+      this._allTasks = tasks.map(t => ({ id: t.id, ticket_id: t.ticket_id, title: t.title }));
+    } catch { /* ignore */ }
+  }
+
+  private async _handleAddBlocker(blockerId: string) {
+    if (!this._task) return;
+    try {
+      await addDependency(this.sessionCode, blockerId, this._task.id);
+      this._addingBlocker = false;
+      await this._loadTask();
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to add dependency';
+    }
+  }
+
+  private async _handleRemoveBlocker(blockerId: string) {
+    if (!this._task) return;
+    try {
+      await removeDependency(this.sessionCode, blockerId, this._task.id);
+      await this._loadTask();
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to remove dependency';
+    }
+  }
+
+  private async _handleRemoveBlocks(blockedId: string) {
+    if (!this._task) return;
+    try {
+      await removeDependency(this.sessionCode, this._task.id, blockedId);
+      await this._loadTask();
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to remove dependency';
+    }
+  }
+
+  private _renderDependencies(task: TaskDetailView) {
+    const hasBlockedBy = task.blocked_by.length > 0;
+    const hasBlocks = task.blocks.length > 0;
+
+    if (!hasBlockedBy && !hasBlocks && !this._addingBlocker) {
+      return html`
+        <div class="dep-section">
+          <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Dependencies</span>
+            <sl-button size="small" variant="text" @click=${() => { this._addingBlocker = true; this._loadAllTasks(); }}>
+              <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+              Add
+            </sl-button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Filter tasks that can be selected as blockers (not self, not already blocking)
+    const existingBlockerIds = new Set(task.blocked_by.map(b => b.id));
+    existingBlockerIds.add(task.id);
+    const availableTasks = this._allTasks.filter(t => !existingBlockerIds.has(t.id));
+
+    return html`
+      <div class="dep-section">
+        <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
+          <span>Dependencies</span>
+          <sl-button size="small" variant="text" @click=${() => { this._addingBlocker = true; this._loadAllTasks(); }}>
+            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+            Add Blocker
+          </sl-button>
+        </div>
+
+        ${hasBlockedBy ? html`
+          <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; font-weight: 600;">BLOCKED BY</div>
+          <div class="dep-list">
+            ${task.blocked_by.map(b => html`
+              <div class="dep-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: b.id }))}>
+                <sl-icon name=${TASK_TYPE_ICONS[b.task_type]} style="color: ${TASK_TYPE_COLORS[b.task_type]}; font-size: 0.85rem;"></sl-icon>
+                <span style="font-family: var(--sl-font-mono); opacity: 0.7; font-size: 0.8rem;">${b.ticket_id}</span>
+                <span class="dep-title">${b.title}</span>
+                <sl-badge variant=${STATUS_VARIANTS[b.status] as any} pill size="small">${STATUS_LABELS[b.status]}</sl-badge>
+                <sl-icon-button class="remove-dep" name="x-lg" label="Remove" style="font-size: 0.7rem;"
+                  @click=${(e: Event) => { e.stopPropagation(); this._handleRemoveBlocker(b.id); }}
+                ></sl-icon-button>
+              </div>
+            `)}
+          </div>
+        ` : nothing}
+
+        ${hasBlocks ? html`
+          <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; margin-top: ${hasBlockedBy ? '0.75rem' : '0'}; font-weight: 600;">BLOCKS</div>
+          <div class="dep-list">
+            ${task.blocks.map(b => html`
+              <div class="dep-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: b.id }))}>
+                <sl-icon name=${TASK_TYPE_ICONS[b.task_type]} style="color: ${TASK_TYPE_COLORS[b.task_type]}; font-size: 0.85rem;"></sl-icon>
+                <span style="font-family: var(--sl-font-mono); opacity: 0.7; font-size: 0.8rem;">${b.ticket_id}</span>
+                <span class="dep-title">${b.title}</span>
+                <sl-badge variant=${STATUS_VARIANTS[b.status] as any} pill size="small">${STATUS_LABELS[b.status]}</sl-badge>
+                <sl-icon-button class="remove-dep" name="x-lg" label="Remove" style="font-size: 0.7rem;"
+                  @click=${(e: Event) => { e.stopPropagation(); this._handleRemoveBlocks(b.id); }}
+                ></sl-icon-button>
+              </div>
+            `)}
+          </div>
+        ` : nothing}
+
+        ${this._addingBlocker ? html`
+          <div class="dep-add-row">
+            <sl-select size="small" placeholder="Select blocking task..." style="flex: 1;"
+              @sl-change=${(e: Event) => {
+                const val = (e.target as HTMLSelectElement).value;
+                if (val) this._handleAddBlocker(val);
+              }}
+            >
+              ${availableTasks.map(t => html`
+                <sl-option value=${t.id}>${t.ticket_id} — ${t.title}</sl-option>
+              `)}
+            </sl-select>
+            <sl-icon-button name="x-lg" label="Cancel" @click=${() => { this._addingBlocker = false; }}></sl-icon-button>
+          </div>
+        ` : nothing}
+      </div>
+    `;
+  }
+
   private _activityIcon(eventType: string): string {
     switch (eventType) {
       case 'task_created': return 'plus-circle';
@@ -853,6 +1070,8 @@ export class TaskDetail extends LitElement {
       case 'task_closed': return 'check-circle';
       case 'task_deleted': return 'trash';
       case 'comment_added': return 'chat-dots';
+      case 'dependency_added': return 'link-45deg';
+      case 'dependency_removed': return 'link-45deg';
       default: return 'clock-history';
     }
   }
