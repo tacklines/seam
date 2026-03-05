@@ -215,6 +215,20 @@ export class AgentList extends LitElement {
       border-color: var(--sl-color-success-600);
       background: rgba(34, 197, 94, 0.08);
     }
+
+    .toggle-chip {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-chip:hover {
+      border-color: var(--color-primary-border);
+      color: var(--text-primary);
+    }
+
+    .toggle-chip sl-icon {
+      font-size: 0.85rem;
+    }
   `;
 
   @property() projectId = '';
@@ -222,6 +236,7 @@ export class AgentList extends LitElement {
   @state() private _agents: ProjectAgentView[] = [];
   @state() private _loading = true;
   @state() private _error = '';
+  @state() private _showAll = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -239,12 +254,19 @@ export class AgentList extends LitElement {
     this._loading = true;
     this._error = '';
     try {
-      this._agents = await fetchProjectAgents(this.projectId);
+      this._agents = await fetchProjectAgents(this.projectId, {
+        includeDisconnected: this._showAll,
+      });
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to load agents';
     } finally {
       this._loading = false;
     }
+  }
+
+  private _toggleShowAll() {
+    this._showAll = !this._showAll;
+    this._load();
   }
 
   private _relativeTime(iso: string): string {
@@ -296,7 +318,13 @@ export class AgentList extends LitElement {
           <span class="count">${online.length}</span> Online
         </div>
         <div class="stat-chip">
-          <span class="count">${this._agents.length}</span> Total
+          <span class="count">${this._agents.length}</span> ${this._showAll ? 'Total' : 'Active'}
+        </div>
+        <div class="stat-chip toggle-chip" role="button" tabindex="0"
+             @click=${this._toggleShowAll}
+             @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._toggleShowAll(); }}>
+          <sl-icon name=${this._showAll ? 'eye-slash' : 'eye'}></sl-icon>
+          ${this._showAll ? 'Hide disconnected' : 'Show all'}
         </div>
       </div>
 

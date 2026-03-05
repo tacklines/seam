@@ -92,6 +92,10 @@ def main():
             from seam_agents.agents.session_agent import _build_llm
             from seam_agents.tools import mcp_tools_from_client
             llm_raw, profile = _build_llm(cli_requirement)
+            try:
+                client.call_tool("update_composition", {"model": profile.name})
+            except Exception:
+                pass
             tools = mcp_tools_from_client(client)
             print(f"Routing workflow with {profile.name}...")
             result = run_wf(args.workflow, llm_raw, tools)

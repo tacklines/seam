@@ -110,8 +110,17 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json();
 }
 
-export async function fetchProjectAgents(projectId: string): Promise<ProjectAgentView[]> {
-  const res = await fetch(`${API_BASE}/api/projects/${projectId}/agents`, { headers: authHeaders() });
+export async function fetchProjectAgents(
+  projectId: string,
+  opts?: { includeDisconnected?: boolean },
+): Promise<ProjectAgentView[]> {
+  const params = new URLSearchParams();
+  if (opts?.includeDisconnected) params.set('include_disconnected', 'true');
+  const qs = params.toString();
+  const res = await fetch(
+    `${API_BASE}/api/projects/${projectId}/agents${qs ? `?${qs}` : ''}`,
+    { headers: authHeaders() },
+  );
   return handleResponse(res);
 }
 

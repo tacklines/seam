@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -392,6 +392,12 @@ fn capitalize(s: &str) -> String {
 
 // --- Project-level agent views ---
 
+#[derive(Debug, serde::Deserialize)]
+pub struct ListAgentsQuery {
+    /// Include disconnected agents (default: false)
+    pub include_disconnected: Option<bool>,
+}
+
 /// Row returned by the agent list query (flat join).
 #[derive(Debug, sqlx::FromRow)]
 struct AgentRow {
@@ -466,6 +472,7 @@ fn agent_view_from_row(row: AgentRow, ticket_prefix: &str, online_ids: &std::col
 pub async fn list_project_agents(
     State(state): State<Arc<AppState>>,
     Path(project_id): Path<Uuid>,
+    Query(query): Query<ListAgentsQuery>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<ProjectAgentView>>, StatusCode> {
     let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
@@ -502,7 +509,9 @@ pub async fn list_project_agents(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let rows = sqlx::query_as::<_, AgentRow>(
+    let include_disconnected = query.include_disconnected.unwrap_or(false);
+
+    let sql = format!(
         "SELECT
             p.id, p.display_name, p.session_id,
             s.code AS session_code, s.name AS session_name,
@@ -521,8 +530,12 @@ pub async fn list_project_agents(
          LEFT JOIN workspaces w ON w.task_id = t.id AND w.status NOT IN ('destroyed')
          WHERE s.project_id = $1
            AND p.participant_type = 'agent'
+           {}
          ORDER BY p.joined_at DESC",
-    )
+        if include_disconnected { "" } else { "AND p.disconnected_at IS NULL" },
+    );
+
+    let rows = sqlx::query_as::<_, AgentRow>(&sql)
     .bind(project_id)
     .fetch_all(&state.db)
     .await

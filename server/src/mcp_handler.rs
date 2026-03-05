@@ -32,6 +32,16 @@ struct JoinSessionParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct UpdateCompositionParams {
+    /// MCP client name (e.g., "claude-code", "seam-agent")
+    client_name: Option<String>,
+    /// MCP client version (e.g., "1.2.3")
+    client_version: Option<String>,
+    /// Model being used (e.g., "claude-opus-4-6", "devstral-tuned")
+    model: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct GetSessionParams {
     /// Session code (6-character). Omit to use your current session.
     code: Option<String>,
@@ -341,6 +351,66 @@ impl SeamMcp {
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(e)])),
         }
+    }
+
+    #[tool(description = "Update your agent's composition metadata (model, client info). Call after model routing to report which model you are using.")]
+    async fn update_composition(
+        &self,
+        Parameters(params): Parameters<UpdateCompositionParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let pid = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        // Build dynamic SET clauses for non-null fields
+        let mut sets = Vec::new();
+        let mut idx = 2u32; // $1 is participant_id
+
+        if params.client_name.is_some() {
+            sets.push(format!("client_name = ${idx}"));
+            idx += 1;
+        }
+        if params.client_version.is_some() {
+            sets.push(format!("client_version = ${idx}"));
+            idx += 1;
+        }
+        if params.model.is_some() {
+            sets.push(format!("model = ${idx}"));
+        }
+
+        if sets.is_empty() {
+            return Ok(CallToolResult::success(vec![Content::text(
+                "No fields to update",
+            )]));
+        }
+
+        let sql = format!(
+            "UPDATE participants SET {} WHERE id = $1",
+            sets.join(", "),
+        );
+
+        let mut query = sqlx::query(&sql).bind(pid);
+        if let Some(ref v) = params.client_name {
+            query = query.bind(v);
+        }
+        if let Some(ref v) = params.client_version {
+            query = query.bind(v);
+        }
+        if let Some(ref v) = params.model {
+            query = query.bind(v);
+        }
+
+        query.execute(&self.db).await.map_err(|e| {
+            McpError::internal_error(format!("Failed to update composition: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::json!({
+                "updated": true,
+                "participant_id": pid,
+            }).to_string(),
+        )]))
     }
 
     #[tool(description = "Get session state including all participants. Provide session code or omit to use your current session.")]
