@@ -129,6 +129,25 @@ export async function removeDependency(
   }
 }
 
+// --- Dependency Graph ---
+
+export interface GraphEdge {
+  blocker_id: string;
+  blocked_id: string;
+}
+
+export interface DependencyGraphView {
+  tasks: TaskView[];
+  edges: GraphEdge[];
+}
+
+export async function fetchDependencyGraph(projectId: string): Promise<DependencyGraphView> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/graph`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<DependencyGraphView>(res);
+}
+
 export interface ActivityEvent {
   id: string;
   actor_id: string;

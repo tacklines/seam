@@ -37,6 +37,55 @@ data "coder_parameter" "branch" {
   default      = ""
 }
 
+data "coder_parameter" "seam_url" {
+  name         = "seam_url"
+  display_name = "Seam Server URL"
+  description  = "URL of the Seam server for MCP access."
+  type         = "string"
+  mutable      = false
+  default      = ""
+}
+
+data "coder_parameter" "agent_code" {
+  name         = "agent_code"
+  display_name = "Agent Join Code"
+  description  = "Code for the agent to join a Seam session."
+  type         = "string"
+  mutable      = false
+  default      = ""
+}
+
+data "coder_parameter" "agent_type" {
+  name         = "agent_type"
+  display_name = "Agent Type"
+  description  = "Type of agent: coder, planner, reviewer."
+  type         = "string"
+  mutable      = false
+  default      = "coder"
+
+  option {
+    name  = "Coder"
+    value = "coder"
+  }
+  option {
+    name  = "Planner"
+    value = "planner"
+  }
+  option {
+    name  = "Reviewer"
+    value = "reviewer"
+  }
+}
+
+data "coder_parameter" "instructions" {
+  name         = "instructions"
+  display_name = "Custom Instructions"
+  description  = "Optional instructions for the agent."
+  type         = "string"
+  mutable      = true
+  default      = ""
+}
+
 data "coder_parameter" "cpu_limit" {
   name         = "cpu_limit"
   display_name = "CPU Cores"
@@ -105,12 +154,36 @@ resource "coder_agent" "dev" {
       fi
     fi
 
+    # Configure Seam MCP tools if agent_code is provided
+    if [ -n "${data.coder_parameter.agent_code.value}" ] && [ -n "${data.coder_parameter.seam_url.value}" ]; then
+      echo "Configuring Seam MCP connection..."
+
+      mkdir -p /workspace/.claude
+      cat > /workspace/.claude/settings.local.json <<SETTINGS
+    {
+      "mcpServers": {
+        "seam": {
+          "url": "${data.coder_parameter.seam_url.value}/mcp"
+        }
+      }
+    }
+    SETTINGS
+
+      echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
+      echo "Agent code: ${data.coder_parameter.agent_code.value}"
+      echo "Agent type: ${data.coder_parameter.agent_type.value}"
+    fi
+
     echo "Workspace ready."
   EOT
 
   env = {
-    GIT_AUTHOR_NAME  = data.coder_workspace_owner.me.name
-    GIT_AUTHOR_EMAIL = data.coder_workspace_owner.me.email
+    GIT_AUTHOR_NAME    = data.coder_workspace_owner.me.name
+    GIT_AUTHOR_EMAIL   = data.coder_workspace_owner.me.email
+    SEAM_URL           = data.coder_parameter.seam_url.value
+    SEAM_AGENT_CODE    = data.coder_parameter.agent_code.value
+    SEAM_AGENT_TYPE    = data.coder_parameter.agent_type.value
+    SEAM_INSTRUCTIONS  = data.coder_parameter.instructions.value
   }
 }
 
@@ -189,5 +262,9 @@ resource "docker_container" "workspace" {
   labels {
     label = "seam.managed"
     value = "true"
+  }
+  labels {
+    label = "seam.agent_type"
+    value = data.coder_parameter.agent_type.value
   }
 }

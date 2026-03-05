@@ -44,7 +44,10 @@ Health check: `GET /api/integrations/coder/status`
 
 ## MCP Access
 
-Agents connect via Streamable HTTP at `/mcp`. Authentication is required via Keycloak JWT (Bearer token).
+Agents connect via Streamable HTTP at `/mcp`. Two auth methods:
+
+1. **Keycloak JWT** — external clients authenticate via OAuth; auto-discovered from `/.well-known/oauth-protected-resource`
+2. **Agent tokens** (`sat_` prefix) — server-spawned agents get opaque tokens injected as `SEAM_TOKEN`; validated via SHA-256 hash lookup in `agent_tokens` table
 
 ```json
 {
@@ -56,9 +59,9 @@ Agents connect via Streamable HTTP at `/mcp`. Authentication is required via Key
 }
 ```
 
-MCP clients with OAuth support auto-discover auth via `/.well-known/oauth-protected-resource`. For local dev, set `MCP_AUTH_DISABLED=true` to skip JWT validation.
+For local dev, set `MCP_AUTH_DISABLED=true` (or use `just dev-noauth`) to skip auth on `/mcp`.
 
-After connecting, agents call `join_session` with their agent code to enter a session.
+After connecting, agents call `join_session` with their agent code to enter a session. Authenticated agents get a persistent identity via the `agents` table (upserted on join).
 
 ## Conventions
 

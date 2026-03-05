@@ -1,11 +1,13 @@
 pub mod activity;
 pub mod agent;
+pub mod agents;
 pub mod events;
 pub mod integrations;
 pub mod notes;
 pub mod plans;
 pub mod projects;
 pub mod questions;
+pub mod requirements;
 pub mod sessions;
 pub mod tasks;
 pub mod workspaces;

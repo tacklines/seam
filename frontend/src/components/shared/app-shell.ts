@@ -22,13 +22,13 @@ import '../project/project-workspace.js';
 
 type AppRoute =
   | { view: 'projects' }
-  | { view: 'project'; projectId: string }
+  | { view: 'project'; projectId: string; tab?: string }
   | { view: 'session'; code: string };
 
 function parseRoute(): AppRoute {
   const hash = window.location.hash;
-  const projectMatch = hash.match(/^#project\/([a-f0-9-]+)/i);
-  if (projectMatch) return { view: 'project', projectId: projectMatch[1] };
+  const projectMatch = hash.match(/^#project\/([a-f0-9-]+)(?:\/(\w+))?/i);
+  if (projectMatch) return { view: 'project', projectId: projectMatch[1], tab: projectMatch[2] };
   const sessionMatch = hash.match(/^#session\/([A-Z0-9]+)/i);
   if (sessionMatch) return { view: 'session', code: sessionMatch[1].toUpperCase() };
   return { view: 'projects' };
@@ -312,14 +312,8 @@ export class AppShell extends LitElement {
       if (event.type === 'mentioned' || event.type === 'session-connected') {
         this._loadUnreadMentions();
       }
-      if (event.type === 'session-disconnected') {
-        // Go back to project view or project list
-        const session = this._appState.sessionState?.session;
-        if (session?.project_id) {
-          window.location.hash = `#project/${session.project_id}`;
-        } else {
-          window.location.hash = '#projects';
-        }
+      if (event.type === 'session-disconnected' && !window.location.hash.startsWith('#project/')) {
+        window.location.hash = '#projects';
       }
     });
 
@@ -348,8 +342,14 @@ export class AppShell extends LitElement {
   }
 
   private _leaveSession() {
+    const projectId = this._appState.sessionState?.session?.project_id;
     disconnectSession();
     store.clearSession();
+    if (projectId) {
+      window.location.hash = `#project/${projectId}`;
+    } else {
+      window.location.hash = '#projects';
+    }
   }
 
   private async _loadUnreadMentions() {
@@ -423,9 +423,9 @@ export class AppShell extends LitElement {
 
       <sl-divider></sl-divider>
 
-      <sl-button class="leave-btn" variant="danger" size="small" outline @click=${this._leaveSession}>
+      <sl-button class="leave-btn" variant="neutral" size="small" outline @click=${this._leaveSession}>
         <sl-icon slot="prefix" name="box-arrow-left"></sl-icon>
-        Leave
+        Back to Project
       </sl-button>
 
       <sl-divider></sl-divider>
@@ -451,7 +451,7 @@ export class AppShell extends LitElement {
     // Route based on hash
     switch (this._route.view) {
       case 'project':
-        return html`<project-workspace project-id=${this._route.projectId}></project-workspace>`;
+        return html`<project-workspace project-id=${this._route.projectId} .initialTab=${this._route.tab ?? ''}></project-workspace>`;
       case 'session':
         // Session hash but no active session — session-lobby will attempt rejoin
         return html`<session-lobby></session-lobby>`;

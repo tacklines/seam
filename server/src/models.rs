@@ -103,8 +103,12 @@ pub struct Participant {
     /// For agents: the human user who spawned them
     pub sponsor_id: Option<Uuid>,
     pub joined_at: DateTime<Utc>,
-    /// For agents: persistent agent identity across sessions
-    pub agent_id: Option<Uuid>,
+    /// Agent composition metadata (self-reported on join)
+    pub client_name: Option<String>,
+    pub client_version: Option<String>,
+    pub model: Option<String>,
+    pub metadata: serde_json::Value,
+    pub disconnected_at: Option<DateTime<Utc>>,
 }
 
 /// Join code for humans to enter a session
@@ -415,6 +419,33 @@ pub struct CreateWorkspaceRequest {
     pub task_id: Uuid,
     pub template_name: Option<String>,
     pub branch: Option<String>,
+}
+
+// --- Requirements ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum RequirementStatus {
+    Draft,
+    Active,
+    Satisfied,
+    Archived,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Requirement {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub parent_id: Option<Uuid>,
+    pub title: String,
+    pub description: String,
+    pub status: RequirementStatus,
+    pub priority: TaskPriority,
+    pub created_by: Uuid,
+    pub session_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // --- Agent API DTOs ---

@@ -229,16 +229,16 @@ Set `MCP_AUTH_DISABLED=true` on the server (or use `just dev-noauth`) to skip JW
 3. ~~Remove stdio transport~~ — deleted `seam-mcp` binary (gave direct DB access)
 4. ~~Dev bypass~~ — `MCP_AUTH_DISABLED` env var + `just dev-noauth` / `just server-noauth`
 
-### Sprint 2: Internal Agent Tokens + Identity
+### Sprint 2: Internal Agent Tokens + Identity (DONE - commits 3334acb, 0459860)
 
-5. **`agent_tokens` table migration** — opaque token storage with SHA-256 hashes
-6. **Token generation + validation** — crypto-random tokens, dual-path auth in middleware (JWT vs opaque)
-7. **`agents` table migration** — persistent agent identity across sessions
-8. **Agent upsert on join** — link authenticated agent to persistent identity record
+5. ~~`agent_tokens` table migration~~ — opaque token storage with SHA-256 hashes (migration 015)
+6. ~~Token generation + validation~~ — crypto-random tokens, dual-path auth in middleware (JWT vs `sat_` prefix)
+7. ~~`agents` table migration~~ — persistent agent identity across sessions (migration 016)
+8. ~~Agent upsert on join~~ — link authenticated agent to persistent identity record
 
-### Sprint 3: Workspace Integration + Polish
+### Sprint 3: Workspace Integration + Polish (partially DONE)
 
-9. **Inject token into Coder workspace** — generate + pass `SEAM_TOKEN` on workspace creation
+9. ~~Inject token into Coder workspace~~ — generate + pass `SEAM_TOKEN` on workspace creation (commit 36c571d)
 10. **Agent info in session context** — participants show agent metadata (model, capabilities)
 11. **Token lifecycle** — expiry, revocation, cleanup
 12. **External client OAuth** (future) — Keycloak device auth for Claude Code etc.

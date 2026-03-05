@@ -1033,6 +1033,55 @@ async fn extract_and_record_mentions(
     mentioned_names
 }
 
+// --- Project-scoped dependency graph ---
+
+#[derive(Debug, Serialize)]
+pub struct GraphEdge {
+    pub blocker_id: Uuid,
+    pub blocked_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DependencyGraphView {
+    pub tasks: Vec<TaskView>,
+    pub edges: Vec<GraphEdge>,
+}
+
+pub async fn get_project_dependency_graph(
+    State(state): State<Arc<AppState>>,
+    Path(project_id): Path<Uuid>,
+    AuthUser(_claims): AuthUser,
+) -> Result<Json<DependencyGraphView>, StatusCode> {
+    let project = resolve_project(&state.db, project_id).await?;
+
+    let tasks: Vec<Task> = sqlx::query_as(
+        "SELECT * FROM tasks WHERE project_id = $1 ORDER BY created_at"
+    )
+    .bind(project.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let task_ids: Vec<Uuid> = tasks.iter().map(|t| t.id).collect();
+
+    let edges: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT blocker_id, blocked_id FROM task_dependencies WHERE blocker_id = ANY($1) AND blocked_id = ANY($1)"
+    )
+    .bind(&task_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let views: Vec<TaskView> = tasks.into_iter().map(|t| {
+        TaskView::from_task(t, &project.ticket_prefix)
+    }).collect();
+
+    Ok(Json(DependencyGraphView {
+        tasks: views,
+        edges: edges.into_iter().map(|(blocker_id, blocked_id)| GraphEdge { blocker_id, blocked_id }).collect(),
+    }))
+}
+
 // --- Project-scoped handlers (read-only, no session required) ---
 
 pub async fn list_project_tasks(

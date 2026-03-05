@@ -52,7 +52,8 @@ dev-noauth: infra-up
     echo "✓ Keycloak ready"
 
     echo "🚀 Starting backend (MCP auth disabled) + frontend..."
-    MCP_AUTH_DISABLED=true cd server && cargo run --bin seam-server 2>&1 | sed 's/^/[server] /' &
+    export MCP_AUTH_DISABLED=true
+    cd server && cargo run --bin seam-server 2>&1 | sed 's/^/[server] /' &
     sleep 2
     cd frontend && npx vite 2>&1 | sed 's/^/[frontend] /' &
     wait
@@ -63,7 +64,7 @@ server:
 
 # Backend with MCP auth disabled (for local MCP clients without OAuth)
 server-noauth:
-    MCP_AUTH_DISABLED=true cd server && cargo run --bin seam-server
+    export MCP_AUTH_DISABLED=true && cd server && cargo run --bin seam-server
 
 # Frontend only
 frontend:

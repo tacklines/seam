@@ -183,6 +183,66 @@ struct RemoveDependencyParams {
     blocked_id: String,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CreateRequirementParams {
+    /// Requirement title — a high-level goal (e.g. "Ensure full WCAG 2.1 AA compliance")
+    title: String,
+    /// Detailed description of what this requirement means (markdown supported)
+    description: Option<String>,
+    /// Priority: critical, high, medium (default), low
+    priority: Option<String>,
+    /// Parent requirement ID for decomposition hierarchy
+    parent_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ListRequirementsParams {
+    /// Filter by status: draft, active, satisfied, archived
+    status: Option<String>,
+    /// Filter by priority: critical, high, medium, low
+    priority: Option<String>,
+    /// Filter by parent requirement ID (get children of a requirement)
+    parent_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetRequirementParams {
+    /// Requirement ID
+    id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UpdateRequirementParams {
+    /// Requirement ID to update
+    id: String,
+    /// New title
+    title: Option<String>,
+    /// New description
+    description: Option<String>,
+    /// New status: draft, active, satisfied, archived
+    status: Option<String>,
+    /// New priority: critical, high, medium, low
+    priority: Option<String>,
+    /// New parent requirement ID (use "none" to remove parent)
+    parent_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct LinkRequirementTaskParams {
+    /// Requirement ID
+    requirement_id: String,
+    /// Task ID to link to this requirement
+    task_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UnlinkRequirementTaskParams {
+    /// Requirement ID
+    requirement_id: String,
+    /// Task ID to unlink
+    task_id: String,
+}
+
 // --- MCP Server ---
 
 #[derive(Default)]
@@ -1481,6 +1541,440 @@ impl SeamMcp {
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
         }
     }
+
+    // --- Requirements tools ---
+
+    #[tool(description = "Create a requirement — a high-level goal that drives research and task creation. Examples: 'Ensure full i18n coverage', 'Achieve WCAG 2.1 AA compliance'. Use parent_id for decomposition.")]
+    async fn create_requirement(
+        &self,
+        Parameters(params): Parameters<CreateRequirementParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let priority = params.priority.as_deref().unwrap_or("medium");
+        let description = params.description.as_deref().unwrap_or("");
+
+        let parent_id = if let Some(ref pid) = params.parent_id {
+            match Uuid::parse_str(pid) {
+                Ok(id) => Some(id),
+                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id")])),
+            }
+        } else {
+            None
+        };
+
+        // Look up the user_id for this participant
+        let user_id: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT user_id FROM participants WHERE id = $1"
+        )
+        .bind(participant_id)
+        .fetch_optional(&self.db)
+        .await
+        .unwrap_or(None);
+
+        let user_id = match user_id {
+            Some((uid,)) => uid,
+            None => return Ok(CallToolResult::error(vec![Content::text("Participant not found")])),
+        };
+
+        match sqlx::query_as::<_, crate::models::Requirement>(
+            "INSERT INTO requirements (project_id, parent_id, title, description, priority, created_by, session_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING *"
+        )
+        .bind(project_id)
+        .bind(parent_id)
+        .bind(&params.title)
+        .bind(description)
+        .bind(priority)
+        .bind(user_id)
+        .bind(session_id)
+        .fetch_one(&self.db)
+        .await
+        {
+            Ok(req) => {
+                let result = serde_json::json!({
+                    "id": req.id,
+                    "project_id": req.project_id,
+                    "parent_id": req.parent_id,
+                    "title": req.title,
+                    "description": req.description,
+                    "status": req.status,
+                    "priority": req.priority,
+                    "created_at": req.created_at,
+                });
+                self.record_activity(project_id, Some(session_id), participant_id,
+                    "requirement_created", "requirement", req.id,
+                    &format!("created requirement: {}", req.title),
+                    serde_json::json!({"title": req.title}),
+                ).await;
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result).unwrap(),
+                )]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed to create requirement: {e}"))])),
+        }
+    }
+
+    #[tool(description = "List requirements in the current project. Defaults to top-level requirements (no parent). Use parent_id to list children of a specific requirement.")]
+    async fn list_requirements(
+        &self,
+        Parameters(params): Parameters<ListRequirementsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let mut sql = "SELECT r.*,
+            (SELECT COUNT(*) FROM requirements c WHERE c.parent_id = r.id) as child_count,
+            (SELECT COUNT(*) FROM requirement_tasks rt WHERE rt.requirement_id = r.id) as task_count
+            FROM requirements r WHERE r.project_id = $1".to_string();
+
+        let mut conditions = Vec::new();
+        let mut bind_idx = 2u32;
+
+        if let Some(ref status) = params.status {
+            conditions.push(format!("r.status = ${bind_idx}"));
+            bind_idx += 1;
+            let _ = status;
+        }
+        if let Some(ref priority) = params.priority {
+            conditions.push(format!("r.priority = ${bind_idx}"));
+            bind_idx += 1;
+            let _ = priority;
+        }
+        if let Some(ref parent_id) = params.parent_id {
+            conditions.push(format!("r.parent_id = ${bind_idx}"));
+            let _ = parent_id;
+        } else if params.status.is_none() && params.priority.is_none() {
+            conditions.push("r.parent_id IS NULL".to_string());
+        }
+
+        for c in &conditions {
+            sql.push_str(&format!(" AND {c}"));
+        }
+        sql.push_str(" ORDER BY r.priority, r.created_at");
+
+        // Build query string with lifetime that outlasts the query
+        let mut sql = "SELECT * FROM requirements WHERE project_id = $1".to_string();
+        let mut idx = 2u32;
+        if params.status.is_some() {
+            sql.push_str(&format!(" AND status = ${idx}"));
+            idx += 1;
+        }
+        if params.priority.is_some() {
+            sql.push_str(&format!(" AND priority = ${idx}"));
+            idx += 1;
+        }
+        if params.parent_id.is_some() {
+            sql.push_str(&format!(" AND parent_id = ${idx}"));
+        } else if params.status.is_none() && params.priority.is_none() {
+            sql.push_str(" AND parent_id IS NULL");
+        }
+        sql.push_str(" ORDER BY priority, created_at");
+
+        let mut q = sqlx::query_as::<_, crate::models::Requirement>(&sql)
+            .bind(project_id);
+        if let Some(ref status) = params.status {
+            q = q.bind(status);
+        }
+        if let Some(ref priority) = params.priority {
+            q = q.bind(priority);
+        }
+        if let Some(ref parent_id) = params.parent_id {
+            match Uuid::parse_str(parent_id) {
+                Ok(pid) => q = q.bind(pid),
+                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id")])),
+            }
+        }
+
+        match q.fetch_all(&self.db).await {
+            Ok(reqs) => {
+                let mut items = Vec::new();
+                for r in &reqs {
+                    let child_count: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM requirements WHERE parent_id = $1"
+                    ).bind(r.id).fetch_one(&self.db).await.unwrap_or(0);
+
+                    let task_count: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM requirement_tasks WHERE requirement_id = $1"
+                    ).bind(r.id).fetch_one(&self.db).await.unwrap_or(0);
+
+                    items.push(serde_json::json!({
+                        "id": r.id,
+                        "title": r.title,
+                        "status": r.status,
+                        "priority": r.priority,
+                        "parent_id": r.parent_id,
+                        "child_count": child_count,
+                        "task_count": task_count,
+                        "created_at": r.created_at,
+                        "updated_at": r.updated_at,
+                    }));
+                }
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&items).unwrap(),
+                )]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+        }
+    }
+
+    #[tool(description = "Get a requirement by ID with full details including description, children, and linked tasks.")]
+    async fn get_requirement(
+        &self,
+        Parameters(params): Parameters<GetRequirementParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let req_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement ID")])),
+        };
+
+        let req = match sqlx::query_as::<_, crate::models::Requirement>(
+            "SELECT * FROM requirements WHERE id = $1"
+        ).bind(req_id).fetch_optional(&self.db).await {
+            Ok(Some(r)) => r,
+            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Requirement not found")])),
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+        };
+
+        let children = sqlx::query_as::<_, crate::models::Requirement>(
+            "SELECT * FROM requirements WHERE parent_id = $1 ORDER BY priority, created_at"
+        ).bind(req_id).fetch_all(&self.db).await.unwrap_or_default();
+
+        let linked_tasks: Vec<(Uuid,)> = sqlx::query_as(
+            "SELECT task_id FROM requirement_tasks WHERE requirement_id = $1"
+        ).bind(req_id).fetch_all(&self.db).await.unwrap_or_default();
+
+        let child_items: Vec<_> = children.iter().map(|c| serde_json::json!({
+            "id": c.id,
+            "title": c.title,
+            "status": c.status,
+            "priority": c.priority,
+        })).collect();
+
+        let result = serde_json::json!({
+            "id": req.id,
+            "project_id": req.project_id,
+            "parent_id": req.parent_id,
+            "title": req.title,
+            "description": req.description,
+            "status": req.status,
+            "priority": req.priority,
+            "created_by": req.created_by,
+            "session_id": req.session_id,
+            "children": child_items,
+            "linked_task_ids": linked_tasks.iter().map(|(id,)| id).collect::<Vec<_>>(),
+            "created_at": req.created_at,
+            "updated_at": req.updated_at,
+        });
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "Update a requirement's title, description, status, priority, or parent. Only provided fields are changed. Status transitions: draft→active, active→satisfied/archived, satisfied→active/archived, archived→draft.")]
+    async fn update_requirement(
+        &self,
+        Parameters(params): Parameters<UpdateRequirementParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let req_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement ID")])),
+        };
+
+        let current = match sqlx::query_as::<_, crate::models::Requirement>(
+            "SELECT * FROM requirements WHERE id = $1 AND project_id = $2"
+        ).bind(req_id).bind(project_id).fetch_optional(&self.db).await {
+            Ok(Some(r)) => r,
+            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Requirement not found")])),
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+        };
+
+        // Build dynamic update
+        let mut set_clauses = vec!["updated_at = NOW()".to_string()];
+        let mut bind_idx = 3u32;
+
+        if params.title.is_some() {
+            set_clauses.push(format!("title = ${bind_idx}"));
+            bind_idx += 1;
+        }
+        if params.description.is_some() {
+            set_clauses.push(format!("description = ${bind_idx}"));
+            bind_idx += 1;
+        }
+        if params.status.is_some() {
+            set_clauses.push(format!("status = ${bind_idx}"));
+            bind_idx += 1;
+        }
+        if params.priority.is_some() {
+            set_clauses.push(format!("priority = ${bind_idx}"));
+            bind_idx += 1;
+        }
+        if params.parent_id.is_some() {
+            set_clauses.push(format!("parent_id = ${bind_idx}"));
+        }
+
+        if set_clauses.len() == 1 {
+            return Ok(CallToolResult::error(vec![Content::text("No fields to update")]));
+        }
+
+        let query = format!(
+            "UPDATE requirements SET {} WHERE id = $1 AND project_id = $2 RETURNING *",
+            set_clauses.join(", ")
+        );
+
+        let mut q = sqlx::query_as::<_, crate::models::Requirement>(&query)
+            .bind(req_id)
+            .bind(project_id);
+
+        if let Some(ref title) = params.title {
+            q = q.bind(title);
+        }
+        if let Some(ref desc) = params.description {
+            q = q.bind(desc);
+        }
+        if let Some(ref status) = params.status {
+            // Validate transition
+            let valid = match (current.status, status.as_str()) {
+                (crate::models::RequirementStatus::Draft, "active" | "archived") => true,
+                (crate::models::RequirementStatus::Active, "satisfied" | "archived") => true,
+                (crate::models::RequirementStatus::Satisfied, "active" | "archived") => true,
+                (crate::models::RequirementStatus::Archived, "draft") => true,
+                _ => false,
+            };
+            if !valid {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    format!("Invalid status transition: {:?} → {status}", current.status)
+                )]));
+            }
+            q = q.bind(status);
+        }
+        if let Some(ref priority) = params.priority {
+            q = q.bind(priority);
+        }
+        if let Some(ref parent_id) = params.parent_id {
+            if parent_id == "none" {
+                q = q.bind(None::<Uuid>);
+            } else {
+                match Uuid::parse_str(parent_id) {
+                    Ok(pid) => {
+                        if pid == req_id {
+                            return Ok(CallToolResult::error(vec![Content::text("A requirement cannot be its own parent")]));
+                        }
+                        q = q.bind(Some(pid));
+                    }
+                    Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id")])),
+                }
+            }
+        }
+
+        match q.fetch_one(&self.db).await {
+            Ok(req) => {
+                let result = serde_json::json!({
+                    "id": req.id,
+                    "title": req.title,
+                    "description": req.description,
+                    "status": req.status,
+                    "priority": req.priority,
+                    "parent_id": req.parent_id,
+                    "updated_at": req.updated_at,
+                });
+                self.record_activity(project_id, Some(session_id), participant_id,
+                    "requirement_updated", "requirement", req.id,
+                    &format!("updated requirement: {}", req.title),
+                    serde_json::json!({"title": req.title}),
+                ).await;
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result).unwrap(),
+                )]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+        }
+    }
+
+    #[tool(description = "Link a task to a requirement, indicating the task was created to satisfy this requirement.")]
+    async fn link_requirement_task(
+        &self,
+        Parameters(params): Parameters<LinkRequirementTaskParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let req_id = match Uuid::parse_str(&params.requirement_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement_id")])),
+        };
+        let task_id = match Uuid::parse_str(&params.task_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task_id")])),
+        };
+
+        match sqlx::query(
+            "INSERT INTO requirement_tasks (requirement_id, task_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+        )
+        .bind(req_id)
+        .bind(task_id)
+        .execute(&self.db)
+        .await
+        {
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text("Task linked to requirement")])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+        }
+    }
+
+    #[tool(description = "Unlink a task from a requirement.")]
+    async fn unlink_requirement_task(
+        &self,
+        Parameters(params): Parameters<UnlinkRequirementTaskParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let req_id = match Uuid::parse_str(&params.requirement_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement_id")])),
+        };
+        let task_id = match Uuid::parse_str(&params.task_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task_id")])),
+        };
+
+        match sqlx::query(
+            "DELETE FROM requirement_tasks WHERE requirement_id = $1 AND task_id = $2"
+        )
+        .bind(req_id)
+        .bind(task_id)
+        .execute(&self.db)
+        .await
+        {
+            Ok(result) if result.rows_affected() == 0 => {
+                Ok(CallToolResult::error(vec![Content::text("Link not found")]))
+            }
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text("Task unlinked from requirement")])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+        }
+    }
 }
 
 #[tool_handler]
@@ -1854,13 +2348,6 @@ impl SeamMcp {
         .await
         .map_err(|e| format!("Database error: {e}"))?;
 
-        // Upsert persistent agent identity
-        let agent_id = self.upsert_agent(
-            agent_code.user_id,
-            session.project_id,
-            display_name.unwrap_or("Agent"),
-        ).await.ok();
-
         let participant_id = if let Some(existing) = existing_agent {
             // Update display_name if a new one was provided
             if let Some(new_name) = display_name {
@@ -1870,16 +2357,6 @@ impl SeamMcp {
                     .execute(&self.db)
                     .await;
             }
-            // Link to agent identity if not already linked
-            if existing.agent_id.is_none() {
-                if let Some(aid) = agent_id {
-                    let _ = sqlx::query("UPDATE participants SET agent_id = $1 WHERE id = $2")
-                        .bind(aid)
-                        .bind(existing.id)
-                        .execute(&self.db)
-                        .await;
-                }
-            }
             existing.id
         } else {
             let name = display_name
@@ -1888,15 +2365,14 @@ impl SeamMcp {
             let pid = Uuid::new_v4();
 
             sqlx::query(
-                "INSERT INTO participants (id, session_id, user_id, display_name, participant_type, sponsor_id, joined_at, agent_id)
-                 VALUES ($1, $2, $3, $4, 'agent', $5, NOW(), $6)",
+                "INSERT INTO participants (id, session_id, user_id, display_name, participant_type, sponsor_id, joined_at)
+                 VALUES ($1, $2, $3, $4, 'agent', $5, NOW())",
             )
             .bind(pid)
             .bind(session.id)
             .bind(agent_code.user_id)
             .bind(&name)
             .bind(sponsor.id)
-            .bind(agent_id)
             .execute(&self.db)
             .await
             .map_err(|e| format!("Failed to create participant: {e}"))?;
@@ -1939,38 +2415,6 @@ impl SeamMcp {
     }
 
     /// Upsert a persistent agent identity. Resolves org from project.
-    async fn upsert_agent(
-        &self,
-        user_id: Uuid,
-        project_id: Uuid,
-        display_name: &str,
-    ) -> Result<Uuid, String> {
-        // Resolve org_id from project
-        let org_id: Uuid = sqlx::query_scalar("SELECT org_id FROM projects WHERE id = $1")
-            .bind(project_id)
-            .fetch_one(&self.db)
-            .await
-            .map_err(|e| format!("Failed to resolve org: {e}"))?;
-
-        // Upsert agent record
-        let agent_id: Uuid = sqlx::query_scalar(
-            r#"INSERT INTO agents (user_id, display_name, organization_id, last_seen_at)
-               VALUES ($1, $2, $3, now())
-               ON CONFLICT (user_id, organization_id) DO UPDATE
-                 SET last_seen_at = now(),
-                     display_name = EXCLUDED.display_name
-               RETURNING id"#,
-        )
-        .bind(user_id)
-        .bind(display_name)
-        .bind(org_id)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|e| format!("Failed to upsert agent: {e}"))?;
-
-        Ok(agent_id)
-    }
-
     async fn fetch_session(&self, code: &str) -> Result<serde_json::Value, String> {
         let session: Session = sqlx::query_as(
             "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL",

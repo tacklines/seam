@@ -1,8 +1,21 @@
-import { defineConfig } from 'vite';
+import { defineConfig, PluginOption } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 
+// Lit custom elements can't be re-registered via HMR — force full reload
+function litFullReload(): PluginOption {
+  return {
+    name: 'lit-full-reload',
+    handleHotUpdate({ file, server }) {
+      if (file.endsWith('.ts') && file.includes('/src/components/')) {
+        server.ws.send({ type: 'full-reload' });
+        return [];
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [tailwindcss()],
+  plugins: [tailwindcss(), litFullReload()],
   resolve: {
     alias: {
       '@': '/src',

@@ -30,6 +30,7 @@ import '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js';
 import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 
 import './task-detail.js';
+import { launchAgent } from '../../state/agent-api.js';
 
 @customElement('task-board')
 export class TaskBoard extends LitElement {
@@ -510,6 +511,14 @@ export class TaskBoard extends LitElement {
   @state() private _createLoading = false;
   @state() private _toastMessage = '';
 
+  // Launch agent dialog state
+  @state() private _showAgentDialog = false;
+  @state() private _agentType = 'coder';
+  @state() private _agentBranch = '';
+  @state() private _agentInstructions = '';
+  @state() private _agentLoading = false;
+  @state() private _agentError = '';
+
   private _storeUnsub: (() => void) | null = null;
   private _keyHandler = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
@@ -855,6 +864,10 @@ export class TaskBoard extends LitElement {
             <sl-icon-button name="arrow-clockwise" @click=${() => this._loadTasks()}></sl-icon-button>
           </sl-tooltip>
           ${this._isProjectMode ? nothing : html`
+            <sl-button variant="default" size="small" @click=${() => { this._showAgentDialog = true; this._agentError = ''; }}>
+              <sl-icon slot="prefix" name="robot"></sl-icon>
+              Launch Agent
+            </sl-button>
             <sl-button variant="primary" size="small" @click=${() => this._openCreateDialog()}>
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
               New Task
@@ -960,6 +973,7 @@ export class TaskBoard extends LitElement {
             : this._renderTaskList()}
 
       ${this._renderCreateDialog()}
+      ${this._renderAgentDialog()}
       ${this._renderShortcuts()}
       ${this._toastMessage ? html`<div class="toast">${this._toastMessage}</div>` : nothing}
     `;
@@ -1317,6 +1331,86 @@ export class TaskBoard extends LitElement {
         >Create</sl-button>
       </sl-dialog>
     `;
+  }
+
+  private _renderAgentDialog() {
+    if (!this._showAgentDialog) return nothing;
+    return html`
+      <sl-dialog
+        label="Launch Agent"
+        ?open=${this._showAgentDialog}
+        @sl-request-close=${() => { this._showAgentDialog = false; }}
+      >
+        <div class="create-form">
+          ${this._agentError ? html`<sl-alert variant="danger" open>${this._agentError}</sl-alert>` : nothing}
+          <sl-select
+            label="Agent Type"
+            value=${this._agentType}
+            @sl-change=${(e: Event) => { this._agentType = (e.target as HTMLSelectElement).value; }}
+          >
+            <sl-option value="coder">
+              <sl-icon slot="prefix" name="code-slash"></sl-icon>
+              Coder
+            </sl-option>
+            <sl-option value="planner">
+              <sl-icon slot="prefix" name="diagram-3"></sl-icon>
+              Planner
+            </sl-option>
+            <sl-option value="reviewer">
+              <sl-icon slot="prefix" name="search"></sl-icon>
+              Reviewer
+            </sl-option>
+          </sl-select>
+
+          <sl-input
+            label="Branch"
+            placeholder="Default branch"
+            value=${this._agentBranch}
+            @sl-input=${(e: Event) => { this._agentBranch = (e.target as HTMLInputElement).value; }}
+          ></sl-input>
+
+          <sl-textarea
+            label="Instructions"
+            placeholder="Optional: what should the agent focus on?"
+            value=${this._agentInstructions}
+            @sl-input=${(e: Event) => { this._agentInstructions = (e.target as HTMLTextAreaElement).value; }}
+            rows="3"
+          ></sl-textarea>
+        </div>
+
+        <sl-button
+          slot="footer"
+          variant="primary"
+          ?loading=${this._agentLoading}
+          @click=${() => this._handleLaunchAgent()}
+        >
+          <sl-icon slot="prefix" name="rocket-takeoff"></sl-icon>
+          Launch
+        </sl-button>
+      </sl-dialog>
+    `;
+  }
+
+  private async _handleLaunchAgent() {
+    this._agentLoading = true;
+    this._agentError = '';
+    try {
+      await launchAgent(this.sessionCode, {
+        agent_type: this._agentType,
+        branch: this._agentBranch || undefined,
+        instructions: this._agentInstructions || undefined,
+      });
+      this._showAgentDialog = false;
+      this._agentType = 'coder';
+      this._agentBranch = '';
+      this._agentInstructions = '';
+      this._toastMessage = 'Agent launched! It will appear in the session shortly.';
+      setTimeout(() => { this._toastMessage = ''; }, 4000);
+    } catch (err) {
+      this._agentError = err instanceof Error ? err.message : 'Failed to launch agent';
+    } finally {
+      this._agentLoading = false;
+    }
   }
 
   private _renderShortcuts() {

@@ -22,6 +22,8 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 
 import '../plans/plan-list.js';
 import '../plans/plan-detail.js';
+// Lazy-loaded when graph tab is shown (Three.js is ~800KB)
+const ensureGraphLoaded = () => import('../graph/dependency-graph.js');
 
 const API_BASE = '';
 
@@ -34,6 +36,25 @@ export class ProjectWorkspace extends LitElement {
       min-height: 100%;
       padding: 2rem;
       background: var(--surface-1, #111320);
+    }
+
+    .container.graph-mode {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .container.graph-mode .graph-header {
+      padding: 1rem 2rem 0;
+      background: var(--surface-1, #111320);
+      flex-shrink: 0;
+    }
+
+    .container.graph-mode dependency-graph {
+      flex: 1;
+      min-height: 0;
     }
 
     .inner {
@@ -527,6 +548,7 @@ export class ProjectWorkspace extends LitElement {
   `;
 
   @property({ attribute: 'project-id' }) projectId = '';
+  @property() initialTab = '';
 
   @state() private _project: ProjectView | null = null;
   @state() private _sessions: SessionView[] = [];
@@ -574,6 +596,12 @@ export class ProjectWorkspace extends LitElement {
   updated(changed: Map<string, unknown>) {
     if (changed.has('projectId') && this.projectId) {
       this._loadProject();
+    }
+    if (changed.has('initialTab') && this.initialTab) {
+      const valid = ['overview', 'graph', 'settings'];
+      if (valid.includes(this.initialTab)) {
+        this._switchTab(this.initialTab, false);
+      }
     }
   }
 
@@ -694,21 +722,31 @@ export class ProjectWorkspace extends LitElement {
       return html`<div class="empty-state">Project not found</div>`;
     }
 
+    const isGraph = this._activeTab === 'graph';
+
     return html`
-      <div class="container">
-        <div class="inner">
-          ${this._renderHeader()}
-          ${this._renderTabNav()}
-          ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem;">${this._error}</sl-alert>` : nothing}
-          ${this._activeTab === 'overview' ? html`
-            ${this._renderRepo()}
-            ${this._renderSessions()}
-            ${this._renderPlans()}
-            ${this._renderWorkspaces()}
-            ${this._renderTasks()}
-          ` : nothing}
-          ${this._activeTab === 'settings' ? this._renderSettings() : nothing}
-        </div>
+      <div class="container ${isGraph ? 'graph-mode' : ''}">
+        ${isGraph ? html`
+          <div class="graph-header">
+            ${this._renderHeader()}
+            ${this._renderTabNav()}
+          </div>
+          <dependency-graph project-id=${this.projectId}></dependency-graph>
+        ` : html`
+          <div class="inner">
+            ${this._renderHeader()}
+            ${this._renderTabNav()}
+            ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem;">${this._error}</sl-alert>` : nothing}
+            ${this._activeTab === 'overview' ? html`
+              ${this._renderRepo()}
+              ${this._renderSessions()}
+              ${this._renderPlans()}
+              ${this._renderWorkspaces()}
+              ${this._renderTasks()}
+            ` : nothing}
+            ${this._activeTab === 'settings' ? this._renderSettings() : nothing}
+          </div>
+        `}
       </div>
 
       <sl-dialog label="New Session" ?open=${this._showNewSession}
@@ -960,16 +998,26 @@ export class ProjectWorkspace extends LitElement {
     return html`
       <nav class="tab-nav">
         ${tab('overview', 'Overview', 'grid-1x2')}
+        ${tab('graph', 'Graph', 'diagram-3')}
         ${tab('settings', 'Settings', 'gear')}
       </nav>
     `;
   }
 
-  private _switchTab(tab: string) {
+  private _switchTab(tab: string, updateHash = true) {
     this._activeTab = tab;
+    if (updateHash) {
+      const hash = tab === 'overview'
+        ? `#project/${this.projectId}`
+        : `#project/${this.projectId}/${tab}`;
+      window.history.replaceState(null, '', hash);
+    }
     if (tab === 'settings') {
       this._initSettingsForm();
       this._loadCoderStatus();
+    }
+    if (tab === 'graph') {
+      void ensureGraphLoaded();
     }
   }
 

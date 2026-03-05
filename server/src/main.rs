@@ -104,6 +104,11 @@ async fn main() {
         // Plans
         .route("/api/projects/{project_id}/plans", get(routes::plans::list_plans).post(routes::plans::create_plan))
         .route("/api/projects/{project_id}/plans/{plan_id}", get(routes::plans::get_plan).patch(routes::plans::update_plan))
+        // Requirements
+        .route("/api/projects/{project_id}/requirements", get(routes::requirements::list_requirements).post(routes::requirements::create_requirement))
+        .route("/api/projects/{project_id}/requirements/{req_id}", get(routes::requirements::get_requirement).patch(routes::requirements::update_requirement).delete(routes::requirements::delete_requirement))
+        .route("/api/projects/{project_id}/requirements/{req_id}/tasks", post(routes::requirements::link_task))
+        .route("/api/projects/{project_id}/requirements/{req_id}/tasks/{task_id}", delete(routes::requirements::unlink_task))
         // Sessions
         .route("/api/sessions", post(routes::sessions::create_session))
         .route("/api/sessions/{code}", get(routes::sessions::get_session))

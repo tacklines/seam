@@ -4,6 +4,14 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 use chrono::Utc;
+use std::sync::atomic::{AtomicI32, Ordering};
+
+/// Per-test ticket counter to avoid unique constraint violations across concurrent tests.
+static TICKET_COUNTER: AtomicI32 = AtomicI32::new(10000);
+
+fn next_ticket() -> i32 {
+    TICKET_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
@@ -14,8 +22,8 @@ async fn setup_db() -> PgPool {
 }
 
 /// Create a test user, org, project, session, and participant for task tests.
-/// Returns (session_id, participant_id).
-async fn create_test_session(db: &PgPool) -> (Uuid, Uuid) {
+/// Returns (session_id, project_id, participant_id).
+async fn create_test_session(db: &PgPool) -> (Uuid, Uuid, Uuid) {
     let user_id = Uuid::new_v4();
     let external_id = format!("test-{}", Uuid::new_v4());
     sqlx::query("INSERT INTO users (id, external_id, username, display_name, created_at) VALUES ($1, $2, $3, $4, NOW())")
@@ -57,21 +65,23 @@ async fn create_test_session(db: &PgPool) -> (Uuid, Uuid) {
         .bind("Test User")
         .execute(db).await.unwrap();
 
-    (session_id, participant_id)
+    (session_id, project_id, participant_id)
 }
 
 #[tokio::test]
 async fn test_create_task() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, parent_id, task_type, title, description, status, assigned_to, created_by, created_at, updated_at)
-         VALUES ($1, $2, NULL, 'task', $3, $4, 'open', NULL, $5, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, assigned_to, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, NULL, 'task', $5, $6, 'open', NULL, $7, NOW(), NOW())"
     )
     .bind(task_id)
     .bind(session_id)
+    .bind(project_id)
+    .bind(next_ticket())
     .bind("Implement login form")
     .bind("Add username/password fields with validation")
     .bind(participant_id)
@@ -92,42 +102,42 @@ async fn test_create_task() {
 #[tokio::test]
 async fn test_task_hierarchy() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     // Create epic
     let epic_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, 'epic', 'User Authentication', 'open', $3, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'epic', 'User Authentication', 'open', $5, NOW(), NOW())"
     )
-    .bind(epic_id).bind(session_id).bind(participant_id)
+    .bind(epic_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Create story under epic
     let story_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, parent_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, 'story', 'Login flow', 'open', $4, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'story', 'Login flow', 'open', $6, NOW(), NOW())"
     )
-    .bind(story_id).bind(session_id).bind(epic_id).bind(participant_id)
+    .bind(story_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(epic_id).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Create task under story
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, parent_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, 'task', 'Build login form', 'open', $4, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'task', 'Build login form', 'open', $6, NOW(), NOW())"
     )
-    .bind(task_id).bind(session_id).bind(story_id).bind(participant_id)
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(story_id).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Create subtask under task
     let subtask_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, parent_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, 'subtask', 'Add password validation', 'open', $4, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'subtask', 'Add password validation', 'open', $6, NOW(), NOW())"
     )
-    .bind(subtask_id).bind(session_id).bind(task_id).bind(participant_id)
+    .bind(subtask_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(task_id).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Query children of epic
@@ -163,24 +173,24 @@ async fn test_task_hierarchy() {
 #[tokio::test]
 async fn test_task_types() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     for task_type in &["epic", "story", "task", "subtask", "bug"] {
         let id = Uuid::new_v4();
         sqlx::query(
-            "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, 'open', $5, NOW(), NOW())"
+            "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 'open', $7, NOW(), NOW())"
         )
-        .bind(id).bind(session_id).bind(task_type).bind(format!("Test {task_type}")).bind(participant_id)
+        .bind(id).bind(session_id).bind(project_id).bind(next_ticket()).bind(task_type).bind(format!("Test {task_type}")).bind(participant_id)
         .execute(&db).await.unwrap();
     }
 
     // Invalid type should fail
     let result = sqlx::query(
-        "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, 'invalid_type', 'Bad', 'open', $3, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'invalid_type', 'Bad', 'open', $5, NOW(), NOW())"
     )
-    .bind(Uuid::new_v4()).bind(session_id).bind(participant_id)
+    .bind(Uuid::new_v4()).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await;
 
     assert!(result.is_err(), "Invalid task_type should be rejected by CHECK constraint");
@@ -189,14 +199,14 @@ async fn test_task_types() {
 #[tokio::test]
 async fn test_task_statuses() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, 'task', 'Status test', 'open', $3, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'task', 'Status test', 'open', $5, NOW(), NOW())"
     )
-    .bind(task_id).bind(session_id).bind(participant_id)
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Transition through statuses
@@ -219,14 +229,14 @@ async fn test_task_statuses() {
 #[tokio::test]
 async fn test_task_comments() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, 'bug', 'Login broken', 'open', $3, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'bug', 'Login broken', 'open', $5, NOW(), NOW())"
     )
-    .bind(task_id).bind(session_id).bind(participant_id)
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Add comments
@@ -257,14 +267,14 @@ async fn test_task_comments() {
 #[tokio::test]
 async fn test_task_commit_link() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, 'task', 'Fix the thing', 'in_progress', $3, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'task', 'Fix the thing', 'in_progress', $5, NOW(), NOW())"
     )
-    .bind(task_id).bind(session_id).bind(participant_id)
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Close with commit SHA
@@ -289,14 +299,14 @@ async fn test_task_commit_link() {
 #[tokio::test]
 async fn test_task_assignment() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, task_type, title, status, assigned_to, created_by, created_at, updated_at)
-         VALUES ($1, $2, 'task', 'Assigned task', 'open', $3, $3, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, assigned_to, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'task', 'Assigned task', 'open', $5, $5, NOW(), NOW())"
     )
-    .bind(task_id).bind(session_id).bind(participant_id)
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
     let row: (Option<Uuid>,) = sqlx::query_as("SELECT assigned_to FROM tasks WHERE id = $1")
@@ -315,22 +325,22 @@ async fn test_task_assignment() {
 #[tokio::test]
 async fn test_cascade_delete_on_parent() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     let parent_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, 'story', 'Parent story', 'open', $3, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'story', 'Parent story', 'open', $5, NOW(), NOW())"
     )
-    .bind(parent_id).bind(session_id).bind(participant_id)
+    .bind(parent_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
     let child_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, parent_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, 'task', 'Child task', 'open', $4, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'task', 'Child task', 'open', $6, NOW(), NOW())"
     )
-    .bind(child_id).bind(session_id).bind(parent_id).bind(participant_id)
+    .bind(child_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(parent_id).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Add a comment to the child
@@ -354,7 +364,7 @@ async fn test_cascade_delete_on_parent() {
 #[tokio::test]
 async fn test_list_tasks_by_filter() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     // Create tasks of different types and statuses
     for (task_type, title, status) in &[
@@ -365,10 +375,10 @@ async fn test_list_tasks_by_filter() {
         ("task", "Task 2", "done"),
     ] {
         sqlx::query(
-            "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())"
+            "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())"
         )
-        .bind(Uuid::new_v4()).bind(session_id).bind(task_type).bind(title).bind(status).bind(participant_id)
+        .bind(Uuid::new_v4()).bind(session_id).bind(project_id).bind(next_ticket()).bind(task_type).bind(title).bind(status).bind(participant_id)
         .execute(&db).await.unwrap();
     }
 
@@ -396,14 +406,14 @@ async fn test_list_tasks_by_filter() {
 #[tokio::test]
 async fn test_delete_task_standalone() {
     let db = setup_db().await;
-    let (session_id, participant_id) = create_test_session(&db).await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
 
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, task_type, title, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, 'task', 'Delete me', 'open', $3, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'task', 'Delete me', 'open', $5, NOW(), NOW())"
     )
-    .bind(task_id).bind(session_id).bind(participant_id)
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
     // Verify it exists
