@@ -86,19 +86,38 @@ Per MCP spec, the server advertises OAuth configuration:
 
 **`GET /.well-known/oauth-authorization-server`** — proxies to Keycloak's own metadata at `{keycloak_url}/realms/{realm}/.well-known/openid-configuration`, which already includes the `device_authorization_endpoint`.
 
-#### 3. Keycloak Device Auth Configuration
+#### 3. Internal Agent Tokens
 
-Keycloak natively supports RFC 8628. Configuration needed:
+For server-spawned agents (Coder workspaces), Keycloak OAuth is overkill — the server itself creates and manages these agents. Instead, opaque bearer tokens:
+
+```sql
+CREATE TABLE agent_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    token_hash TEXT NOT NULL UNIQUE,    -- SHA-256 of the raw token
+    user_id UUID NOT NULL REFERENCES users(id),  -- sponsoring human
+    session_id UUID REFERENCES sessions(id),     -- optional session scope
+    agent_id UUID REFERENCES agents(id),         -- links to persistent agent identity
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ
+);
+```
+
+Flow:
+1. Server generates crypto-random token when creating a Coder workspace
+2. Stores SHA-256 hash in `agent_tokens`, injects raw token as `SEAM_TOKEN` env var
+3. Agent uses `Authorization: Bearer <SEAM_TOKEN>` for MCP connections
+4. McpAuthMiddleware: if token has no dots (not a JWT), look up hash in `agent_tokens`
+
+This is simpler and more secure for internal agents — no OAuth dance, tokens are scoped and revocable, and the server controls the full lifecycle.
+
+#### 3b. Keycloak Device Auth (future, external clients)
+
+For external MCP clients (Claude Code, etc.), Keycloak device auth (RFC 8628) will be added later:
 
 - Create client `mcp-agents` in realm `seam`
-  - Access Type: `public` (no client secret — agents are public clients)
-  - Enable "OAuth 2.0 Device Authorization Grant" flow
-  - Set allowed scopes: `openid`, `profile`
-  - Device code lifespan: 10 minutes
-  - Polling interval: 5 seconds
-- Add `device_authorization_endpoint` to realm metadata (Keycloak does this automatically)
-
-The device flow endpoints are all on Keycloak directly — Seam doesn't need to proxy them. The agent just needs the Keycloak realm URL.
+- Enable "OAuth 2.0 Device Authorization Grant" flow
+- MCP clients discover this via `/.well-known/oauth-authorization-server`
 
 #### 4. Agent Identity Model
 
@@ -197,32 +216,32 @@ seam-auth device-login --realm-url https://keycloak.example.com/realms/seam
 
 The client auto-discovers OAuth metadata from `/.well-known/oauth-protected-resource`, performs the device auth flow (or browser redirect if available), and handles token refresh automatically.
 
-#### For local development (unchanged):
+#### For local development:
 
-Stdio transport continues to work without auth. The remote endpoint can optionally skip auth when `MCP_AUTH_DISABLED=true` is set (dev only).
+Set `MCP_AUTH_DISABLED=true` on the server (or use `just dev-noauth`) to skip JWT validation on the `/mcp` endpoint.
 
 ## Implementation Plan
 
-### Sprint 1: Auth Middleware + Metadata
+### Sprint 1: Auth Middleware + Metadata (DONE - commit 9edc564)
 
-1. **Tower auth middleware** — validate Bearer JWTs on `/mcp`, inject claims into extensions
-2. **OAuth metadata endpoints** — `/.well-known/oauth-protected-resource` and authorization server proxy
-3. **Keycloak device auth client config** — Terraform/realm export for `mcp-agents` client
-4. **Dev bypass** — `MCP_AUTH_DISABLED` env var for local development
+1. ~~Tower auth middleware~~ — `McpAuthLayer` validates Bearer JWTs, injects `Arc<Claims>`
+2. ~~OAuth metadata endpoints~~ — `/.well-known/oauth-protected-resource` + authorization server proxy
+3. ~~Remove stdio transport~~ — deleted `seam-mcp` binary (gave direct DB access)
+4. ~~Dev bypass~~ — `MCP_AUTH_DISABLED` env var + `just dev-noauth` / `just server-noauth`
 
-### Sprint 2: Agent Identity
+### Sprint 2: Internal Agent Tokens + Identity
 
-5. **`agents` table migration** — persistent agent identity
-6. **Agent upsert on join** — extract JWT sub, create/update agent record
-7. **Tool handler changes** — `join_session` uses JWT identity when available
-8. **Agent info in session context** — participants show agent metadata
+5. **`agent_tokens` table migration** — opaque token storage with SHA-256 hashes
+6. **Token generation + validation** — crypto-random tokens, dual-path auth in middleware (JWT vs opaque)
+7. **`agents` table migration** — persistent agent identity across sessions
+8. **Agent upsert on join** — link authenticated agent to persistent identity record
 
-### Sprint 3: UX Polish
+### Sprint 3: Workspace Integration + Polish
 
-9. **`seam-auth` CLI tool** — device flow helper for token acquisition
-10. **Session UI** — show agent identity details (model, last seen, etc.)
-11. **Token refresh** — middleware handles expired tokens gracefully
-12. **Documentation** — update CLAUDE.md and README
+9. **Inject token into Coder workspace** — generate + pass `SEAM_TOKEN` on workspace creation
+10. **Agent info in session context** — participants show agent metadata (model, capabilities)
+11. **Token lifecycle** — expiry, revocation, cleanup
+12. **External client OAuth** (future) — Keycloak device auth for Claude Code etc.
 
 ## Security Considerations
 
@@ -231,7 +250,7 @@ Stdio transport continues to work without auth. The remote endpoint can optional
 - **Scoping**: future work could add Keycloak roles/scopes for fine-grained tool access (e.g., read-only agents)
 - **Token lifetime**: Keycloak access tokens should be short-lived (5 min) with refresh tokens
 - **Rate limiting**: Consider per-agent rate limits on the MCP endpoint
-- **Stdio transport**: Unaffected — remains unauthenticated (requires DB access, inherently trusted)
+- **Stdio transport**: Removed (gave direct DB access, bypassed all auth)
 
 ## Alternatives Considered
 

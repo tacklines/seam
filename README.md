@@ -48,7 +48,9 @@ The frontend is at `http://localhost:5173`. Log in with `testuser` / `testpass`.
 ```bash
 just infra-up           # Postgres + Keycloak only
 just server             # backend on :3002
+just server-noauth      # backend with MCP auth disabled
 just frontend           # frontend on :5173
+just dev-noauth         # full stack with MCP auth disabled
 just infra-down         # stop containers
 just infra-reset        # stop + wipe volumes
 ```

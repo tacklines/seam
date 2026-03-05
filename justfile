@@ -37,9 +37,33 @@ dev-no-infra:
     cd frontend && npx vite 2>&1 | sed 's/^/[frontend] /' &
     wait
 
+# Start everything with MCP auth disabled (for local MCP clients without OAuth)
+dev-noauth: infra-up
+    #!/usr/bin/env bash
+    set -e
+    trap 'kill 0' EXIT
+
+    echo "⏳ Waiting for Postgres..."
+    until pg_isready -h localhost -p {{POSTGRES_PORT}} -U seam -q 2>/dev/null; do sleep 0.5; done
+    echo "✓ Postgres ready"
+
+    echo "⏳ Waiting for Keycloak..."
+    until curl -sf http://localhost:{{KEYCLOAK_PORT}}/realms/seam > /dev/null 2>&1; do sleep 1; done
+    echo "✓ Keycloak ready"
+
+    echo "🚀 Starting backend (MCP auth disabled) + frontend..."
+    MCP_AUTH_DISABLED=true cd server && cargo run --bin seam-server 2>&1 | sed 's/^/[server] /' &
+    sleep 2
+    cd frontend && npx vite 2>&1 | sed 's/^/[frontend] /' &
+    wait
+
 # Backend only
 server:
     cd server && cargo run --bin seam-server
+
+# Backend with MCP auth disabled (for local MCP clients without OAuth)
+server-noauth:
+    MCP_AUTH_DISABLED=true cd server && cargo run --bin seam-server
 
 # Frontend only
 frontend:
@@ -114,6 +138,3 @@ test-session:
       -H "Content-Type: application/json" \
       -d '{}' | jq .
 
-# Run MCP server with an agent code
-mcp code="":
-    cd server && cargo run --bin seam-mcp -- {{code}}
