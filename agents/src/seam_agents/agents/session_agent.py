@@ -10,6 +10,7 @@ from langgraph.graph import MessagesState, StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
 from seam_agents.config import settings, build_model_registry
+from seam_agents.coder_client import CoderMCPClient
 from seam_agents.mcp_client import SeamMCPClient
 from seam_agents.models import ModelProfile, ModelRequirement, ModelRouter
 from seam_agents.skills import get_skill, list_skills
@@ -23,6 +24,7 @@ SYSTEM_PROMPT = """\
 You are a Seam session agent — an AI participant in a collaborative work session.
 
 You have access to Seam MCP tools for managing tasks, notes, questions, and session state.
+{coder_context}
 You can be directed to run specific skills or work autonomously on the session's goals.
 
 Available skills: {skills}
@@ -66,11 +68,34 @@ def _build_llm(requirement: ModelRequirement | None = None) -> tuple[BaseChatMod
     return llm, profile
 
 
-def build_session_agent(mcp_client: SeamMCPClient, requirement: ModelRequirement | None = None):
-    """Build a compiled LangGraph agent wired to the Seam MCP tools."""
+async def _try_connect_coder() -> CoderMCPClient | None:
+    """Connect to Coder MCP server if configured. Returns None if unavailable."""
+    if not settings.coder_url or not settings.coder_session_token:
+        return None
+    try:
+        client = CoderMCPClient()
+        await client.connect()
+        return client
+    except Exception as e:
+        log.warning("Coder MCP unavailable: %s", e)
+        return None
+
+
+def build_session_agent(
+    mcp_client: SeamMCPClient,
+    coder_client: CoderMCPClient | None = None,
+    requirement: ModelRequirement | None = None,
+):
+    """Build a compiled LangGraph agent wired to Seam and optionally Coder MCP tools."""
 
     # Convert MCP tools to LangChain tools
     tools = mcp_tools_from_client(mcp_client)
+    if coder_client is not None:
+        coder_tools = mcp_tools_from_client(coder_client)
+        # Prefix coder tool names to avoid collisions
+        for tool in coder_tools:
+            tool.name = f"coder_{tool.name}"
+        tools.extend(coder_tools)
     tool_node = ToolNode(tools)
 
     # Route to best model and bind tools
@@ -80,9 +105,17 @@ def build_session_agent(mcp_client: SeamMCPClient, requirement: ModelRequirement
              profile.name, profile.provider, profile.context_window, profile.tok_per_sec)
 
     skill_list = ", ".join(f"/{s.name} — {s.description}" for s in list_skills())
+    coder_context = (
+        "You also have Coder workspace tools (prefixed coder_) for creating, managing, "
+        "and executing commands in sandboxed workspaces."
+        if coder_client is not None
+        else ""
+    )
 
     def agent_node(state: MessagesState):
-        system = SystemMessage(content=SYSTEM_PROMPT.format(skills=skill_list))
+        system = SystemMessage(content=SYSTEM_PROMPT.format(
+            skills=skill_list, coder_context=coder_context,
+        ))
         messages = [system] + state["messages"]
         response = llm.invoke(messages)
         return {"messages": [response]}
@@ -109,6 +142,7 @@ def run_agent(
     message: str,
     skill_name: str | None = None,
     requirement: ModelRequirement | None = None,
+    coder_client: CoderMCPClient | None = None,
 ) -> str:
     """Run the session agent with a message, optionally using a skill's system prompt.
 
@@ -123,7 +157,7 @@ def run_agent(
         if skill and skill.model_requirement:
             requirement = skill.model_requirement
 
-    agent = build_session_agent(mcp_client, requirement=requirement)
+    agent = build_session_agent(mcp_client, coder_client=coder_client, requirement=requirement)
 
     # If a skill is specified, prepend its system prompt
     if skill_name:

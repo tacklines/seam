@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import sys
 
+from seam_agents.coder_client import CoderMCPClient
 from seam_agents.mcp_client import SeamMCPClient
 from seam_agents.models import Budget, ModelRequirement
 
@@ -45,6 +46,11 @@ def main():
         choices=["free", "economy", "moderate", "unlimited"],
         help="Maximum cost tier for model selection",
     )
+    parser.add_argument(
+        "--no-coder",
+        action="store_true",
+        help="Disable Coder workspace integration even if configured",
+    )
     args = parser.parse_args()
 
     loop = asyncio.new_event_loop()
@@ -52,25 +58,44 @@ def main():
     client = SeamMCPClient(agent_code=args.agent_code, agent_name=args.name)
     cli_requirement = _parse_requirement(args)
 
+    # Optionally connect to Coder MCP
+    coder_client = None
+    if not args.no_coder:
+        from seam_agents.agents.session_agent import _try_connect_coder
+        coder_client = loop.run_until_complete(_try_connect_coder())
+        if coder_client:
+            print("Coder workspace management enabled")
+
     try:
         loop.run_until_complete(client.connect())
         print(f"Connected to Seam session via agent code {args.agent_code}")
 
         if args.message:
             # Single-shot mode
-            result = run_agent(client, args.message, skill_name=args.skill, requirement=cli_requirement)
+            result = run_agent(
+                client, args.message,
+                skill_name=args.skill, requirement=cli_requirement,
+                coder_client=coder_client,
+            )
             print(result)
         else:
             # Interactive REPL
-            _repl(client, args.skill, cli_requirement)
+            _repl(client, args.skill, cli_requirement, coder_client=coder_client)
     except KeyboardInterrupt:
         pass
     finally:
         loop.run_until_complete(client.disconnect())
+        if coder_client:
+            loop.run_until_complete(coder_client.disconnect())
         loop.close()
 
 
-def _repl(client: SeamMCPClient, default_skill: str | None = None, cli_requirement: ModelRequirement | None = None):
+def _repl(
+    client: SeamMCPClient,
+    default_skill: str | None = None,
+    cli_requirement: ModelRequirement | None = None,
+    coder_client: CoderMCPClient | None = None,
+):
     skills = {s.name: s for s in list_skills()}
     print("\nSeam Agent REPL — type /help for commands, Ctrl+C to exit\n")
 
@@ -122,7 +147,12 @@ def _repl(client: SeamMCPClient, default_skill: str | None = None, cli_requireme
                 skill_name = candidate
                 message = parts[1] if len(parts) > 1 else f"Run the {candidate} skill"
 
-        result = run_agent(client, message, skill_name=skill_name or default_skill, requirement=cli_requirement)
+        result = run_agent(
+            client, message,
+            skill_name=skill_name or default_skill,
+            requirement=cli_requirement,
+            coder_client=coder_client,
+        )
         print(f"\n{result}\n")
 
 

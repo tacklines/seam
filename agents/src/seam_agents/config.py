@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     seam_mcp_binary: str = "../server/target/debug/seam-mcp"
     database_url: str = "postgres://seam:seam@localhost:5432/seam"
 
+    # Coder (workspace sandbox management)
+    coder_binary: str = "coder"
+    coder_url: str = ""
+    coder_session_token: str = ""
+    coder_template: str = "agent-workspace"
+
     # Langfuse
     langfuse_secret_key: str = ""
     langfuse_public_key: str = ""
