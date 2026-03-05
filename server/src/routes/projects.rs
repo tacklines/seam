@@ -329,7 +329,7 @@ pub async fn list_project_sessions(
     let mut views = Vec::new();
     for session in sessions {
         let participants: Vec<Participant> = sqlx::query_as(
-            "SELECT * FROM participants WHERE session_id = $1 ORDER BY joined_at"
+            "SELECT * FROM participants WHERE session_id = $1 AND disconnected_at IS NULL ORDER BY joined_at"
         )
         .bind(session.id)
         .fetch_all(&state.db)

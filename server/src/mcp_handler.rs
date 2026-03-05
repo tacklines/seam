@@ -23,6 +23,12 @@ struct JoinSessionParams {
     code: String,
     /// Display name for the agent in the session
     display_name: Option<String>,
+    /// MCP client name (e.g., "claude-code", "cursor")
+    client_name: Option<String>,
+    /// MCP client version (e.g., "1.2.3")
+    client_version: Option<String>,
+    /// Model being used (e.g., "claude-opus-4-6", "gpt-4o")
+    model: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -275,7 +281,13 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<JoinSessionParams>,
     ) -> Result<CallToolResult, McpError> {
-        match self.do_agent_join(&params.code, params.display_name.as_deref()).await {
+        match self.do_agent_join(
+            &params.code,
+            params.display_name.as_deref(),
+            params.client_name.as_deref(),
+            params.client_version.as_deref(),
+            params.model.as_deref(),
+        ).await {
             Ok(result) => {
                 // Persist session state so subsequent tools work
                 let session_code = result["session"]["code"].as_str().map(|s| s.to_string());
@@ -2302,6 +2314,9 @@ impl SeamMcp {
         &self,
         code: &str,
         display_name: Option<&str>,
+        client_name: Option<&str>,
+        client_version: Option<&str>,
+        model: Option<&str>,
     ) -> Result<serde_json::Value, String> {
         let agent_code: AgentJoinCode = sqlx::query_as(
             "SELECT * FROM agent_join_codes WHERE code = $1",
@@ -2339,49 +2354,41 @@ impl SeamMcp {
         .await
         .map_err(|e| format!("Database error: {e}"))?;
 
-        let existing_agent: Option<Participant> = sqlx::query_as(
-            "SELECT * FROM participants WHERE session_id = $1 AND sponsor_id = $2 AND participant_type = 'agent'",
+        // Mark any existing agent participants from this sponsor as disconnected
+        sqlx::query(
+            "UPDATE participants SET disconnected_at = NOW()
+             WHERE session_id = $1 AND sponsor_id = $2 AND participant_type = 'agent' AND disconnected_at IS NULL",
         )
         .bind(session.id)
         .bind(sponsor.id)
-        .fetch_optional(&self.db)
+        .execute(&self.db)
         .await
         .map_err(|e| format!("Database error: {e}"))?;
 
-        let participant_id = if let Some(existing) = existing_agent {
-            // Update display_name if a new one was provided
-            if let Some(new_name) = display_name {
-                let _ = sqlx::query("UPDATE participants SET display_name = $1 WHERE id = $2")
-                    .bind(new_name)
-                    .bind(existing.id)
-                    .execute(&self.db)
-                    .await;
-            }
-            existing.id
-        } else {
-            let name = display_name
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| format!("{}'s Agent", sponsor_user.display_name));
-            let pid = Uuid::new_v4();
+        // Always create a new participant — agents are ephemeral compositions
+        let name = display_name
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("{}'s Agent", sponsor_user.display_name));
+        let pid = Uuid::new_v4();
 
-            sqlx::query(
-                "INSERT INTO participants (id, session_id, user_id, display_name, participant_type, sponsor_id, joined_at)
-                 VALUES ($1, $2, $3, $4, 'agent', $5, NOW())",
-            )
-            .bind(pid)
-            .bind(session.id)
-            .bind(agent_code.user_id)
-            .bind(&name)
-            .bind(sponsor.id)
-            .execute(&self.db)
-            .await
-            .map_err(|e| format!("Failed to create participant: {e}"))?;
-
-            pid
-        };
+        sqlx::query(
+            "INSERT INTO participants (id, session_id, user_id, display_name, participant_type, sponsor_id, joined_at, client_name, client_version, model)
+             VALUES ($1, $2, $3, $4, 'agent', $5, NOW(), $6, $7, $8)",
+        )
+        .bind(pid)
+        .bind(session.id)
+        .bind(agent_code.user_id)
+        .bind(&name)
+        .bind(sponsor.id)
+        .bind(client_name)
+        .bind(client_version)
+        .bind(model)
+        .execute(&self.db)
+        .await
+        .map_err(|e| format!("Failed to create participant: {e}"))?;
 
         let participants: Vec<Participant> = sqlx::query_as(
-            "SELECT * FROM participants WHERE session_id = $1 ORDER BY joined_at",
+            "SELECT * FROM participants WHERE session_id = $1 AND disconnected_at IS NULL ORDER BY joined_at",
         )
         .bind(session.id)
         .fetch_all(&self.db)
@@ -2409,12 +2416,11 @@ impl SeamMcp {
                 "created_at": session.created_at,
                 "participants": participant_views,
             },
-            "participant_id": participant_id,
+            "participant_id": pid,
             "sponsor_name": sponsor_user.display_name,
         }))
     }
 
-    /// Upsert a persistent agent identity. Resolves org from project.
     async fn fetch_session(&self, code: &str) -> Result<serde_json::Value, String> {
         let session: Session = sqlx::query_as(
             "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL",
@@ -2426,7 +2432,7 @@ impl SeamMcp {
         .ok_or_else(|| "Session not found".to_string())?;
 
         let participants: Vec<Participant> = sqlx::query_as(
-            "SELECT * FROM participants WHERE session_id = $1 ORDER BY joined_at",
+            "SELECT * FROM participants WHERE session_id = $1 AND disconnected_at IS NULL ORDER BY joined_at",
         )
         .bind(session.id)
         .fetch_all(&self.db)
