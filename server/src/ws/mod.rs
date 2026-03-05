@@ -1,6 +1,7 @@
 pub mod handler;
 
 use dashmap::DashMap;
+use std::collections::HashSet;
 use tokio::sync::mpsc;
 
 type Tx = mpsc::UnboundedSender<String>;
@@ -9,6 +10,8 @@ type Tx = mpsc::UnboundedSender<String>;
 pub struct ConnInfo {
     pub conn_id: String,
     pub participant_id: Option<String>,
+    /// Participant IDs this connection is subscribed to for agent streams
+    pub agent_subscriptions: HashSet<String>,
     pub tx: Tx,
 }
 
@@ -31,6 +34,7 @@ impl ConnectionManager {
             .push(ConnInfo {
                 conn_id: conn_id.to_string(),
                 participant_id: None,
+                agent_subscriptions: HashSet::new(),
                 tx,
             });
     }
@@ -89,6 +93,34 @@ impl ConnectionManager {
         if let Some(conns) = self.sessions.get(session_code) {
             for conn in conns.iter() {
                 let _ = conn.tx.send(text.clone());
+            }
+        }
+    }
+
+    pub fn subscribe_agent(&self, session_code: &str, conn_id: &str, participant_id: &str) {
+        if let Some(mut conns) = self.sessions.get_mut(session_code) {
+            if let Some(conn) = conns.iter_mut().find(|c| c.conn_id == conn_id) {
+                conn.agent_subscriptions.insert(participant_id.to_string());
+            }
+        }
+    }
+
+    pub fn unsubscribe_agent(&self, session_code: &str, conn_id: &str, participant_id: &str) {
+        if let Some(mut conns) = self.sessions.get_mut(session_code) {
+            if let Some(conn) = conns.iter_mut().find(|c| c.conn_id == conn_id) {
+                conn.agent_subscriptions.remove(participant_id);
+            }
+        }
+    }
+
+    /// Broadcast an agent stream message only to connections subscribed to this participant
+    pub async fn broadcast_agent_stream(&self, session_code: &str, participant_id: &str, msg: &serde_json::Value) {
+        let text = serde_json::to_string(msg).unwrap_or_default();
+        if let Some(conns) = self.sessions.get(session_code) {
+            for conn in conns.iter() {
+                if conn.agent_subscriptions.contains(participant_id) {
+                    let _ = conn.tx.send(text.clone());
+                }
             }
         }
     }

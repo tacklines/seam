@@ -135,6 +135,8 @@ async fn main() {
         .route("/api/sessions/{code}/questions/{question_id}/cancel", post(routes::questions::cancel_question))
         // Activity
         .route("/api/sessions/{code}/activity", get(routes::activity::list_activity))
+        // Tool Invocations
+        .route("/api/sessions/{code}/tool-invocations", get(routes::tool_invocations::list_tool_invocations))
         // Messages
         .route("/api/sessions/{code}/participants/{participant_id}/messages", get(routes::messages::list_messages).post(routes::messages::send_message))
         // Workspaces (Coder integration)
@@ -228,7 +230,8 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
     let mut listener = sqlx::postgres::PgListener::connect(database_url).await?;
     listener.listen("task_changes").await?;
     listener.listen("domain_events").await?;
-    tracing::info!("PG LISTEN on 'task_changes' and 'domain_events' channels active");
+    listener.listen("tool_invocations").await?;
+    tracing::info!("PG LISTEN on 'task_changes', 'domain_events', and 'tool_invocations' channels active");
 
     loop {
         let notification = listener.recv().await?;
@@ -236,6 +239,36 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
         let payload = notification.payload();
 
         match channel {
+            "tool_invocations" => {
+                match serde_json::from_str::<serde_json::Value>(payload) {
+                    Ok(msg) => {
+                        let session_code = msg["session_code"].as_str().unwrap_or("");
+                        let participant_id = msg["participant_id"].as_str().unwrap_or("");
+
+                        if !session_code.is_empty() && !participant_id.is_empty() {
+                            state.connections.broadcast_agent_stream(
+                                session_code,
+                                participant_id,
+                                &serde_json::json!({
+                                    "type": "agent_stream",
+                                    "stream": "tool",
+                                    "participant_id": participant_id,
+                                    "data": {
+                                        "id": msg["id"],
+                                        "tool_name": msg["tool_name"],
+                                        "is_error": msg["is_error"],
+                                        "duration_ms": msg["duration_ms"],
+                                        "created_at": msg["created_at"],
+                                    }
+                                }),
+                            ).await;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Bad tool_invocations NOTIFY payload: {e}");
+                    }
+                }
+            }
             "domain_events" => {
                 match serde_json::from_str::<serde_json::Value>(payload) {
                     Ok(msg) => {

@@ -1,9 +1,14 @@
 use rmcp::{
     ErrorData as McpError,
+    RoleServer,
     ServerHandler,
-    handler::server::tool::ToolRouter,
-    model::{CallToolResult, Content, ServerCapabilities, ServerInfo},
-    tool, tool_router, tool_handler,
+    handler::server::tool::{ToolCallContext, ToolRouter},
+    model::{
+        CallToolRequestParams, CallToolResult, Content, ListToolsResult,
+        PaginatedRequestParams, ServerCapabilities, ServerInfo,
+    },
+    service::RequestContext,
+    tool, tool_router,
     handler::server::wrapper::Parameters,
     schemars::JsonSchema,
 };
@@ -280,6 +285,7 @@ struct UnlinkRequirementTaskParams {
 #[derive(Default)]
 pub(crate) struct SessionState {
     pub session_code: Option<String>,
+    pub session_id: Option<Uuid>,
     pub participant_id: Option<Uuid>,
     pub sponsor_name: Option<String>,
     pub project_id: Option<Uuid>,
@@ -337,8 +343,12 @@ impl SeamMcp {
                     }
                 }
 
+                let session_id = result["session"]["id"].as_str()
+                    .and_then(|s| Uuid::parse_str(s).ok());
+
                 if let Ok(mut state) = self.state.lock() {
                     state.session_code = session_code;
+                    state.session_id = session_id;
                     state.participant_id = participant_id;
                     state.sponsor_name = sponsor_name;
                     state.project_id = project_id;
@@ -2195,7 +2205,6 @@ impl SeamMcp {
     }
 }
 
-#[tool_handler]
 impl ServerHandler for SeamMcp {
     fn get_info(&self) -> ServerInfo {
         let mut info = ServerInfo::default();
@@ -2208,6 +2217,54 @@ impl ServerHandler for SeamMcp {
             "Seam collaborative session server. Use join_session with an agent code to connect, then manage tasks with create_task, list_tasks, update_task, etc.".into()
         );
         info
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        let tool_name = request.name.to_string();
+        let request_params = request.arguments.as_ref()
+            .map(|a| serde_json::Value::Object(a.clone().into_iter().collect()));
+        let start = std::time::Instant::now();
+
+        let tcc = ToolCallContext::new(self, request, context);
+        let result = self.tool_router.call(tcc).await;
+
+        let duration_ms = start.elapsed().as_millis() as i32;
+
+        // Record invocation (fire-and-forget)
+        let participant_id = self.state.lock().ok().and_then(|s| s.participant_id);
+        let session_id = self.get_session_id();
+
+        // Only record if we have session context (skip for join_session itself on first call)
+        if let (Some(participant_id), Some(session_id)) = (participant_id, session_id) {
+            let is_error = match &result {
+                Ok(r) => r.is_error.unwrap_or(false),
+                Err(_) => true,
+            };
+            let response_json = match &result {
+                Ok(r) => serde_json::to_value(r).unwrap_or(serde_json::json!(null)),
+                Err(e) => serde_json::json!({ "error": format!("{:?}", e) }),
+            };
+
+            self.record_tool_invocation(
+                session_id, participant_id, &tool_name,
+                request_params, response_json, is_error, duration_ms,
+            ).await;
+        }
+
+        result
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        let items = self.tool_router.list_all();
+        Ok(ListToolsResult::with_all_items(items))
     }
 }
 
@@ -2222,6 +2279,10 @@ impl SeamMcp {
                     "Not in a session. Use join_session first.",
                 )])
             })
+    }
+
+    fn get_session_id(&self) -> Option<Uuid> {
+        self.state.lock().ok().and_then(|s| s.session_id)
     }
 
     fn get_ticket_prefix(&self) -> String {
@@ -2453,6 +2514,34 @@ impl SeamMcp {
         .await
         {
             eprintln!("[seam-mcp] Failed to record activity: {e}");
+        }
+    }
+
+    async fn record_tool_invocation(
+        &self,
+        session_id: Uuid,
+        participant_id: Uuid,
+        tool_name: &str,
+        request_params: Option<serde_json::Value>,
+        response: serde_json::Value,
+        is_error: bool,
+        duration_ms: i32,
+    ) {
+        if let Err(e) = sqlx::query(
+            "INSERT INTO tool_invocations (session_id, participant_id, tool_name, request_params, response, is_error, duration_ms)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        )
+        .bind(session_id)
+        .bind(participant_id)
+        .bind(tool_name)
+        .bind(request_params)
+        .bind(response)
+        .bind(is_error)
+        .bind(duration_ms)
+        .execute(&self.db)
+        .await
+        {
+            eprintln!("[seam-mcp] Failed to record tool invocation: {e}");
         }
     }
 

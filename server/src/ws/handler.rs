@@ -65,6 +65,26 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                 }).to_string());
                             }
                         }
+                        Some("subscribe_agent") => {
+                            if let (Some(ref code), Some(pid)) = (
+                                &session_code,
+                                parsed.get("participantId").and_then(|p| p.as_str()),
+                            ) {
+                                state.connections.subscribe_agent(code, &conn_id, pid);
+                                let _ = tx.send(serde_json::json!({
+                                    "type": "subscribed_agent",
+                                    "participantId": pid,
+                                }).to_string());
+                            }
+                        }
+                        Some("unsubscribe_agent") => {
+                            if let (Some(ref code), Some(pid)) = (
+                                &session_code,
+                                parsed.get("participantId").and_then(|p| p.as_str()),
+                            ) {
+                                state.connections.unsubscribe_agent(code, &conn_id, pid);
+                            }
+                        }
                         Some("ping") => {
                             let _ = tx.send(serde_json::json!({ "type": "pong" }).to_string());
                         }
