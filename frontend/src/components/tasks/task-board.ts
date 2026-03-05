@@ -505,11 +505,16 @@ export class TaskBoard extends LitElement {
 
   private _storeUnsub: (() => void) | null = null;
   private _keyHandler = (e: KeyboardEvent) => {
-    const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-    const isInput = tag === 'sl-input' || tag === 'sl-textarea' || tag === 'input' || tag === 'textarea';
+    const target = e.target as HTMLElement;
+    const tag = target?.tagName?.toLowerCase();
+    const isInput = tag === 'sl-input' || tag === 'sl-textarea' || tag === 'input' || tag === 'textarea'
+      || target?.isContentEditable;
 
     if (e.key === 'Escape') {
-      if (this._selectedIds.size > 0) {
+      if (isInput) return; // let inputs handle their own Escape
+      if (this._showShortcuts) {
+        this._showShortcuts = false;
+      } else if (this._selectedIds.size > 0) {
         this._clearSelection();
       } else if (this._selectedTaskId) {
         this._selectedTaskId = null;

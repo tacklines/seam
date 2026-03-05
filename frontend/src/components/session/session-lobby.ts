@@ -232,16 +232,71 @@ export class SessionLobby extends LitElement {
     this._unsubscribe = store.subscribe((event) => {
       if (event.type === 'session-connected' || event.type === 'session-updated' || event.type === 'session-disconnected') {
         this._sessionState = store.get().sessionState;
-        if (event.type === 'session-connected') this._lobbyState = 'in-session';
-        else if (event.type === 'session-disconnected') this._lobbyState = 'landing';
+        if (event.type === 'session-connected') {
+          this._lobbyState = 'in-session';
+          const code = store.get().sessionState?.code;
+          if (code) window.location.hash = `session/${code}`;
+        } else if (event.type === 'session-disconnected') {
+          this._lobbyState = 'landing';
+          window.location.hash = '';
+        }
       }
     });
-    if (this._sessionState) this._lobbyState = 'in-session';
+    if (this._sessionState) {
+      this._lobbyState = 'in-session';
+    } else {
+      this._tryRejoinFromHash();
+    }
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
+  }
+
+  private async _tryRejoinFromHash() {
+    const match = window.location.hash.match(/^#session\/([A-Z0-9]+)$/i);
+    if (!match) return;
+    const code = match[1].toUpperCase();
+
+    // Wait for auth to be ready
+    const waitForAuth = () => new Promise<void>((resolve) => {
+      if (authStore.get().isAuthenticated) { resolve(); return; }
+      const unsub = authStore.subscribe((event) => {
+        if (event.type === 'auth-success') { unsub(); resolve(); }
+        if (event.type === 'auth-logout' || event.type === 'auth-error') { unsub(); resolve(); }
+      });
+    });
+    await waitForAuth();
+    if (!authStore.get().isAuthenticated) return;
+
+    this._loading = true;
+    this._lobbyState = 'joining';
+    this._joinCode = code;
+    try {
+      const token = authStore.getAccessToken();
+      const user = authStore.user;
+      const res = await fetch(`${API_BASE}/api/sessions/${code}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: JSON.stringify({ display_name: user?.name ?? 'Participant' }),
+      });
+      if (!res.ok) {
+        window.location.hash = '';
+        throw new Error(await res.text() || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      store.setSession(code, data.participant_id, data.session, data.agent_code);
+      connectSession(code);
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to rejoin session';
+      this._lobbyState = 'landing';
+    } finally {
+      this._loading = false;
+    }
   }
 
   private async _copyCode(code: string) {

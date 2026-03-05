@@ -124,7 +124,7 @@ class AuthStore {
       this.notify({ type: 'auth-loading' });
       const user = await this.userManager.signinRedirectCallback();
       this.setUser(user);
-      window.history.replaceState({}, '', '/');
+      window.history.replaceState({}, '', '/' + window.location.hash);
     } catch (err) {
       // Stale OIDC state (e.g. authority changed) — clear and restart
       await this.userManager.removeUser();
@@ -145,6 +145,9 @@ class AuthStore {
         this.clearUser();
       }
     } catch {
+      // Stale OIDC state (e.g. authority changed) — clear and restart
+      await this.userManager.removeUser();
+      await this.userManager.clearStaleState();
       this.clearUser();
     }
   }
