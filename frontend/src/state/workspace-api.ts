@@ -67,3 +67,17 @@ export async function destroyWorkspace(projectId: string, workspaceId: string): 
     throw new Error(text || `HTTP ${res.status}`);
   }
 }
+
+export interface CoderStatus {
+  enabled: boolean;
+  connected: boolean;
+  url: string | null;
+  user: string | null;
+  error: string | null;
+  templates: string[];
+}
+
+export async function fetchCoderStatus(): Promise<CoderStatus> {
+  const res = await fetch(`${API_BASE}/api/integrations/coder/status`, { headers: authHeaders() });
+  return handleResponse(res);
+}

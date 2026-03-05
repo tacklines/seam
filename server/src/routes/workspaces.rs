@@ -110,6 +110,23 @@ pub async fn create_workspace(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // Emit workspace.requested event
+    let event = crate::events::DomainEvent::new(
+        "workspace.requested",
+        "workspace",
+        workspace.id,
+        Some(user.id),
+        serde_json::json!({
+            "task_id": req.task_id,
+            "template_name": template_name,
+            "branch": req.branch,
+            "project_id": project_id,
+        }),
+    );
+    if let Err(e) = crate::events::emit(&state.db, &event).await {
+        tracing::warn!("Failed to emit domain event: {e}");
+    }
+
     // Spawn async task to create the Coder workspace
     let ws_id = workspace.id;
     let db = state.db.clone();
@@ -146,24 +163,46 @@ async fn provision_workspace(
         Ok(Some(t)) => t,
         Ok(None) => {
             tracing::error!("Coder template '{template_name}' not found");
+            let error_message = format!("Template '{template_name}' not found in Coder");
             let _ = sqlx::query(
                 "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
             )
             .bind(workspace_id)
-            .bind(format!("Template '{template_name}' not found in Coder"))
+            .bind(&error_message)
             .execute(db)
             .await;
+            let event = crate::events::DomainEvent::new(
+                "workspace.failed",
+                "workspace",
+                workspace_id,
+                None,
+                serde_json::json!({ "error_message": error_message }),
+            );
+            if let Err(e) = crate::events::emit(db, &event).await {
+                tracing::warn!("Failed to emit domain event: {e}");
+            }
             return;
         }
         Err(e) => {
             tracing::error!("Failed to resolve Coder template: {e}");
+            let error_message = format!("Failed to resolve template: {e}");
             let _ = sqlx::query(
                 "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
             )
             .bind(workspace_id)
-            .bind(format!("Failed to resolve template: {e}"))
+            .bind(&error_message)
             .execute(db)
             .await;
+            let event = crate::events::DomainEvent::new(
+                "workspace.failed",
+                "workspace",
+                workspace_id,
+                None,
+                serde_json::json!({ "error_message": error_message }),
+            );
+            if let Err(e) = crate::events::emit(db, &event).await {
+                tracing::warn!("Failed to emit domain event: {e}");
+            }
             return;
         }
     };
@@ -202,6 +241,21 @@ async fn provision_workspace(
             .execute(db)
             .await;
 
+            // Emit workspace.running event
+            let event = crate::events::DomainEvent::new(
+                "workspace.running",
+                "workspace",
+                workspace_id,
+                None,
+                serde_json::json!({
+                    "coder_workspace_id": coder_ws.id,
+                    "coder_workspace_name": coder_ws.name,
+                }),
+            );
+            if let Err(e) = crate::events::emit(db, &event).await {
+                tracing::warn!("Failed to emit domain event: {e}");
+            }
+
             tracing::info!(
                 workspace_id = %workspace_id,
                 coder_id = %coder_ws.id,
@@ -210,13 +264,24 @@ async fn provision_workspace(
         }
         Err(e) => {
             tracing::error!("Failed to create Coder workspace: {e}");
+            let error_message = format!("Failed to create workspace: {e}");
             let _ = sqlx::query(
                 "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
             )
             .bind(workspace_id)
-            .bind(format!("Failed to create workspace: {e}"))
+            .bind(&error_message)
             .execute(db)
             .await;
+            let event = crate::events::DomainEvent::new(
+                "workspace.failed",
+                "workspace",
+                workspace_id,
+                None,
+                serde_json::json!({ "error_message": error_message }),
+            );
+            if let Err(e) = crate::events::emit(db, &event).await {
+                tracing::warn!("Failed to emit domain event: {e}");
+            }
         }
     }
 }
@@ -335,17 +400,40 @@ pub async fn stop_workspace(
                 tracing::error!("Failed to update workspace: {e}");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
+            // Emit workspace.stopped event
+            let event = crate::events::DomainEvent::new(
+                "workspace.stopped",
+                "workspace",
+                workspace_id,
+                Some(user.id),
+                serde_json::json!({ "coder_workspace_id": coder_ws_id }),
+            );
+            if let Err(e) = crate::events::emit(&state.db, &event).await {
+                tracing::warn!("Failed to emit domain event: {e}");
+            }
+
             Ok(Json(workspace_view(&updated)))
         }
         Err(e) => {
             tracing::error!("Failed to stop Coder workspace: {e}");
+            let error_message = format!("Failed to stop: {e}");
             let _ = sqlx::query(
                 "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
             )
             .bind(workspace_id)
-            .bind(format!("Failed to stop: {e}"))
+            .bind(&error_message)
             .execute(&state.db)
             .await;
+            let event = crate::events::DomainEvent::new(
+                "workspace.failed",
+                "workspace",
+                workspace_id,
+                None,
+                serde_json::json!({ "error_message": error_message }),
+            );
+            if let Err(err) = crate::events::emit(&state.db, &event).await {
+                tracing::warn!("Failed to emit domain event: {err}");
+            }
             Err(StatusCode::BAD_GATEWAY)
         }
     }
@@ -393,6 +481,18 @@ pub async fn destroy_workspace(
     .bind(workspace_id)
     .execute(&state.db)
     .await;
+
+    // Emit workspace.destroyed event
+    let event = crate::events::DomainEvent::new(
+        "workspace.destroyed",
+        "workspace",
+        workspace_id,
+        Some(user.id),
+        serde_json::json!({ "coder_workspace_id": workspace.coder_workspace_id }),
+    );
+    if let Err(e) = crate::events::emit(&state.db, &event).await {
+        tracing::warn!("Failed to emit domain event: {e}");
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }

@@ -287,6 +287,24 @@ pub async fn create_task(
         serde_json::json!({ "ticket_id": ticket_id, "task_type": req.task_type, "title": req.title }),
     ).await;
 
+    // Emit domain event
+    let event = crate::events::DomainEvent::new(
+        "task.created",
+        "task",
+        task_id,
+        Some(participant.id),
+        serde_json::json!({
+            "task_type": req.task_type,
+            "title": req.title,
+            "ticket_id": ticket_id,
+            "priority": priority,
+            "complexity": complexity,
+        }),
+    );
+    if let Err(e) = crate::events::emit(&state.db, &event).await {
+        tracing::warn!("Failed to emit domain event: {e}");
+    }
+
     let view = TaskView::from_task(task, &ticket_prefix);
     Ok(Json(view))
 }
@@ -583,8 +601,25 @@ pub async fn update_task(
                 "task",
                 task_id,
                 &summary,
-                serde_json::Value::Object(changes),
+                serde_json::Value::Object(changes.clone()),
             ).await;
+
+            // Emit domain event
+            let domain_event_type = if event_type == "task_closed" {
+                "task.closed"
+            } else {
+                "task.updated"
+            };
+            let domain_event = crate::events::DomainEvent::new(
+                domain_event_type,
+                "task",
+                task_id,
+                Some(actor),
+                serde_json::Value::Object(changes),
+            );
+            if let Err(e) = crate::events::emit(&state.db, &domain_event).await {
+                tracing::warn!("Failed to emit domain event: {e}");
+            }
         }
     }
 
@@ -597,6 +632,30 @@ pub async fn delete_task(
     Path((_session_code, task_id)): Path<(String, Uuid)>,
     AuthUser(_claims): AuthUser,
 ) -> Result<StatusCode, StatusCode> {
+    // Emit domain event before deleting (need task data)
+    let task: Option<Task> = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        .bind(task_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(ref t) = task {
+        let event = crate::events::DomainEvent::new(
+            "task.deleted",
+            "task",
+            task_id,
+            None,
+            serde_json::json!({
+                "project_id": t.project_id,
+                "title": t.title,
+                "ticket_number": t.ticket_number,
+            }),
+        );
+        if let Err(e) = crate::events::emit(&state.db, &event).await {
+            tracing::warn!("Failed to emit domain event: {e}");
+        }
+    }
+
     let result = sqlx::query("DELETE FROM tasks WHERE id = $1")
         .bind(task_id)
         .execute(&state.db)
@@ -674,6 +733,22 @@ pub async fn add_comment(
         &format!("commented on {}", ticket_id),
         serde_json::json!({ "ticket_id": ticket_id, "preview": &req.content[..req.content.len().min(100)], "mentions": mentioned }),
     ).await;
+
+    // Emit domain event
+    let comment_event = crate::events::DomainEvent::new(
+        "comment.added",
+        "task",
+        task_id,
+        Some(participant.id),
+        serde_json::json!({
+            "comment_id": comment_id,
+            "preview": &req.content[..req.content.len().min(100)],
+            "mentions": mentioned,
+        }),
+    );
+    if let Err(e) = crate::events::emit(&state.db, &comment_event).await {
+        tracing::warn!("Failed to emit domain event: {e}");
+    }
 
     let view = CommentView {
         id: comment_id,

@@ -107,6 +107,22 @@ pub async fn create_session(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Emit domain event
+    let event = crate::events::DomainEvent::new(
+        "session.created",
+        "session",
+        session_id,
+        Some(user.id),
+        serde_json::json!({
+            "session_code": session_code,
+            "project_id": project_id,
+            "session_name": req.name,
+        }),
+    );
+    if let Err(e) = crate::events::emit(&state.db, &event).await {
+        tracing::warn!("Failed to emit domain event: {e}");
+    }
+
     // Fetch project name for the response
     let project: crate::models::Project = sqlx::query_as(
         "SELECT * FROM projects WHERE id = $1"
@@ -279,6 +295,21 @@ pub async fn join_session(
                 }
             }),
         ).await;
+
+        // Emit domain event
+        let event = crate::events::DomainEvent::new(
+            "session.participant_joined",
+            "session",
+            session.id,
+            Some(user.id),
+            serde_json::json!({
+                "participant_id": participant_id,
+                "display_name": display_name,
+            }),
+        );
+        if let Err(e) = crate::events::emit(&state.db, &event).await {
+            tracing::warn!("Failed to emit domain event: {e}");
+        }
 
         (participant_id, agent_code)
     };
