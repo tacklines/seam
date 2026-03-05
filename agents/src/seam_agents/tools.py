@@ -5,17 +5,19 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import nest_asyncio
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from seam_agents.mcp_client import SeamMCPClient
 
+# Allow nested event loop usage — needed because LangGraph's ToolNode
+# calls sync tool functions from within an already-running event loop.
+nest_asyncio.apply()
+
 
 def mcp_tools_from_client(client: SeamMCPClient, loop: asyncio.AbstractEventLoop | None = None) -> list[StructuredTool]:
-    """Convert MCP tool definitions into LangChain StructuredTools.
-
-    Runs the async list_tools call and builds a sync wrapper for each tool.
-    """
+    """Convert MCP tool definitions into LangChain StructuredTools."""
     if loop is None:
         loop = asyncio.get_event_loop()
     mcp_tools = loop.run_until_complete(client.list_tools())
@@ -42,7 +44,6 @@ def mcp_tools_from_client(client: SeamMCPClient, loop: asyncio.AbstractEventLoop
 
         def _make_fn(tool_name: str):
             def fn(**kwargs) -> str:
-                # Strip None values
                 args = {k: v for k, v in kwargs.items() if v is not None}
                 return loop.run_until_complete(client.call_tool(tool_name, args))
             return fn
@@ -59,7 +60,11 @@ def mcp_tools_from_client(client: SeamMCPClient, loop: asyncio.AbstractEventLoop
     return lc_tools
 
 
-def _json_type_to_python(json_type: str) -> type:
+def _json_type_to_python(json_type: str | list) -> type:
+    # JSON Schema nullable types come as ["string", "null"]
+    if isinstance(json_type, list):
+        non_null = [t for t in json_type if t != "null"]
+        json_type = non_null[0] if non_null else "string"
     return {
         "string": str,
         "integer": int,

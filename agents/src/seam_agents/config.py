@@ -14,9 +14,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     anthropic_api_key: str = ""
 
-    # Seam MCP
-    seam_mcp_binary: str = "../server/target/debug/seam-mcp"
-    database_url: str = "postgres://seam:seam@localhost:5432/seam"
+    # Seam MCP (Streamable HTTP)
+    seam_url: str = "http://localhost:3002"
+    seam_token: str = ""  # Optional: agent token (sat_ prefix) for auth
 
     # Coder (workspace sandbox management)
     coder_binary: str = "coder"

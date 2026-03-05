@@ -1,14 +1,13 @@
-"""MCP client that connects to the Seam MCP server over stdio."""
+"""MCP client that connects to the Seam server over Streamable HTTP."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 from seam_agents.config import settings
 
@@ -20,31 +19,35 @@ class SeamMCPClient:
     agent_code: str
     agent_name: str = "seam-agent"
     _session: ClientSession | None = field(default=None, repr=False)
-    _stdio_cm: Any = field(default=None, repr=False)
+    _http_cm: Any = field(default=None, repr=False)
 
     async def connect(self) -> "SeamMCPClient":
-        server_params = StdioServerParameters(
-            command=settings.seam_mcp_binary,
-            args=[
-                "--agent-code", self.agent_code,
-                "--agent-name", self.agent_name,
-                "--database-url", settings.database_url,
-            ],
-        )
-        self._stdio_cm = stdio_client(server_params)
-        self._read, self._write = await self._stdio_cm.__aenter__()
+        url = self._seam_url = f"{settings.seam_url.rstrip('/')}/mcp"
+        headers = {}
+        if settings.seam_token:
+            headers["Authorization"] = f"Bearer {settings.seam_token}"
+
+        self._http_cm = streamablehttp_client(url, headers=headers or None)
+        self._read, self._write, self._get_session_id = await self._http_cm.__aenter__()
         self._session = ClientSession(self._read, self._write)
         await self._session.__aenter__()
         await self._session.initialize()
         return self
 
     async def disconnect(self):
-        if self._session:
-            await self._session.__aexit__(None, None, None)
+        try:
+            if self._session:
+                await self._session.__aexit__(None, None, None)
+                self._session = None
+        except RuntimeError:
+            # anyio cancel scope task mismatch during shutdown — safe to ignore
             self._session = None
-        if self._stdio_cm:
-            await self._stdio_cm.__aexit__(None, None, None)
-            self._stdio_cm = None
+        try:
+            if self._http_cm:
+                await self._http_cm.__aexit__(None, None, None)
+                self._http_cm = None
+        except RuntimeError:
+            self._http_cm = None
 
     def _require_session(self) -> ClientSession:
         if self._session is None:

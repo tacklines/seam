@@ -76,7 +76,14 @@ def main():
 
     try:
         loop.run_until_complete(client.connect())
-        print(f"Connected to Seam session via agent code {args.agent_code}")
+        print(f"Connected to Seam MCP at {client._seam_url}")
+
+        # Join the session using the agent code
+        join_result = loop.run_until_complete(client.call_tool(
+            "join_session",
+            {"code": args.agent_code, "display_name": args.name},
+        ))
+        print(f"Joined session: {join_result}")
 
         if args.workflow:
             # Workflow mode: route goal to best workflow
