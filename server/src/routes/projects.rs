@@ -98,8 +98,8 @@ pub async fn create_project(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    // Find the user's org (or create default)
-    let org_id: Uuid = sqlx::query_scalar(
+    // Find the user's org, bootstrapping one if needed
+    let org_id: Uuid = match sqlx::query_scalar(
         "SELECT org_id FROM org_members WHERE user_id = $1 ORDER BY joined_at LIMIT 1"
     )
     .bind(user.id)
@@ -108,14 +108,27 @@ pub async fn create_project(
     .map_err(|e| {
         tracing::error!("Failed to find org: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or_else(|| {
-        // If user has no org, ensure_default_project will create one,
-        // but for explicit project creation we need the org first.
-        // This shouldn't happen in practice since login auto-bootstraps.
-        tracing::error!("User has no org membership");
-        StatusCode::BAD_REQUEST
-    })?;
+    })? {
+        Some(id) => id,
+        None => {
+            // Auto-bootstrap org via ensure_default_project, then read org_id
+            let _ = db::ensure_default_project(&state.db, user.id).await
+                .map_err(|e| {
+                    tracing::error!("Failed to bootstrap default org: {e}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            sqlx::query_scalar(
+                "SELECT org_id FROM org_members WHERE user_id = $1 ORDER BY joined_at LIMIT 1"
+            )
+            .bind(user.id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to find org after bootstrap: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+        }
+    };
 
     let slug = req.slug.unwrap_or_else(|| slugify(&req.name));
     let ticket_prefix = req.ticket_prefix.unwrap_or_else(|| "TASK".to_string());

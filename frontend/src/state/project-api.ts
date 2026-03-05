@@ -39,11 +39,11 @@ export async function fetchProject(projectId: string): Promise<ProjectView> {
   return handleResponse(res);
 }
 
-export async function createProject(name: string, ticketPrefix?: string): Promise<ProjectView> {
+export async function createProject(name: string, ticketPrefix?: string, repoUrl?: string): Promise<ProjectView> {
   const res = await fetch(`${API_BASE}/api/projects`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ name, ticket_prefix: ticketPrefix }),
+    body: JSON.stringify({ name, ticket_prefix: ticketPrefix, repo_url: repoUrl }),
   });
   return handleResponse(res);
 }

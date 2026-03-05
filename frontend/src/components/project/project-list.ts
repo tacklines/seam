@@ -135,6 +135,7 @@ export class ProjectList extends LitElement {
   @state() private _showCreateDialog = false;
   @state() private _newProjectName = '';
   @state() private _newProjectPrefix = '';
+  @state() private _newProjectRepo = '';
   @state() private _creating = false;
 
   connectedCallback() {
@@ -165,11 +166,13 @@ export class ProjectList extends LitElement {
       const project = await createProject(
         this._newProjectName.trim(),
         this._newProjectPrefix.trim() || undefined,
+        this._newProjectRepo.trim() || undefined,
       );
       this._projects = [...this._projects, project];
       this._showCreateDialog = false;
       this._newProjectName = '';
       this._newProjectPrefix = '';
+      this._newProjectRepo = '';
       this._selectProject(project);
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to create project';
@@ -229,6 +232,11 @@ export class ProjectList extends LitElement {
             <sl-input label="Ticket Prefix" placeholder="TASK" help-text="Prefix for ticket IDs (e.g. TASK-1)"
                       value=${this._newProjectPrefix}
                       @sl-input=${(e: CustomEvent) => { this._newProjectPrefix = (e.target as HTMLInputElement).value; }}
+                      @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createProject(); }}
+            ></sl-input>
+            <sl-input label="Repository URL" placeholder="https://github.com/org/repo" help-text="Optional — link to the project's git repository"
+                      value=${this._newProjectRepo}
+                      @sl-input=${(e: CustomEvent) => { this._newProjectRepo = (e.target as HTMLInputElement).value; }}
                       @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createProject(); }}
             ></sl-input>
           </div>
