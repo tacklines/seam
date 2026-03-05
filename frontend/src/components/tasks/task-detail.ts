@@ -564,6 +564,47 @@ export class TaskDetail extends LitElement {
     }
   }
 
+  private _getCurrentParticipantId(): string | null {
+    return store.get().sessionState?.participantId ?? null;
+  }
+
+  private async _claimTask() {
+    if (!this._task) return;
+    const pid = this._getCurrentParticipantId();
+    if (!pid) return;
+    await this._updateField({ assigned_to: pid });
+  }
+
+  private async _unclaimTask() {
+    if (!this._task) return;
+    await this._updateField({ assigned_to: null });
+  }
+
+  private _renderClaimButton(task: TaskDetailView) {
+    const currentPid = this._getCurrentParticipantId();
+    if (!currentPid) return nothing;
+
+    if (!task.assigned_to) {
+      return html`
+        <sl-button size="small" variant="primary" outline style="width: 100%; margin-top: 0.25rem;"
+          @click=${this._claimTask}>
+          <sl-icon slot="prefix" name="hand-index-thumb"></sl-icon>
+          Claim
+        </sl-button>`;
+    }
+
+    if (task.assigned_to === currentPid) {
+      return html`
+        <sl-button size="small" variant="neutral" outline style="width: 100%; margin-top: 0.25rem;"
+          @click=${this._unclaimTask}>
+          <sl-icon slot="prefix" name="x-circle"></sl-icon>
+          Unclaim
+        </sl-button>`;
+    }
+
+    return nothing;
+  }
+
   private async _handleAddComment() {
     if (!this._task || !this._commentText.trim()) return;
     this._commentLoading = true;
@@ -987,7 +1028,8 @@ export class TaskDetail extends LitElement {
                 }
                 <sl-icon class="edit-pencil" name="pencil"></sl-icon>
               </span>
-            </div>`
+            </div>
+            ${this._renderClaimButton(task)}`
         }
 
         <sl-divider style="--spacing: 0.25rem;"></sl-divider>

@@ -132,6 +132,12 @@ struct CloseTaskParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct ClaimTaskParams {
+    /// Task ID to claim (assigns to yourself)
+    id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct ListActivityParams {
     /// Maximum number of events to return (default 20, max 100)
     limit: Option<i64>,
@@ -757,6 +763,142 @@ impl SeamMcp {
                 }
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Close failed: {e}"))])),
+        }
+    }
+
+    #[tool(description = "Claim a task — assigns it to yourself. Useful for preventing duplicate work in multi-agent sessions.")]
+    async fn claim_task(
+        &self,
+        Parameters(params): Parameters<ClaimTaskParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let task_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+        };
+
+        // Check task exists and isn't already claimed by someone else
+        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_optional(&self.db)
+            .await
+        {
+            Ok(Some(t)) => t,
+            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Task not found")])),
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+        };
+
+        if task.assigned_to == Some(participant_id) {
+            return Ok(CallToolResult::success(vec![Content::text("Already assigned to you")]));
+        }
+
+        if task.assigned_to.is_some() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                format!("Task is already assigned to {}. Use update_task to reassign.", task.assigned_to.unwrap()),
+            )]));
+        }
+
+        match sqlx::query("UPDATE tasks SET assigned_to = $1, updated_at = NOW() WHERE id = $2")
+            .bind(participant_id)
+            .bind(task_id)
+            .execute(&self.db)
+            .await
+        {
+            Ok(_) => {
+                let prefix = self.get_ticket_prefix();
+                let ticket_id = format!("{}-{}", prefix, task.ticket_number);
+                self.record_activity(
+                    project_id, Some(session_id), participant_id,
+                    "task_updated", "task", task_id,
+                    &format!("claimed {}", ticket_id),
+                    serde_json::json!({ "ticket_id": ticket_id, "assigned_to": participant_id }),
+                ).await;
+
+                let updated = self.fetch_task(task_id).await;
+                match updated {
+                    Ok(t) => Ok(CallToolResult::success(vec![Content::text(
+                        serde_json::to_string_pretty(&t).unwrap(),
+                    )])),
+                    Err(e) => Ok(CallToolResult::error(vec![Content::text(e)])),
+                }
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Claim failed: {e}"))])),
+        }
+    }
+
+    #[tool(description = "Unclaim a task — removes your assignment. Only works if you are the current assignee.")]
+    async fn unclaim_task(
+        &self,
+        Parameters(params): Parameters<ClaimTaskParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let task_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+        };
+
+        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_optional(&self.db)
+            .await
+        {
+            Ok(Some(t)) => t,
+            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Task not found")])),
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+        };
+
+        if task.assigned_to != Some(participant_id) {
+            return Ok(CallToolResult::error(vec![Content::text("You are not assigned to this task")]));
+        }
+
+        match sqlx::query("UPDATE tasks SET assigned_to = NULL, updated_at = NOW() WHERE id = $1")
+            .bind(task_id)
+            .execute(&self.db)
+            .await
+        {
+            Ok(_) => {
+                let prefix = self.get_ticket_prefix();
+                let ticket_id = format!("{}-{}", prefix, task.ticket_number);
+                self.record_activity(
+                    project_id, Some(session_id), participant_id,
+                    "task_updated", "task", task_id,
+                    &format!("unclaimed {}", ticket_id),
+                    serde_json::json!({ "ticket_id": ticket_id }),
+                ).await;
+
+                let updated = self.fetch_task(task_id).await;
+                match updated {
+                    Ok(t) => Ok(CallToolResult::success(vec![Content::text(
+                        serde_json::to_string_pretty(&t).unwrap(),
+                    )])),
+                    Err(e) => Ok(CallToolResult::error(vec![Content::text(e)])),
+                }
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Unclaim failed: {e}"))])),
         }
     }
 
