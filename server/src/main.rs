@@ -69,6 +69,12 @@ async fn main() {
     let app = Router::new()
         // Health
         .route("/health", get(|| async { "ok" }))
+        // Projects
+        .route("/api/projects", get(routes::projects::list_projects))
+        .route("/api/projects", post(routes::projects::create_project))
+        .route("/api/projects/{project_id}", get(routes::projects::get_project))
+        .route("/api/projects/{project_id}", patch(routes::projects::update_project))
+        .route("/api/projects/{project_id}/sessions", get(routes::projects::list_project_sessions))
         // Sessions
         .route("/api/sessions", post(routes::sessions::create_session))
         .route("/api/sessions/{code}", get(routes::sessions::get_session))

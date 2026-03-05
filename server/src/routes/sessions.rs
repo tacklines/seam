@@ -107,11 +107,22 @@ pub async fn create_session(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Fetch project name for the response
+    let project: crate::models::Project = sqlx::query_as(
+        "SELECT * FROM projects WHERE id = $1"
+    )
+    .bind(project_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(CreateSessionResponse {
         session: SessionView {
             id: session_id,
             code: session_code.clone(),
             name: req.name,
+            project_id,
+            project_name: project.name,
             created_at: chrono::Utc::now(),
             participants: vec![ParticipantView {
                 id: participant_id,
@@ -150,10 +161,20 @@ pub async fn get_session(
 
     let online_ids = state.connections.online_participant_ids(&code);
 
+    let project: crate::models::Project = sqlx::query_as(
+        "SELECT * FROM projects WHERE id = $1"
+    )
+    .bind(session.project_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(SessionView {
         id: session.id,
         code: session.code,
         name: session.name,
+        project_id: session.project_id,
+        project_name: project.name,
         created_at: session.created_at,
         participants: participants.into_iter().map(|p| {
             let is_online = online_ids.contains(&p.id.to_string());
@@ -271,11 +292,21 @@ pub async fn join_session(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let project: crate::models::Project = sqlx::query_as(
+        "SELECT * FROM projects WHERE id = $1"
+    )
+    .bind(session.project_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(JoinSessionResponse {
         session: SessionView {
             id: session.id,
             code: session.code.clone(),
             name: session.name,
+            project_id: session.project_id,
+            project_name: project.name,
             created_at: session.created_at,
             participants: {
                 let online_ids = state.connections.online_participant_ids(&session.code);

@@ -216,6 +216,28 @@ pub struct ActivityEvent {
 
 // --- API DTOs ---
 
+#[derive(Debug, Serialize)]
+pub struct ProjectView {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub ticket_prefix: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateProjectRequest {
+    pub name: String,
+    pub slug: Option<String>,
+    pub ticket_prefix: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProjectRequest {
+    pub name: Option<String>,
+    pub ticket_prefix: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateSessionRequest {
     pub project_id: Option<Uuid>,
@@ -246,6 +268,8 @@ pub struct SessionView {
     pub id: Uuid,
     pub code: String,
     pub name: Option<String>,
+    pub project_id: Uuid,
+    pub project_name: String,
     pub created_at: DateTime<Utc>,
     pub participants: Vec<ParticipantView>,
 }

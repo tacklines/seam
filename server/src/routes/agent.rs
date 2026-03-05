@@ -132,11 +132,21 @@ pub async fn agent_join(
 
     let online_ids = state.connections.online_participant_ids(&session.code);
 
+    let project: Project = sqlx::query_as(
+        "SELECT * FROM projects WHERE id = $1"
+    )
+    .bind(session.project_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(AgentJoinResponse {
         session: SessionView {
             id: session.id,
             code: session.code,
             name: session.name,
+            project_id: session.project_id,
+            project_name: project.name,
             created_at: session.created_at,
             participants: {
                 participants.into_iter().map(|p| {
