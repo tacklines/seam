@@ -1,5 +1,6 @@
 mod auth;
 mod db;
+mod events;
 #[allow(dead_code)]
 mod models;
 mod routes;
@@ -103,6 +104,8 @@ async fn main() {
         .route("/api/sessions/{code}/questions/{question_id}/cancel", post(routes::questions::cancel_question))
         // Activity
         .route("/api/sessions/{code}/activity", get(routes::activity::list_activity))
+        // Domain Events
+        .route("/api/projects/{project_id}/events", get(routes::events::list_events))
         // Agent API
         .route("/api/agent/join", post(routes::agent::agent_join))
         // WebSocket
@@ -122,25 +125,47 @@ async fn main() {
 async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<(), sqlx::Error> {
     let mut listener = sqlx::postgres::PgListener::connect(database_url).await?;
     listener.listen("task_changes").await?;
-    tracing::info!("PG LISTEN on 'task_changes' channel active");
+    listener.listen("domain_events").await?;
+    tracing::info!("PG LISTEN on 'task_changes' and 'domain_events' channels active");
 
     loop {
         let notification = listener.recv().await?;
+        let channel = notification.channel();
         let payload = notification.payload();
 
-        match serde_json::from_str::<serde_json::Value>(payload) {
-            Ok(msg) => {
-                let event_type = msg["type"].as_str().unwrap_or("unknown");
-                let session_code = msg["session_code"].as_str().unwrap_or("");
-
-                if !session_code.is_empty() {
-                    state.connections.broadcast_to_session(session_code, &serde_json::json!({
-                        "type": event_type,
-                    })).await;
+        match channel {
+            "domain_events" => {
+                match serde_json::from_str::<serde_json::Value>(payload) {
+                    Ok(msg) => {
+                        tracing::debug!(
+                            event_type = msg["event_type"].as_str().unwrap_or("unknown"),
+                            aggregate_type = msg["aggregate_type"].as_str().unwrap_or("unknown"),
+                            aggregate_id = msg["aggregate_id"].as_str().unwrap_or("unknown"),
+                            "Domain event received"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!("Bad domain_events NOTIFY payload: {e}");
+                    }
                 }
             }
-            Err(e) => {
-                tracing::warn!("Bad NOTIFY payload: {e}");
+            _ => {
+                // task_changes and any other channels
+                match serde_json::from_str::<serde_json::Value>(payload) {
+                    Ok(msg) => {
+                        let event_type = msg["type"].as_str().unwrap_or("unknown");
+                        let session_code = msg["session_code"].as_str().unwrap_or("");
+
+                        if !session_code.is_empty() {
+                            state.connections.broadcast_to_session(session_code, &serde_json::json!({
+                                "type": event_type,
+                            })).await;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Bad NOTIFY payload: {e}");
+                    }
+                }
             }
         }
     }
