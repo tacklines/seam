@@ -77,4 +77,15 @@ impl ConnectionManager {
             }
         }
     }
+
+    pub async fn send_to_participant(&self, session_code: &str, participant_id: &str, msg: &serde_json::Value) {
+        let text = serde_json::to_string(msg).unwrap_or_default();
+        if let Some(conns) = self.sessions.get(session_code) {
+            for conn in conns.iter() {
+                if conn.participant_id.as_deref() == Some(participant_id) {
+                    let _ = conn.tx.send(text.clone());
+                }
+            }
+        }
+    }
 }

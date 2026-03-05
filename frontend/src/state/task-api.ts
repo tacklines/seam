@@ -196,6 +196,30 @@ export async function cancelQuestion(
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
+// --- Mentions ---
+
+export interface UnreadMentionView {
+  id: string;
+  comment_id: string;
+  task_id: string;
+  created_at: string;
+}
+
+export async function fetchUnreadMentions(sessionCode: string): Promise<UnreadMentionView[]> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/mentions/unread`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<UnreadMentionView[]>(res);
+}
+
+export async function clearUnreadMentions(sessionCode: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/mentions/unread`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
 // --- Notes ---
 
 export interface NoteView {

@@ -33,7 +33,8 @@ export type AppStateEvent =
   | { type: 'tasks-changed' }
   | { type: 'activity-changed' }
   | { type: 'questions-changed' }
-  | { type: 'notes-changed' };
+  | { type: 'notes-changed' }
+  | { type: 'mentioned'; taskId: string; commentId: string };
 
 type Listener = (event: AppStateEvent) => void;
 
@@ -93,6 +94,10 @@ class Store {
 
   notifyNotesChanged() {
     this.notify({ type: 'notes-changed' });
+  }
+
+  notifyMentioned(taskId: string, commentId: string) {
+    this.notify({ type: 'mentioned', taskId, commentId });
   }
 }
 

@@ -121,6 +121,20 @@ function openSocket(code: string): void {
         store.notifyNotesChanged();
       }
 
+      // Mention events — targeted to the mentioned participant
+      if (msg.type === 'mentioned') {
+        const taskId = (msg as any).taskId as string;
+        const commentId = (msg as any).commentId as string;
+        store.notifyMentioned(taskId, commentId);
+
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('You were mentioned', {
+            body: 'Someone mentioned you in a comment',
+            tag: `mention-${commentId}`,
+          });
+        }
+      }
+
       // Activity events — notify activity feed to refresh
       if (msg.type === 'activity') {
         store.notifyActivityChanged();

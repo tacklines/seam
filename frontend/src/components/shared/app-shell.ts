@@ -3,6 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { authStore, type AuthState } from '../../state/auth-state.js';
 import { store, type AppState, type SessionState } from '../../state/app-state.js';
 import { disconnectSession } from '../../state/session-connection.js';
+import { fetchUnreadMentions, clearUnreadMentions, type UnreadMentionView } from '../../state/task-api.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -270,6 +271,7 @@ export class AppShell extends LitElement {
   @state() private _authState: AuthState = authStore.get();
   @state() private _appState: AppState = store.get();
   @state() private _sidebarCollapsed = false;
+  @state() private _unreadMentions: UnreadMentionView[] = [];
 
   private _authUnsub: (() => void) | null = null;
   private _appUnsub: (() => void) | null = null;
@@ -281,8 +283,11 @@ export class AppShell extends LitElement {
       this._authState = authStore.get();
     });
 
-    this._appUnsub = store.subscribe(() => {
+    this._appUnsub = store.subscribe((event) => {
       this._appState = store.get();
+      if (event.type === 'mentioned' || event.type === 'session-connected') {
+        this._loadUnreadMentions();
+      }
     });
 
     if (window.location.pathname === '/auth/callback') {
@@ -309,6 +314,28 @@ export class AppShell extends LitElement {
   private _leaveSession() {
     disconnectSession();
     store.clearSession();
+  }
+
+  private async _loadUnreadMentions() {
+    const code = this._appState.sessionState?.code;
+    if (!code) return;
+    try {
+      this._unreadMentions = await fetchUnreadMentions(code);
+    } catch { /* silent */ }
+  }
+
+  private async _clearMentions() {
+    const code = this._appState.sessionState?.code;
+    if (!code || this._unreadMentions.length === 0) return;
+    // Navigate to the most recent mention's task
+    const latest = this._unreadMentions[0];
+    if (latest) {
+      window.location.hash = `#session/${code}/task/${latest.task_id}`;
+    }
+    try {
+      await clearUnreadMentions(code);
+      this._unreadMentions = [];
+    } catch { /* silent */ }
   }
 
   private _renderSessionSidebar(session: SessionState, currentId: string) {
@@ -429,6 +456,16 @@ export class AppShell extends LitElement {
           </div>
 
           <div class="header-right">
+            ${session && this._unreadMentions.length > 0 ? html`
+              <sl-tooltip content="You have ${this._unreadMentions.length} unread mention(s)">
+                <sl-button size="small" variant="text" @click=${this._clearMentions} style="position: relative;">
+                  <sl-icon name="bell-fill" style="color: var(--sl-color-warning-500);"></sl-icon>
+                  <sl-badge variant="danger" pill style="position: absolute; top: -2px; right: -2px; font-size: 0.6rem;">
+                    ${this._unreadMentions.length}
+                  </sl-badge>
+                </sl-button>
+              </sl-tooltip>
+            ` : nothing}
             <span class="user-name">${this._authState.user?.name}</span>
             <sl-button size="small" variant="text" @click=${() => authStore.logout()}>
               Sign out
