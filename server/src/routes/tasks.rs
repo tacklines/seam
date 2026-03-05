@@ -45,6 +45,7 @@ pub struct CreateTaskRequest {
     pub assigned_to: Option<Uuid>,
     pub priority: Option<String>,
     pub complexity: Option<String>,
+    pub source_task_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -58,7 +59,8 @@ pub struct UpdateTaskRequest {
     #[serde(default, deserialize_with = "deserialize_optional_field")]
     pub assigned_to: Option<Option<Uuid>>,
     pub parent_id: Option<Uuid>,
-    pub commit_sha: Option<String>,
+    pub commit_hashes: Option<Vec<String>>,
+    pub no_code_change: Option<bool>,
 }
 
 fn deserialize_optional_field<'de, D>(deserializer: D) -> Result<Option<Option<Uuid>>, D::Error>
@@ -100,7 +102,9 @@ pub struct TaskView {
     pub complexity: TaskComplexity,
     pub assigned_to: Option<Uuid>,
     pub created_by: Uuid,
-    pub commit_sha: Option<String>,
+    pub commit_hashes: Vec<String>,
+    pub no_code_change: bool,
+    pub source_task_id: Option<Uuid>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -168,7 +172,9 @@ impl TaskView {
             complexity: t.complexity,
             assigned_to: t.assigned_to,
             created_by: t.created_by,
-            commit_sha: t.commit_sha,
+            commit_hashes: t.commit_hashes,
+            no_code_change: t.no_code_change,
+            source_task_id: t.source_task_id,
             created_at: t.created_at,
             updated_at: t.updated_at,
             closed_at: t.closed_at,
@@ -246,8 +252,8 @@ pub async fn create_task(
 
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, source_task_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, NOW(), NOW())"
     )
     .bind(task_id)
     .bind(session.id)
@@ -261,6 +267,7 @@ pub async fn create_task(
     .bind(complexity)
     .bind(req.assigned_to)
     .bind(participant.id)
+    .bind(req.source_task_id)
     .execute(&state.db)
     .await
     .map_err(|e| {
@@ -526,16 +533,24 @@ pub async fn update_task(
         None => task.assigned_to,
     };
     let parent_id = req.parent_id.or(task.parent_id);
-    let commit_sha = req.commit_sha.as_deref().or(task.commit_sha.as_deref());
+    let commit_hashes = req.commit_hashes.clone().unwrap_or_else(|| task.commit_hashes.clone());
+    let no_code_change = req.no_code_change.unwrap_or(task.no_code_change);
 
-    let closed_at = if (status_str == "closed" || status_str == "done") && task.closed_at.is_none() {
+    let is_closing = (status_str == "closed" || status_str == "done") && task.closed_at.is_none();
+
+    // Enforce: closing requires either commit_hashes or no_code_change
+    if is_closing && !no_code_change && commit_hashes.is_empty() {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    let closed_at = if is_closing {
         Some(chrono::Utc::now())
     } else {
         task.closed_at
     };
 
     sqlx::query(
-        "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_sha = $8, closed_at = $9, updated_at = NOW() WHERE id = $10"
+        "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = $10, updated_at = NOW() WHERE id = $11"
     )
     .bind(title)
     .bind(description)
@@ -544,7 +559,8 @@ pub async fn update_task(
     .bind(complexity_str)
     .bind(assigned_to)
     .bind(parent_id)
-    .bind(commit_sha)
+    .bind(&commit_hashes)
+    .bind(no_code_change)
     .bind(closed_at)
     .bind(task_id)
     .execute(&state.db)
@@ -1042,9 +1058,16 @@ pub struct GraphEdge {
 }
 
 #[derive(Debug, Serialize)]
+pub struct ProvenanceEdge {
+    pub source_id: Uuid,
+    pub derived_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
 pub struct DependencyGraphView {
     pub tasks: Vec<TaskView>,
     pub edges: Vec<GraphEdge>,
+    pub provenance: Vec<ProvenanceEdge>,
 }
 
 pub async fn get_project_dependency_graph(
@@ -1072,6 +1095,11 @@ pub async fn get_project_dependency_graph(
     .await
     .unwrap_or_default();
 
+    // Build provenance edges from source_task_id
+    let provenance: Vec<ProvenanceEdge> = tasks.iter()
+        .filter_map(|t| t.source_task_id.map(|src| ProvenanceEdge { source_id: src, derived_id: t.id }))
+        .collect();
+
     let views: Vec<TaskView> = tasks.into_iter().map(|t| {
         TaskView::from_task(t, &project.ticket_prefix)
     }).collect();
@@ -1079,6 +1107,7 @@ pub async fn get_project_dependency_graph(
     Ok(Json(DependencyGraphView {
         tasks: views,
         edges: edges.into_iter().map(|(blocker_id, blocked_id)| GraphEdge { blocker_id, blocked_id }).collect(),
+        provenance,
     }))
 }
 

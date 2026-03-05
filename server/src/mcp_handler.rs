@@ -68,6 +68,8 @@ struct CreateTaskParams {
     priority: Option<String>,
     /// Complexity: xl, large, medium (default), small, trivial
     complexity: Option<String>,
+    /// Source task ID — the task whose work produced this new task (provenance tracking)
+    source_task_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -112,6 +114,10 @@ struct UpdateTaskParams {
     assigned_to: Option<String>,
     /// New parent task ID (use "none" to remove parent)
     parent_id: Option<String>,
+    /// Git commit SHAs to link (append to existing)
+    commit_hashes: Option<Vec<String>>,
+    /// Mark as no-code-change task (required if closing without commits)
+    no_code_change: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -126,8 +132,10 @@ struct AddCommentParams {
 struct CloseTaskParams {
     /// Task ID to close
     id: String,
-    /// Git commit SHA to link (for traceability)
-    commit_sha: Option<String>,
+    /// Git commit SHAs to link (for traceability). Required unless no_code_change is true.
+    commit_hashes: Option<Vec<String>>,
+    /// Mark as no-code-change task (e.g. documentation, planning). Required if no commit_hashes.
+    no_code_change: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -506,6 +514,14 @@ impl SeamMcp {
             None => None,
         };
 
+        let source_task_id = match params.source_task_id {
+            Some(ref s) => match Uuid::parse_str(s) {
+                Ok(id) => Some(id),
+                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid source_task_id UUID")])),
+            },
+            None => None,
+        };
+
         // Atomically allocate next ticket number
         let ticket_number: i32 = match sqlx::query_scalar(
             "UPDATE projects SET next_ticket_number = next_ticket_number + 1 WHERE id = $1 RETURNING next_ticket_number - 1"
@@ -522,8 +538,8 @@ impl SeamMcp {
 
         let task_id = Uuid::new_v4();
         match sqlx::query(
-            "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, NOW(), NOW())"
+            "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, source_task_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, NOW(), NOW())"
         )
         .bind(task_id)
         .bind(session_id)
@@ -537,6 +553,7 @@ impl SeamMcp {
         .bind(complexity)
         .bind(assigned_to)
         .bind(participant_id)
+        .bind(source_task_id)
         .execute(&self.db)
         .await {
             Ok(_) => {
@@ -789,14 +806,34 @@ impl SeamMcp {
             None => task.parent_id,
         };
 
-        let closed_at = if status == "closed" || status == "done" {
+        // Merge commit_hashes
+        let mut commit_hashes = task.commit_hashes.clone();
+        if let Some(ref new_hashes) = params.commit_hashes {
+            for h in new_hashes {
+                if !commit_hashes.contains(h) {
+                    commit_hashes.push(h.clone());
+                }
+            }
+        }
+        let no_code_change = params.no_code_change.unwrap_or(task.no_code_change);
+
+        let is_closing = (status == "closed" || status == "done") && task.closed_at.is_none();
+
+        // Enforce: closing requires either commits or no_code_change
+        if is_closing && !no_code_change && commit_hashes.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Cannot close task without commits. Provide commit_hashes or set no_code_change=true."
+            )]));
+        }
+
+        let closed_at = if is_closing {
             Some(Utc::now())
         } else {
             None
         };
 
         match sqlx::query(
-            "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, closed_at = COALESCE($8, closed_at), updated_at = NOW() WHERE id = $9"
+            "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = COALESCE($10, closed_at), updated_at = NOW() WHERE id = $11"
         )
         .bind(title)
         .bind(description)
@@ -805,6 +842,8 @@ impl SeamMcp {
         .bind(complexity)
         .bind(assigned_to)
         .bind(parent_id)
+        .bind(&commit_hashes)
+        .bind(no_code_change)
         .bind(closed_at)
         .bind(task_id)
         .execute(&self.db)
@@ -918,7 +957,7 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Close a task and optionally link it to a git commit SHA for traceability.")]
+    #[tool(description = "Close a task. Requires either commit_hashes (git SHAs for traceability) or no_code_change=true (for tasks that don't produce code, e.g. planning, docs review).")]
     async fn close_task(
         &self,
         Parameters(params): Parameters<CloseTaskParams>,
@@ -928,10 +967,39 @@ impl SeamMcp {
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
         };
 
+        let no_code_change = params.no_code_change.unwrap_or(false);
+        let new_hashes = params.commit_hashes.unwrap_or_default();
+
+        // Fetch current task to merge commit_hashes
+        let current: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_optional(&self.db)
+            .await
+        {
+            Ok(Some(t)) => t,
+            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Task not found")])),
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("DB error: {e}"))])),
+        };
+
+        let mut merged_hashes = current.commit_hashes.clone();
+        for h in &new_hashes {
+            if !merged_hashes.contains(h) {
+                merged_hashes.push(h.clone());
+            }
+        }
+
+        // Enforce: closing requires either commits or no_code_change
+        if !no_code_change && merged_hashes.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Cannot close task without commits. Provide commit_hashes or set no_code_change=true."
+            )]));
+        }
+
         match sqlx::query(
-            "UPDATE tasks SET status = 'closed', commit_sha = COALESCE($1, commit_sha), closed_at = NOW(), updated_at = NOW() WHERE id = $2"
+            "UPDATE tasks SET status = 'closed', commit_hashes = $1, no_code_change = $2, closed_at = NOW(), updated_at = NOW() WHERE id = $3"
         )
-        .bind(&params.commit_sha)
+        .bind(&merged_hashes)
+        .bind(no_code_change)
         .bind(task_id)
         .execute(&self.db)
         .await {
@@ -2355,7 +2423,9 @@ impl SeamMcp {
             "complexity": serde_json::to_value(&task.complexity).unwrap(),
             "assigned_to": task.assigned_to,
             "created_by": task.created_by,
-            "commit_sha": task.commit_sha,
+            "commit_hashes": task.commit_hashes,
+            "no_code_change": task.no_code_change,
+            "source_task_id": task.source_task_id,
             "created_at": task.created_at,
             "updated_at": task.updated_at,
             "closed_at": task.closed_at,
@@ -2388,7 +2458,9 @@ impl SeamMcp {
             "complexity": serde_json::to_value(&task.complexity).unwrap(),
             "assigned_to": task.assigned_to,
             "created_by": task.created_by,
-            "commit_sha": task.commit_sha,
+            "commit_hashes": task.commit_hashes,
+            "no_code_change": task.no_code_change,
+            "source_task_id": task.source_task_id,
             "created_at": task.created_at,
             "updated_at": task.updated_at,
             "closed_at": task.closed_at,
