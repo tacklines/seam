@@ -121,6 +121,8 @@ async fn main() {
         .route("/api/projects/{project_id}/workspaces", get(routes::workspaces::list_workspaces).post(routes::workspaces::create_workspace))
         .route("/api/projects/{project_id}/workspaces/{workspace_id}", get(routes::workspaces::get_workspace).delete(routes::workspaces::destroy_workspace))
         .route("/api/projects/{project_id}/workspaces/{workspace_id}/stop", post(routes::workspaces::stop_workspace))
+        // Integrations
+        .route("/api/integrations/coder/status", get(routes::integrations::coder_status))
         // Domain Events
         .route("/api/projects/{project_id}/events", get(routes::events::list_events))
         // Agent API

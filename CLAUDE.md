@@ -7,7 +7,8 @@ Collaborative sessions where humans and AI agents work together in real time.
 - **Frontend**: `frontend/` — Lit web components + Vite + Tailwind + Shoelace
 - **Backend**: `server/` — Rust (Axum) with PostgreSQL
 - **Auth**: Keycloak OIDC (realm: `seam`, client: `web-app` public PKCE)
-- **Infra**: Docker Compose (Keycloak + Postgres)
+- **Sandboxes**: Coder workspaces for agent task execution (optional)
+- **Infra**: Docker Compose (Keycloak + Postgres; Coder via `--profile coder`)
 
 ## Data Model
 
@@ -28,6 +29,18 @@ cd frontend && npm run dev     # Vite on :5173
 ```
 
 Test user: `testuser` / `testpass` (Keycloak)
+
+### Coder Integration (optional)
+
+```bash
+docker compose --profile coder up -d   # Add Coder on :7080
+./infra/coder/setup.sh                 # Push seam-agent template
+# Set env vars for the Seam server:
+export CODER_URL=http://localhost:7080
+export CODER_TOKEN=<coder tokens create --name seam-integration>
+```
+
+Health check: `GET /api/integrations/coder/status`
 
 ## Conventions
 
