@@ -107,6 +107,26 @@ function openSocket(code: string): void {
         store.notifyActivityChanged();
       }
 
+      // Desktop notification for new questions directed at this user
+      if (msg.type === 'question_asked' && (msg as any).question_text) {
+        const myId = store.get().sessionState?.participantId;
+        const askerName = (msg as any).asked_by_name ?? 'Someone';
+        const text = (msg as any).question_text ?? '';
+        // Only notify if tab is not focused
+        if (document.hidden && Notification.permission === 'granted') {
+          const n = new Notification(`${askerName} asked a question`, {
+            body: text.length > 120 ? text.slice(0, 120) + '…' : text,
+            tag: 'seam-question',
+          });
+          n.onclick = () => { window.focus(); n.close(); };
+        }
+      }
+
+      // Note events
+      if (msg.type === 'note_updated') {
+        store.notifyNotesChanged();
+      }
+
       // Activity events — notify activity feed to refresh
       if (msg.type === 'activity') {
         store.notifyActivityChanged();

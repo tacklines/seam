@@ -32,7 +32,8 @@ export type AppStateEvent =
   | { type: 'session-disconnected' }
   | { type: 'tasks-changed' }
   | { type: 'activity-changed' }
-  | { type: 'questions-changed' };
+  | { type: 'questions-changed' }
+  | { type: 'notes-changed' };
 
 type Listener = (event: AppStateEvent) => void;
 
@@ -88,6 +89,10 @@ class Store {
 
   notifyQuestionsChanged() {
     this.notify({ type: 'questions-changed' });
+  }
+
+  notifyNotesChanged() {
+    this.notify({ type: 'notes-changed' });
   }
 }
 

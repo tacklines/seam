@@ -80,6 +80,10 @@ async fn main() {
         .route("/api/sessions/{code}/tasks/{task_id}", patch(routes::tasks::update_task))
         .route("/api/sessions/{code}/tasks/{task_id}", delete(routes::tasks::delete_task))
         .route("/api/sessions/{code}/tasks/{task_id}/comments", post(routes::tasks::add_comment))
+        // Notes
+        .route("/api/sessions/{code}/notes", get(routes::notes::list_notes))
+        .route("/api/sessions/{code}/notes/{slug}", get(routes::notes::get_note))
+        .route("/api/sessions/{code}/notes/{slug}", axum::routing::put(routes::notes::upsert_note))
         // Questions
         .route("/api/sessions/{code}/questions", get(routes::questions::list_questions))
         .route("/api/sessions/{code}/questions/{question_id}", get(routes::questions::get_question))

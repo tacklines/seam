@@ -371,6 +371,10 @@ export class AppShell extends LitElement {
 
       <sl-divider></sl-divider>
 
+      <notes-panel session-code=${s.code}></notes-panel>
+
+      <sl-divider></sl-divider>
+
       <activity-feed session-code=${s.code}></activity-feed>
     `;
   }

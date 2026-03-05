@@ -289,6 +289,20 @@ pub struct Question {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+// --- Notes ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Note {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub slug: String,
+    pub title: String,
+    pub content: String,
+    pub updated_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 // --- Agent API DTOs ---
 
 #[derive(Debug, Deserialize)]

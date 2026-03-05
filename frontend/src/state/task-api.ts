@@ -167,3 +167,43 @@ export async function cancelQuestion(
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
+
+// --- Notes ---
+
+export interface NoteView {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  updated_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchNotes(sessionCode: string): Promise<NoteView[]> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/notes`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<NoteView[]>(res);
+}
+
+export async function fetchNote(sessionCode: string, slug: string): Promise<NoteView> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/notes/${slug}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<NoteView>(res);
+}
+
+export async function upsertNote(
+  sessionCode: string,
+  slug: string,
+  content: string,
+  title?: string,
+): Promise<NoteView> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/notes/${slug}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ content, title }),
+  });
+  return handleResponse<NoteView>(res);
+}

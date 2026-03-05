@@ -168,6 +168,22 @@ struct CheckAnswerParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct GetNoteParams {
+    /// Note slug (e.g. "scratchpad", "decisions", "findings")
+    slug: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UpdateNoteParams {
+    /// Note slug (e.g. "scratchpad", "decisions", "findings")
+    slug: String,
+    /// Note title (defaults to the slug if not provided)
+    title: Option<String>,
+    /// Full content to set (replaces existing content)
+    content: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct ListQuestionsParams {
     /// Filter by status: pending, answered, or all (default: pending)
     status: Option<String>,
@@ -1262,6 +1278,120 @@ impl SeamMcp {
             Ok(_) => Ok(CallToolResult::error(vec![Content::text("Question not found, not yours, or not pending")])),
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
         }
+    }
+
+    #[tool(description = "Get a shared note by slug. Notes are session-scoped collaborative documents for sharing context, decisions, and findings.")]
+    async fn get_note(
+        &self,
+        Parameters(params): Parameters<GetNoteParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let note: Option<models::Note> = sqlx::query_as(
+            "SELECT * FROM notes WHERE session_id = $1 AND slug = $2"
+        )
+        .bind(session_id)
+        .bind(&params.slug)
+        .fetch_optional(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
+
+        match note {
+            Some(n) => {
+                let result = serde_json::json!({
+                    "slug": n.slug,
+                    "title": n.title,
+                    "content": n.content,
+                    "updated_at": n.updated_at.to_rfc3339(),
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result).unwrap(),
+                )]))
+            }
+            None => Ok(CallToolResult::error(vec![Content::text(
+                format!("Note '{}' not found. Use update_note to create it.", params.slug)
+            )])),
+        }
+    }
+
+    #[tool(description = "Create or update a shared note. Notes are session-scoped markdown documents. Use slugs like 'scratchpad', 'decisions', 'findings', etc.")]
+    async fn update_note(
+        &self,
+        Parameters(params): Parameters<UpdateNoteParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let title = params.title.unwrap_or_else(|| params.slug.clone());
+
+        let note: models::Note = sqlx::query_as(
+            "INSERT INTO notes (id, session_id, slug, title, content, updated_by, created_at, updated_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
+             ON CONFLICT (session_id, slug) DO UPDATE
+             SET content = EXCLUDED.content, title = EXCLUDED.title, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+             RETURNING *"
+        )
+        .bind(session_id)
+        .bind(&params.slug)
+        .bind(&title)
+        .bind(&params.content)
+        .bind(participant_id)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
+
+        let result = serde_json::json!({
+            "slug": note.slug,
+            "title": note.title,
+            "content": note.content,
+            "updated_at": note.updated_at.to_rfc3339(),
+            "message": "Note saved",
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "List all shared notes in the current session.")]
+    async fn list_notes(&self) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let notes: Vec<models::Note> = sqlx::query_as(
+            "SELECT * FROM notes WHERE session_id = $1 ORDER BY created_at"
+        )
+        .bind(session_id)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
+
+        let items: Vec<serde_json::Value> = notes.iter().map(|n| {
+            serde_json::json!({
+                "slug": n.slug,
+                "title": n.title,
+                "content_length": n.content.len(),
+                "updated_at": n.updated_at.to_rfc3339(),
+            })
+        }).collect();
+
+        let result = serde_json::json!({
+            "count": items.len(),
+            "notes": items,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
     }
 
     #[tool(description = "Delete a task and all its children. Use with caution — this is irreversible.")]
