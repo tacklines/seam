@@ -20,11 +20,29 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U seam"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  coder:
+    image: ghcr.io/coder/coder:latest
+    profiles: [coder]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://seam:seam@postgres:5432/coder?sslmode=disable"
+      CODER_HTTP_ADDRESS: "0.0.0.0:7080"
+      CODER_ACCESS_URL: "http://localhost:7080"
+      CODER_TELEMETRY: "false"
+      CODER_EXPERIMENTS: "*"
+    ports:
+      - "7080:7080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   pgdata:
