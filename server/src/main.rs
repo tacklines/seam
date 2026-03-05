@@ -1,4 +1,5 @@
 mod auth;
+mod coder;
 mod db;
 mod events;
 #[allow(dead_code)]
@@ -16,6 +17,7 @@ pub struct AppState {
     pub db: sqlx::PgPool,
     pub jwks: auth::JwksCache,
     pub connections: ws::ConnectionManager,
+    pub coder: Option<coder::CoderClient>,
 }
 
 #[tokio::main]
@@ -45,10 +47,18 @@ async fn main() {
     let realm = std::env::var("KEYCLOAK_REALM")
         .unwrap_or_else(|_| "seam".to_string());
 
+    let coder = coder::CoderClient::from_env();
+    if coder.is_some() {
+        tracing::info!("Coder integration enabled");
+    } else {
+        tracing::info!("Coder integration disabled (CODER_URL not set)");
+    }
+
     let state = Arc::new(AppState {
         db,
         jwks: auth::JwksCache::new(&keycloak_url, &realm),
         connections: ws::ConnectionManager::new(),
+        coder,
     });
 
     let cors = CorsLayer::new()
