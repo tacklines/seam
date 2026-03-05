@@ -92,9 +92,13 @@ export interface ActivityEvent {
 
 export async function fetchActivity(
   sessionCode: string,
-  limit = 50,
+  opts?: { limit?: number; target_id?: string },
 ): Promise<ActivityEvent[]> {
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/activity?limit=${limit}`, {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.target_id) params.set('target_id', opts.target_id);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/activity${qs ? `?${qs}` : ''}`, {
     headers: authHeaders(),
   });
   return handleResponse<ActivityEvent[]>(res);
@@ -111,4 +115,55 @@ export async function addComment(
     body: JSON.stringify({ content }),
   });
   return handleResponse<CommentView>(res);
+}
+
+// --- Questions ---
+
+export interface QuestionView {
+  id: string;
+  question_text: string;
+  status: 'pending' | 'answered' | 'expired' | 'cancelled';
+  asked_by: string;
+  asked_by_name: string;
+  directed_to: string | null;
+  context: Record<string, unknown> | null;
+  answer_text: string | null;
+  answered_by: string | null;
+  answered_by_name: string | null;
+  created_at: string;
+  answered_at: string | null;
+}
+
+export async function fetchQuestions(
+  sessionCode: string,
+  status = 'pending',
+): Promise<QuestionView[]> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/questions?status=${status}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<QuestionView[]>(res);
+}
+
+export async function answerQuestion(
+  sessionCode: string,
+  questionId: string,
+  answerText: string,
+): Promise<QuestionView> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/questions/${questionId}/answer`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ answer_text: answerText }),
+  });
+  return handleResponse<QuestionView>(res);
+}
+
+export async function cancelQuestion(
+  sessionCode: string,
+  questionId: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/questions/${questionId}/cancel`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }

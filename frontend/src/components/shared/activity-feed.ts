@@ -157,7 +157,7 @@ export class ActivityFeed extends LitElement {
     if (!this.sessionCode) return;
     try {
       this._loading = this._events.length === 0;
-      this._events = await fetchActivity(this.sessionCode, 30);
+      this._events = await fetchActivity(this.sessionCode, { limit: 30 });
     } catch {
       // silent
     } finally {

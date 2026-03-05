@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
-import { fetchTask, updateTask, deleteTask, addComment } from '../../state/task-api.js';
+import { fetchTask, updateTask, deleteTask, addComment, fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import {
   type TaskDetailView, type TaskStatus, type TaskType, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -423,6 +423,38 @@ export class TaskDetail extends LitElement {
       flex: 1;
     }
 
+    /* ── Activity events ── */
+    .activity-event {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+    }
+
+    .activity-event sl-icon {
+      font-size: 0.75rem;
+      margin-top: 0.15rem;
+      flex-shrink: 0;
+    }
+
+    .activity-summary {
+      flex: 1;
+      line-height: 1.4;
+    }
+
+    .activity-actor {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .activity-time {
+      font-size: 0.7rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
     /* ── Misc ── */
     .loading {
       display: flex;
@@ -451,6 +483,7 @@ export class TaskDetail extends LitElement {
   @state() private _editingTitle = false;
   @state() private _editingDescription = false;
   @state() private _editingField: string | null = null; // 'type' | 'status' | 'assignee' | 'commit'
+  @state() private _activity: ActivityEvent[] = [];
 
   private _storeUnsub: (() => void) | null = null;
 
@@ -481,7 +514,12 @@ export class TaskDetail extends LitElement {
     this._loading = true;
     this._error = '';
     try {
-      this._task = await fetchTask(this.sessionCode, this.taskId);
+      const [task, activity] = await Promise.all([
+        fetchTask(this.sessionCode, this.taskId),
+        fetchActivity(this.sessionCode, { target_id: this.taskId }).catch(() => [] as ActivityEvent[]),
+      ]);
+      this._task = task;
+      this._activity = activity;
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to load task';
     } finally {
@@ -805,24 +843,64 @@ export class TaskDetail extends LitElement {
     `;
   }
 
+  private _activityIcon(eventType: string): string {
+    switch (eventType) {
+      case 'task_created': return 'plus-circle';
+      case 'task_status_changed': return 'arrow-right-circle';
+      case 'task_assigned': return 'person-check';
+      case 'task_unassigned': return 'person-dash';
+      case 'task_updated': return 'pencil-square';
+      case 'task_closed': return 'check-circle';
+      case 'task_deleted': return 'trash';
+      case 'comment_added': return 'chat-dots';
+      default: return 'clock-history';
+    }
+  }
+
   private _renderComments(task: TaskDetailView) {
+    // Build a unified timeline: comments + activity events, sorted chronologically
+    type TimelineItem =
+      | { kind: 'comment'; created_at: string; data: (typeof task.comments)[0] }
+      | { kind: 'activity'; created_at: string; data: ActivityEvent };
+
+    const items: TimelineItem[] = [
+      ...task.comments.map(c => ({ kind: 'comment' as const, created_at: c.created_at, data: c })),
+      // Filter out comment_added events to avoid duplication with actual comments
+      ...this._activity
+        .filter(a => a.event_type !== 'comment_added')
+        .map(a => ({ kind: 'activity' as const, created_at: a.created_at, data: a })),
+    ];
+    items.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
     return html`
       <div class="comments-section">
-        <div class="section-heading">Comments (${task.comments.length})</div>
+        <div class="section-heading">Activity (${items.length})</div>
 
-        ${task.comments.length > 0 ? html`
+        ${items.length > 0 ? html`
           <div class="comment-list">
-            ${task.comments.map(c => html`
-              <div class="comment">
-                <div class="comment-header">
-                  <span class="comment-author">${this._getParticipantName(c.author_id)}</span>
-                  <sl-tooltip content=${this._formatDate(c.created_at)}>
-                    <span class="comment-time">${this._relativeTime(c.created_at)}</span>
+            ${items.map(item => item.kind === 'comment'
+              ? html`
+                <div class="comment">
+                  <div class="comment-header">
+                    <span class="comment-author">${this._getParticipantName(item.data.author_id)}</span>
+                    <sl-tooltip content=${this._formatDate(item.created_at)}>
+                      <span class="comment-time">${this._relativeTime(item.created_at)}</span>
+                    </sl-tooltip>
+                  </div>
+                  <div class="comment-content">${this._renderMarkdown(item.data.content)}</div>
+                </div>`
+              : html`
+                <div class="activity-event">
+                  <sl-icon name=${this._activityIcon(item.data.event_type)}></sl-icon>
+                  <span class="activity-summary">
+                    <span class="activity-actor">${item.data.actor_name}</span>
+                    ${item.data.summary}
+                  </span>
+                  <sl-tooltip content=${this._formatDate(item.created_at)}>
+                    <span class="activity-time">${this._relativeTime(item.created_at)}</span>
                   </sl-tooltip>
-                </div>
-                <div class="comment-content">${this._renderMarkdown(c.content)}</div>
-              </div>
-            `)}
+                </div>`
+            )}
           </div>
         ` : nothing}
 

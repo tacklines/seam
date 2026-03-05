@@ -260,6 +260,35 @@ pub struct ParticipantView {
     pub is_online: bool,
 }
 
+// --- Questions ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum QuestionStatus {
+    Pending,
+    Answered,
+    Expired,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Question {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub project_id: Uuid,
+    pub asked_by: Uuid,
+    pub directed_to: Option<Uuid>,
+    pub question_text: String,
+    pub context: Option<serde_json::Value>,
+    pub answer_text: Option<String>,
+    pub answered_by: Option<Uuid>,
+    pub status: QuestionStatus,
+    pub created_at: DateTime<Utc>,
+    pub answered_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
 // --- Agent API DTOs ---
 
 #[derive(Debug, Deserialize)]

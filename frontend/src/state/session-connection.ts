@@ -101,6 +101,12 @@ function openSocket(code: string): void {
         store.notifyTasksChanged();
       }
 
+      // Question events — notify question UI to refresh
+      if (msg.type === 'question_asked' || msg.type === 'question_answered') {
+        store.notifyQuestionsChanged();
+        store.notifyActivityChanged();
+      }
+
       // Activity events — notify activity feed to refresh
       if (msg.type === 'activity') {
         store.notifyActivityChanged();

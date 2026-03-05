@@ -13,6 +13,7 @@ use crate::AppState;
 pub struct ListActivityQuery {
     pub limit: Option<i64>,
     pub before: Option<String>,
+    pub target_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -37,45 +38,44 @@ pub async fn list_activity(
 
     let limit = query.limit.unwrap_or(50).min(200);
 
-    let events = if let Some(ref before) = query.before {
+    let mut sql = String::from(
+        "SELECT ae.id, ae.actor_id, p.display_name, ae.event_type, ae.target_type, ae.target_id, ae.summary, ae.metadata, ae.created_at
+         FROM activity_events ae
+         JOIN participants p ON p.id = ae.actor_id
+         WHERE ae.project_id = $1"
+    );
+    let mut param_idx = 2;
+
+    if query.before.is_some() {
+        sql.push_str(&format!(" AND ae.created_at < ${param_idx}"));
+        param_idx += 1;
+    }
+    if query.target_id.is_some() {
+        sql.push_str(&format!(" AND ae.target_id = ${param_idx}"));
+        param_idx += 1;
+    }
+    sql.push_str(&format!(" ORDER BY ae.created_at DESC LIMIT ${param_idx}"));
+
+    let mut q = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Uuid, String, serde_json::Value, chrono::DateTime<chrono::Utc>)>(&sql)
+        .bind(session.project_id);
+
+    if let Some(ref before) = query.before {
         let before_time: chrono::DateTime<chrono::Utc> = before
             .parse()
             .map_err(|_| StatusCode::BAD_REQUEST)?;
-        sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Uuid, String, serde_json::Value, chrono::DateTime<chrono::Utc>)>(
-            "SELECT ae.id, ae.actor_id, p.display_name, ae.event_type, ae.target_type, ae.target_id, ae.summary, ae.metadata, ae.created_at
-             FROM activity_events ae
-             JOIN participants p ON p.id = ae.actor_id
-             WHERE ae.project_id = $1 AND ae.created_at < $2
-             ORDER BY ae.created_at DESC
-             LIMIT $3"
-        )
-        .bind(session.project_id)
-        .bind(before_time)
-        .bind(limit)
-        .fetch_all(&state.db)
+        q = q.bind(before_time);
+    }
+    if let Some(target_id) = query.target_id {
+        q = q.bind(target_id);
+    }
+    q = q.bind(limit);
+
+    let events = q.fetch_all(&state.db)
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch activity: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
-        })?
-    } else {
-        sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Uuid, String, serde_json::Value, chrono::DateTime<chrono::Utc>)>(
-            "SELECT ae.id, ae.actor_id, p.display_name, ae.event_type, ae.target_type, ae.target_id, ae.summary, ae.metadata, ae.created_at
-             FROM activity_events ae
-             JOIN participants p ON p.id = ae.actor_id
-             WHERE ae.project_id = $1
-             ORDER BY ae.created_at DESC
-             LIMIT $2"
-        )
-        .bind(session.project_id)
-        .bind(limit)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to fetch activity: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-    };
+        })?;
 
     let views: Vec<ActivityEventView> = events
         .into_iter()

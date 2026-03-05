@@ -143,6 +143,28 @@ struct ListActivityParams {
     limit: Option<i64>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct AskQuestionParams {
+    /// The question text to ask
+    question: String,
+    /// Participant ID to direct the question to (omit for open question to any human)
+    directed_to: Option<String>,
+    /// Optional context JSON (e.g. {"task_id": "...", "topic": "..."})
+    context: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CheckAnswerParams {
+    /// Question ID to check
+    id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ListQuestionsParams {
+    /// Filter by status: pending, answered, or all (default: pending)
+    status: Option<String>,
+}
+
 // --- MCP Server ---
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
@@ -992,6 +1014,202 @@ impl SeamMcp {
 
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&items).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "Ask a question that humans in the session can answer. Returns the question ID — use check_answer to poll for the response.")]
+    async fn ask_question(
+        &self,
+        Parameters(params): Parameters<AskQuestionParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let directed_to = match &params.directed_to {
+            Some(id_str) => match Uuid::parse_str(id_str) {
+                Ok(id) => Some(id),
+                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid directed_to participant ID")])),
+            },
+            None => None,
+        };
+
+        let context_json: Option<serde_json::Value> = match &params.context {
+            Some(ctx) => match serde_json::from_str(ctx) {
+                Ok(v) => Some(v),
+                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid context JSON")])),
+            },
+            None => None,
+        };
+
+        let question_id = Uuid::new_v4();
+        match sqlx::query(
+            "INSERT INTO questions (id, session_id, project_id, asked_by, directed_to, question_text, context, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')"
+        )
+        .bind(question_id)
+        .bind(session_id)
+        .bind(project_id)
+        .bind(participant_id)
+        .bind(directed_to)
+        .bind(&params.question)
+        .bind(&context_json)
+        .execute(&self.db)
+        .await
+        {
+            Ok(_) => {
+                self.record_activity(
+                    project_id, Some(session_id), participant_id,
+                    "question_asked", "question", question_id,
+                    &params.question, serde_json::json!({}),
+                ).await;
+
+                let result = serde_json::json!({
+                    "id": question_id,
+                    "status": "pending",
+                    "message": "Question submitted. Use check_answer to poll for the response, or the human will see it in their session UI."
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result).unwrap(),
+                )]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed to create question: {e}"))])),
+        }
+    }
+
+    #[tool(description = "Check if a question has been answered. Returns the current status and answer if available.")]
+    async fn check_answer(
+        &self,
+        Parameters(params): Parameters<CheckAnswerParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let question_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid question ID")])),
+        };
+
+        let row: Option<(Uuid, String, String, Option<String>, Option<Uuid>, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>)> = match sqlx::query_as(
+            "SELECT q.id, q.question_text, q.status, q.answer_text, q.answered_by, q.created_at, q.answered_at
+             FROM questions q WHERE q.id = $1"
+        )
+        .bind(question_id)
+        .fetch_optional(&self.db)
+        .await
+        {
+            Ok(r) => r,
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+        };
+
+        match row {
+            Some((id, question_text, status, answer_text, answered_by, created_at, answered_at)) => {
+                let mut result = serde_json::json!({
+                    "id": id,
+                    "question_text": question_text,
+                    "status": status,
+                    "created_at": created_at.to_rfc3339(),
+                });
+
+                if let Some(answer) = &answer_text {
+                    result["answer_text"] = serde_json::json!(answer);
+                }
+                if let Some(by) = answered_by {
+                    // Look up the answerer's display name
+                    if let Ok(Some(p)) = sqlx::query_as::<_, Participant>(
+                        "SELECT * FROM participants WHERE id = $1"
+                    ).bind(by).fetch_optional(&self.db).await {
+                        result["answered_by_name"] = serde_json::json!(p.display_name);
+                    }
+                    result["answered_by"] = serde_json::json!(by);
+                }
+                if let Some(at) = answered_at {
+                    result["answered_at"] = serde_json::json!(at.to_rfc3339());
+                }
+
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result).unwrap(),
+                )]))
+            }
+            None => Ok(CallToolResult::error(vec![Content::text("Question not found")])),
+        }
+    }
+
+    #[tool(description = "List questions in the current session. Defaults to pending questions. Use status='all' to see everything.")]
+    async fn list_questions(
+        &self,
+        Parameters(params): Parameters<ListQuestionsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let status_filter = params.status.as_deref().unwrap_or("pending");
+
+        let questions: Vec<(Uuid, String, String, Option<String>, Uuid, Option<Uuid>, Option<Uuid>, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>)> = match status_filter {
+            "all" => {
+                sqlx::query_as(
+                    "SELECT q.id, q.question_text, q.status, q.answer_text, q.asked_by, q.directed_to, q.answered_by, q.created_at, q.answered_at
+                     FROM questions q WHERE q.session_id = $1
+                     ORDER BY q.created_at DESC"
+                )
+                .bind(session_id)
+                .fetch_all(&self.db)
+                .await
+            }
+            _ => {
+                sqlx::query_as(
+                    "SELECT q.id, q.question_text, q.status, q.answer_text, q.asked_by, q.directed_to, q.answered_by, q.created_at, q.answered_at
+                     FROM questions q WHERE q.session_id = $1 AND q.status = $2
+                     ORDER BY q.created_at DESC"
+                )
+                .bind(session_id)
+                .bind(status_filter)
+                .fetch_all(&self.db)
+                .await
+            }
+        }.map_err(|e| {
+            McpError::internal_error(format!("Database error: {e}"), None)
+        })?;
+
+        let mut items: Vec<serde_json::Value> = Vec::new();
+        for (id, question_text, status, answer_text, asked_by, directed_to, answered_by, created_at, answered_at) in questions {
+            let mut item = serde_json::json!({
+                "id": id,
+                "question_text": question_text,
+                "status": status,
+                "asked_by": asked_by,
+                "created_at": created_at.to_rfc3339(),
+            });
+            if let Some(dt) = directed_to {
+                item["directed_to"] = serde_json::json!(dt);
+            }
+            if let Some(answer) = &answer_text {
+                item["answer_text"] = serde_json::json!(answer);
+            }
+            if let Some(by) = answered_by {
+                item["answered_by"] = serde_json::json!(by);
+            }
+            if let Some(at) = answered_at {
+                item["answered_at"] = serde_json::json!(at.to_rfc3339());
+            }
+            items.push(item);
+        }
+
+        let result = serde_json::json!({
+            "count": items.len(),
+            "questions": items,
+        });
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
         )]))
     }
 
