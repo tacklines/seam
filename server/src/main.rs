@@ -206,6 +206,9 @@ async fn main() {
         .route("/api/projects/{project_id}/workspaces/{workspace_id}/events", get(routes::workspaces::workspace_events))
         // Workspace Logs (agent process output)
         .route("/api/workspaces/{workspace_id}/logs", post(routes::workspace_logs::ingest_logs).get(routes::workspace_logs::get_logs))
+        // Invocations (ephemeral claude -p calls)
+        .route("/api/projects/{project_id}/invocations", get(routes::invocations::list_invocations).post(routes::invocations::create_invocation))
+        .route("/api/invocations/{invocation_id}", get(routes::invocations::get_invocation))
         // Integrations
         .route("/api/integrations/coder/status", get(routes::integrations::coder_status))
         // Domain Events

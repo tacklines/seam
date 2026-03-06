@@ -6,6 +6,7 @@ pub mod automations;
 pub mod credentials;
 pub mod events;
 pub mod integrations;
+pub mod invocations;
 pub mod messages;
 pub mod notes;
 pub mod orgs;
