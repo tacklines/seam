@@ -11,7 +11,7 @@ services:
       - ./infra/keycloak:/opt/keycloak/data/import
 
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_DB: seam
       POSTGRES_USER: seam

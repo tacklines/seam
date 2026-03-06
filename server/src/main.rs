@@ -4,6 +4,7 @@ mod coder;
 mod credentials;
 mod db;
 mod events;
+pub mod knowledge;
 mod mcp_auth;
 mod mcp_handler;
 #[allow(dead_code)]
