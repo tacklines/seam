@@ -202,7 +202,7 @@ Event-driven reactions and scheduled jobs, powered by RabbitMQ.
 
 - `launch_agent` — launch a Coder workspace with agent config
 - `webhook` — HTTP callback (not yet implemented)
-- `mcp_tool` — invoke an MCP tool (not yet implemented)
+- `mcp_tool` — invoke an MCP tool via Streamable HTTP client
 
 ### API Endpoints
 
@@ -217,6 +217,41 @@ Event-driven reactions and scheduled jobs, powered by RabbitMQ.
 - `WORKER_API_TOKEN` — Bearer token for worker to call server API (launch_agent action)
 - `SEAM_URL` — Server URL for internal API calls (default: `http://localhost:3002`)
 - RabbitMQ management UI: `http://localhost:15672` (seam/seam)
+
+## Knowledge Management
+
+Event-driven indexing pipeline that makes task, comment, plan, and code content searchable by agents via MCP tools.
+
+### Pipeline
+
+1. **Domain events** fire on task/comment/plan CRUD (PG NOTIFY on `domain_events` channel)
+2. **Indexer** (`indexer.rs`) listens for events, fetches full entity, splits into chunks, writes to `knowledge_chunks` table with NULL embeddings
+3. **Embedding worker** (`embeddings.rs`) polls for NULL-embedding chunks, calls Ollama `/api/embed`, writes `pgvector::Vector` back
+4. **Search** (`knowledge.rs`) provides FTS (`search_fts_only`) and hybrid pgvector+FTS via Reciprocal Rank Fusion (`search_hybrid`)
+
+### Code Search
+
+Tantivy-based full-text search for repository files (`code_search.rs`). Separate from knowledge chunks — indexes raw source code with org/project scoping.
+
+- `POST /api/projects/:id/code-index` — index a file
+- `DELETE /api/projects/:id/code-index` — clear project index
+- Index stored at `./code-search-index/` (Tantivy MmapDirectory)
+
+### MCP Tools
+
+- `search_knowledge` — FTS search across knowledge chunks (project-scoped or cross-project)
+- `get_knowledge_detail` — fetch full chunk by ID
+- `search_code` — Tantivy code search with snippet highlights
+
+### Environment
+
+- `OLLAMA_URL` — Ollama endpoint for embeddings (worker disabled if unset)
+- `EMBEDDING_MODEL` — model name (default: `qwen3-embedding:0.6b`)
+
+### Key Tables
+
+- `knowledge_chunks` — indexed content with optional pgvector embeddings
+- `consumer_cursors` — cursor tracking for the indexer consumer
 
 ## Conventions
 
