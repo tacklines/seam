@@ -10,6 +10,7 @@ import {
   COMPLEXITY_LABELS,
 } from '../../state/task-types.js';
 import { store, type SessionParticipant } from '../../state/app-state.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -572,14 +573,14 @@ export class TaskDetail extends LitElement {
       this._task = task;
       this._activity = activity;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load task';
+      this._error = err instanceof Error ? err.message : t('taskDetail.errorLoad');
     } finally {
       this._loading = false;
     }
   }
 
   private _getParticipantName(id: string | null): string {
-    if (!id) return 'Unassigned';
+    if (!id) return t('taskDetail.sidebar.unassigned');
     const p = this.participants.find(p => p.id === id);
     return p?.display_name ?? id.slice(0, 8);
   }
@@ -594,13 +595,13 @@ export class TaskDetail extends LitElement {
     const then = new Date(iso).getTime();
     const diff = now - then;
     const seconds = Math.floor(diff / 1000);
-    if (seconds < 60) return 'just now';
+    if (seconds < 60) return t('time.justNow');
     const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
+    if (minutes < 60) return t('time.minutesAgo', { count: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return t('time.hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
+    if (days < 7) return t('time.daysAgo', { count: days });
     return this._formatDate(iso);
   }
 
@@ -611,7 +612,7 @@ export class TaskDetail extends LitElement {
       await updateTask(this.sessionCode, this._task.id, fields);
       await this._loadTask();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to update';
+      this._error = err instanceof Error ? err.message : t('taskDetail.errorUpdate');
     }
   }
 
@@ -637,7 +638,7 @@ export class TaskDetail extends LitElement {
       await deleteTask(this.sessionCode, this._task.id);
       this.dispatchEvent(new CustomEvent('deleted'));
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to delete';
+      this._error = err instanceof Error ? err.message : t('taskDetail.errorDelete');
     }
   }
 
@@ -666,7 +667,7 @@ export class TaskDetail extends LitElement {
         <sl-button size="small" variant="primary" outline style="width: 100%; margin-top: 0.25rem;"
           @click=${this._claimTask}>
           <sl-icon slot="prefix" name="hand-index-thumb"></sl-icon>
-          Claim
+          ${t('taskBoard.sidebar.claim')}
         </sl-button>`;
     }
 
@@ -675,7 +676,7 @@ export class TaskDetail extends LitElement {
         <sl-button size="small" variant="neutral" outline style="width: 100%; margin-top: 0.25rem;"
           @click=${this._unclaimTask}>
           <sl-icon slot="prefix" name="x-circle"></sl-icon>
-          Unclaim
+          ${t('taskBoard.sidebar.unclaim')}
         </sl-button>`;
     }
 
@@ -691,7 +692,7 @@ export class TaskDetail extends LitElement {
       this._commentExpanded = false;
       await this._loadTask();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to add comment';
+      this._error = err instanceof Error ? err.message : t('taskDetail.errorComment');
     } finally {
       this._commentLoading = false;
     }
@@ -704,8 +705,8 @@ export class TaskDetail extends LitElement {
 
     if (!this._task) {
       return html`
-        <sl-alert variant="danger" open>Task not found</sl-alert>
-        <sl-button @click=${() => this.dispatchEvent(new CustomEvent('back'))}>Back</sl-button>
+        <sl-alert variant="danger" open>${t('taskDetail.notFound')}</sl-alert>
+        <sl-button @click=${() => this.dispatchEvent(new CustomEvent('back'))}>${t('taskDetail.back')}</sl-button>
       `;
     }
 
@@ -732,7 +733,7 @@ export class TaskDetail extends LitElement {
       <!-- Header card -->
       <div class="header-card">
         <div class="header-top">
-          <sl-icon-button class="back-btn" name="arrow-left" label="Back"
+          <sl-icon-button class="back-btn" name="arrow-left" label=${t('taskDetail.back')}
             @click=${() => this.dispatchEvent(new CustomEvent('back'))}
           ></sl-icon-button>
 
@@ -763,41 +764,41 @@ export class TaskDetail extends LitElement {
             </sl-badge>
 
             <sl-dropdown>
-              <sl-icon-button slot="trigger" name="three-dots-vertical" label="Actions"></sl-icon-button>
+              <sl-icon-button slot="trigger" name="three-dots-vertical" label=${t('taskBoard.action.actions')}></sl-icon-button>
               <sl-menu>
                 ${task.status !== 'in_progress' ? html`
                   <sl-menu-item @click=${() => this._updateField({ status: 'in_progress' })}>
                     <sl-icon slot="prefix" name="play-fill"></sl-icon>
-                    Start Work
+                    ${t('taskDetail.startWork')}
                   </sl-menu-item>
                 ` : nothing}
                 ${task.status !== 'done' ? html`
                   <sl-menu-item @click=${() => this._updateField({ status: 'done' })}>
                     <sl-icon slot="prefix" name="check-lg"></sl-icon>
-                    Mark Done
+                    ${t('taskDetail.markDone')}
                   </sl-menu-item>
                 ` : nothing}
                 ${task.status !== 'closed' ? html`
                   <sl-menu-item @click=${() => this._updateField({ status: 'closed' })}>
                     <sl-icon slot="prefix" name="x-circle"></sl-icon>
-                    Close
+                    ${t('taskDetail.close')}
                   </sl-menu-item>
                 ` : nothing}
                 ${task.status !== 'open' ? html`
                   <sl-menu-item @click=${() => this._updateField({ status: 'open' })}>
                     <sl-icon slot="prefix" name="arrow-counterclockwise"></sl-icon>
-                    Reopen
+                    ${t('taskDetail.reopen')}
                   </sl-menu-item>
                 ` : nothing}
                 <sl-divider></sl-divider>
                 <sl-menu-item @click=${() => this.dispatchEvent(new CustomEvent('create-child', { detail: task.id }))}>
                   <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-                  Add Child Task
+                  ${t('taskDetail.addChild')}
                 </sl-menu-item>
                 <sl-divider></sl-divider>
                 <sl-menu-item style="color: var(--sl-color-danger-500);" @click=${() => this._handleDelete()}>
                   <sl-icon slot="prefix" name="trash"></sl-icon>
-                  Delete Task
+                  ${t('taskDetail.delete')}
                 </sl-menu-item>
               </sl-menu>
             </sl-dropdown>
@@ -811,7 +812,7 @@ export class TaskDetail extends LitElement {
           ${task.blocked_by.length > 0 ? html`
             <div class="blocked-banner">
               <sl-icon name="exclamation-triangle-fill"></sl-icon>
-              Blocked by ${task.blocked_by.map(b => b.ticket_id).join(', ')}
+              ${t('taskDetail.blockedBy')} ${task.blocked_by.map(b => b.ticket_id).join(', ')}
             </div>
           ` : nothing}
           ${this._renderDescription(task)}
@@ -829,7 +830,7 @@ export class TaskDetail extends LitElement {
   private _renderDescription(task: TaskDetailView) {
     return html`
       <div class="description-section">
-        <div class="section-heading">Description</div>
+        <div class="section-heading">${t('taskDetail.description')}</div>
         ${this._editingDescription
           ? html`<div>
               <sl-textarea
@@ -844,8 +845,8 @@ export class TaskDetail extends LitElement {
                   const val = (textarea as any)?.value ?? '';
                   this._updateField({ description: val || null });
                   this._editingDescription = false;
-                }}>Save</sl-button>
-                <sl-button size="small" @click=${() => { this._editingDescription = false; }}>Cancel</sl-button>
+                }}>${t('taskDetail.save')}</sl-button>
+                <sl-button size="small" @click=${() => { this._editingDescription = false; }}>${t('taskDetail.cancel')}</sl-button>
               </div>
             </div>`
           : task.description
@@ -853,7 +854,7 @@ export class TaskDetail extends LitElement {
                 <markdown-content .content=${task.description}></markdown-content>
                 <sl-icon class="edit-hint" name="pencil" style="position: absolute; top: 0.5rem; right: 0.5rem;"></sl-icon>
               </div>`
-            : html`<div class="no-description" @click=${() => { this._editingDescription = true; }}>Click to add a description...</div>`
+            : html`<div class="no-description" @click=${() => { this._editingDescription = true; }}>${t('taskDetail.clickToAdd')}</div>`
         }
       </div>
     `;
@@ -863,12 +864,12 @@ export class TaskDetail extends LitElement {
     return html`
       <div class="children-section">
         <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
-          <span>Children (${task.children.length})</span>
+          <span>${t('taskDetail.childrenCount', { count: task.children.length })}</span>
           <sl-button size="small" variant="text"
             @click=${() => this.dispatchEvent(new CustomEvent('create-child', { detail: task.id }))}
           >
             <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-            Add
+            ${t('taskDetail.add')}
           </sl-button>
         </div>
         ${task.children.length > 0 ? html`
@@ -884,7 +885,7 @@ export class TaskDetail extends LitElement {
               </div>
             `)}
           </div>
-        ` : html`<span class="no-description" style="cursor: default; border: none; padding: 0.25rem;">No child tasks yet</span>`}
+        ` : html`<span class="no-description" style="cursor: default; border: none; padding: 0.25rem;">${t('taskDetail.noChildren')}</span>`}
       </div>
     `;
   }
@@ -893,7 +894,7 @@ export class TaskDetail extends LitElement {
     if (this._allTasks.length > 0) return;
     try {
       const tasks = await fetchTasks(this.sessionCode);
-      this._allTasks = tasks.map(t => ({ id: t.id, ticket_id: t.ticket_id, title: t.title }));
+      this._allTasks = tasks.map(tk => ({ id: tk.id, ticket_id: tk.ticket_id, title: tk.title }));
     } catch { /* ignore */ }
   }
 
@@ -904,7 +905,7 @@ export class TaskDetail extends LitElement {
       this._addingBlocker = false;
       await this._loadTask();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to add dependency';
+      this._error = err instanceof Error ? err.message : t('taskDetail.errorAddDep');
     }
   }
 
@@ -914,7 +915,7 @@ export class TaskDetail extends LitElement {
       await removeDependency(this.sessionCode, blockerId, this._task.id);
       await this._loadTask();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to remove dependency';
+      this._error = err instanceof Error ? err.message : t('taskDetail.errorRemoveDep');
     }
   }
 
@@ -924,7 +925,7 @@ export class TaskDetail extends LitElement {
       await removeDependency(this.sessionCode, this._task.id, blockedId);
       await this._loadTask();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to remove dependency';
+      this._error = err instanceof Error ? err.message : t('taskDetail.errorRemoveDep');
     }
   }
 
@@ -936,10 +937,10 @@ export class TaskDetail extends LitElement {
       return html`
         <div class="dep-section">
           <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>Dependencies</span>
+            <span>${t('taskDetail.dependencies')}</span>
             <sl-button size="small" variant="text" @click=${() => { this._addingBlocker = true; this._loadAllTasks(); }}>
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-              Add
+              ${t('taskDetail.add')}
             </sl-button>
           </div>
         </div>
@@ -949,7 +950,7 @@ export class TaskDetail extends LitElement {
     // Filter tasks that can be selected as blockers (not self, not already blocking)
     const existingBlockerIds = new Set(task.blocked_by.map(b => b.id));
     existingBlockerIds.add(task.id);
-    const availableTasks = this._allTasks.filter(t => !existingBlockerIds.has(t.id));
+    const availableTasks = this._allTasks.filter(tk => !existingBlockerIds.has(tk.id));
 
     return html`
       <div class="dep-section">
@@ -957,12 +958,12 @@ export class TaskDetail extends LitElement {
           <span>Dependencies</span>
           <sl-button size="small" variant="text" @click=${() => { this._addingBlocker = true; this._loadAllTasks(); }}>
             <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-            Add Blocker
+            ${t('taskDetail.addBlocker')}
           </sl-button>
         </div>
 
         ${hasBlockedBy ? html`
-          <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; font-weight: 600;">BLOCKED BY</div>
+          <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; font-weight: 600;">${t('taskDetail.blockedByLabel')}</div>
           <div class="dep-list">
             ${task.blocked_by.map(b => html`
               <div class="dep-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: b.id }))}>
@@ -979,7 +980,7 @@ export class TaskDetail extends LitElement {
         ` : nothing}
 
         ${hasBlocks ? html`
-          <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; margin-top: ${hasBlockedBy ? '0.75rem' : '0'}; font-weight: 600;">BLOCKS</div>
+          <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; margin-top: ${hasBlockedBy ? '0.75rem' : '0'}; font-weight: 600;">${t('taskDetail.blocksLabel')}</div>
           <div class="dep-list">
             ${task.blocks.map(b => html`
               <div class="dep-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: b.id }))}>
@@ -997,14 +998,14 @@ export class TaskDetail extends LitElement {
 
         ${this._addingBlocker ? html`
           <div class="dep-add-row">
-            <sl-select size="small" placeholder="Select blocking task..." style="flex: 1;"
+            <sl-select size="small" placeholder=${t('taskDetail.selectBlocker')} style="flex: 1;"
               @sl-change=${(e: Event) => {
                 const val = (e.target as HTMLSelectElement).value;
                 if (val) this._handleAddBlocker(val);
               }}
             >
-              ${availableTasks.map(t => html`
-                <sl-option value=${t.id}>${t.ticket_id} — ${t.title}</sl-option>
+              ${availableTasks.map(tk => html`
+                <sl-option value=${tk.id}>${tk.ticket_id} — ${tk.title}</sl-option>
               `)}
             </sl-select>
             <sl-icon-button name="x-lg" label="Cancel" @click=${() => { this._addingBlocker = false; }}></sl-icon-button>
@@ -1047,7 +1048,7 @@ export class TaskDetail extends LitElement {
 
     return html`
       <div class="comments-section">
-        <div class="section-heading">Activity (${items.length})</div>
+        <div class="section-heading">${t('taskDetail.activityCount', { count: items.length })}</div>
 
         ${items.length > 0 ? html`
           <div class="comment-list">
@@ -1081,7 +1082,7 @@ export class TaskDetail extends LitElement {
           ? html`
             <div class="add-comment">
               <sl-textarea
-                placeholder="Add a comment... (Ctrl+Enter to send)"
+                placeholder=${t('taskDetail.commentPlaceholder')}
                 value=${this._commentText}
                 @sl-input=${(e: Event) => { this._commentText = (e.target as HTMLTextAreaElement).value; }}
                 @keydown=${(e: KeyboardEvent) => {
@@ -1104,7 +1105,7 @@ export class TaskDetail extends LitElement {
                 @click=${() => this._handleAddComment()}
               >
                 <sl-icon slot="prefix" name="send"></sl-icon>
-                Send
+                ${t('taskDetail.commentSend')}
               </sl-button>
             </div>`
           : html`
@@ -1115,7 +1116,7 @@ export class TaskDetail extends LitElement {
                 ta?.focus();
               });
             }}>
-              Add a comment...
+              ${t('taskDetail.commentPlaceholderShort')}
             </div>`
         }
       </div>
@@ -1125,11 +1126,11 @@ export class TaskDetail extends LitElement {
   private _renderSidebar(task: TaskDetailView) {
     return html`
       <div class="sidebar">
-        <div class="sidebar-heading">Details</div>
+        <div class="sidebar-heading">${t('taskDetail.sidebar.details')}</div>
 
         <!-- Ticket ID (read-only) -->
         <div class="meta-row">
-          <span class="meta-label">Ticket</span>
+          <span class="meta-label">${t('taskDetail.sidebar.ticket')}</span>
           <span class="meta-value" style="font-family: var(--sl-font-mono);">${task.ticket_id}</span>
         </div>
 
@@ -1145,17 +1146,17 @@ export class TaskDetail extends LitElement {
                 }}
                 style="width: 100%;"
               >
-                ${(['epic', 'story', 'task', 'subtask', 'bug'] as const).map(t => html`
-                  <sl-option value=${t}>
-                    <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[t]} style="color: ${TASK_TYPE_COLORS[t]}"></sl-icon>
-                    ${TASK_TYPE_LABELS[t]}
+                ${(['epic', 'story', 'task', 'subtask', 'bug'] as const).map(tt => html`
+                  <sl-option value=${tt}>
+                    <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[tt]} style="color: ${TASK_TYPE_COLORS[tt]}"></sl-icon>
+                    ${TASK_TYPE_LABELS[tt]}
                   </sl-option>
                 `)}
               </sl-select>
             </div>`
           : html`
             <div class="meta-row editable" @click=${() => { this._editingField = 'type'; }}>
-              <span class="meta-label">Type</span>
+              <span class="meta-label">${t('taskDetail.sidebar.type')}</span>
               <span class="meta-value">
                 <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${TASK_TYPE_COLORS[task.task_type]}; font-size: 0.85rem;"></sl-icon>
                 ${TASK_TYPE_LABELS[task.task_type]}
@@ -1182,7 +1183,7 @@ export class TaskDetail extends LitElement {
             </div>`
           : html`
             <div class="meta-row editable" @click=${() => { this._editingField = 'status'; }}>
-              <span class="meta-label">Status</span>
+              <span class="meta-label">${t('taskDetail.sidebar.status')}</span>
               <span class="meta-value">
                 <sl-badge variant=${STATUS_VARIANTS[task.status] as any} pill size="small">${STATUS_LABELS[task.status]}</sl-badge>
                 <sl-icon class="edit-pencil" name="pencil"></sl-icon>
@@ -1212,7 +1213,7 @@ export class TaskDetail extends LitElement {
             </div>`
           : html`
             <div class="meta-row editable" @click=${() => { this._editingField = 'priority'; }}>
-              <span class="meta-label">Priority</span>
+              <span class="meta-label">${t('taskDetail.sidebar.priority')}</span>
               <span class="meta-value">
                 <sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.85rem;"></sl-icon>
                 ${PRIORITY_LABELS[task.priority]}
@@ -1240,7 +1241,7 @@ export class TaskDetail extends LitElement {
             </div>`
           : html`
             <div class="meta-row editable" @click=${() => { this._editingField = 'complexity'; }}>
-              <span class="meta-label">Complexity</span>
+              <span class="meta-label">${t('taskDetail.sidebar.complexity')}</span>
               <span class="meta-value">
                 ${COMPLEXITY_LABELS[task.complexity]}
                 <sl-icon class="edit-pencil" name="pencil"></sl-icon>
@@ -1253,7 +1254,7 @@ export class TaskDetail extends LitElement {
           ? html`
             <div class="meta-row">
               <sl-select size="small" value=${task.assigned_to ?? ''}
-                placeholder="Unassigned" clearable
+                placeholder=${t('taskDetail.sidebar.unassigned')} clearable
                 @sl-change=${(e: Event) => {
                   const val = (e.target as HTMLSelectElement).value;
                   this._updateField({ assigned_to: val || null });
@@ -1271,11 +1272,11 @@ export class TaskDetail extends LitElement {
             </div>`
           : html`
             <div class="meta-row editable" @click=${() => { this._editingField = 'assignee'; }}>
-              <span class="meta-label">Assignee</span>
+              <span class="meta-label">${t('taskDetail.sidebar.assignee')}</span>
               <span class="meta-value">
                 ${task.assigned_to
                   ? html`<sl-icon name=${this.participants.find(p => p.id === task.assigned_to)?.participant_type === 'agent' ? 'robot' : 'person-fill'} style="font-size: 0.8rem;"></sl-icon> ${this._getParticipantName(task.assigned_to)}`
-                  : html`<span style="color: var(--text-tertiary);">Unassigned</span>`
+                  : html`<span style="color: var(--text-tertiary);">${t('taskDetail.sidebar.unassigned')}</span>`
                 }
                 <sl-icon class="edit-pencil" name="pencil"></sl-icon>
               </span>
@@ -1287,13 +1288,13 @@ export class TaskDetail extends LitElement {
 
         <!-- Creator (read-only) -->
         <div class="meta-row">
-          <span class="meta-label">Creator</span>
+          <span class="meta-label">${t('taskDetail.sidebar.creator')}</span>
           <span class="meta-value">${this._getParticipantName(task.created_by)}</span>
         </div>
 
         <!-- Created -->
         <div class="meta-row">
-          <span class="meta-label">Created</span>
+          <span class="meta-label">${t('taskDetail.sidebar.created')}</span>
           <span class="meta-value">
             <sl-tooltip content=${this._formatDate(task.created_at)}>
               <span>${this._relativeTime(task.created_at)}</span>
@@ -1304,7 +1305,7 @@ export class TaskDetail extends LitElement {
         <!-- Updated -->
         ${task.updated_at !== task.created_at ? html`
           <div class="meta-row">
-            <span class="meta-label">Updated</span>
+            <span class="meta-label">${t('taskDetail.sidebar.updated')}</span>
             <span class="meta-value">
               <sl-tooltip content=${this._formatDate(task.updated_at)}>
                 <span>${this._relativeTime(task.updated_at)}</span>
@@ -1316,7 +1317,7 @@ export class TaskDetail extends LitElement {
         <!-- Closed -->
         ${task.closed_at ? html`
           <div class="meta-row">
-            <span class="meta-label">Closed</span>
+            <span class="meta-label">${t('taskDetail.sidebar.closed')}</span>
             <span class="meta-value">
               <sl-tooltip content=${this._formatDate(task.closed_at)}>
                 <span>${this._relativeTime(task.closed_at)}</span>
@@ -1329,7 +1330,7 @@ export class TaskDetail extends LitElement {
 
         <!-- Commits -->
         <div class="meta-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
-          <span class="meta-label">Commits</span>
+          <span class="meta-label">${t('taskDetail.sidebar.commits')}</span>
           ${task.commit_hashes.length > 0
             ? html`
               <div class="commit-chips">
@@ -1346,7 +1347,7 @@ export class TaskDetail extends LitElement {
             ? html`
               <sl-input
                 size="small"
-                placeholder="Enter commit SHA and press Enter"
+                placeholder=${t('taskDetail.sidebar.commitPlaceholder')}
                 style="width: 100%; font-family: var(--sl-font-mono); font-size: 0.75rem;"
                 @sl-change=${(e: Event) => {
                   const val = (e.target as HTMLInputElement).value.trim();
@@ -1355,13 +1356,13 @@ export class TaskDetail extends LitElement {
                 }}
                 @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingField = null; }}
               ></sl-input>`
-            : html`<span class="link-action" @click=${() => { this._editingField = 'commit'; }}>+ Add commit</span>`
+            : html`<span class="link-action" @click=${() => { this._editingField = 'commit'; }}>${t('taskDetail.sidebar.addCommit')}</span>`
           }
         </div>
 
         <!-- No Code Change -->
         <div class="meta-row">
-          <span class="meta-label">No code change</span>
+          <span class="meta-label">${t('taskDetail.sidebar.noCodeChange')}</span>
           <sl-switch
             size="small"
             ?checked=${task.no_code_change}
@@ -1375,11 +1376,11 @@ export class TaskDetail extends LitElement {
         ${task.source_task_id
           ? html`
             <div class="meta-row">
-              <span class="meta-label">Derived from</span>
+              <span class="meta-label">${t('taskDetail.sidebar.derivedFrom')}</span>
               <span class="meta-value">
                 <a class="provenance-link" @click=${() => this._navigateToTask(task.source_task_id!)}>
                   <sl-icon name="arrow-return-left" style="font-size: 0.7rem;"></sl-icon>
-                  Source task
+                  ${t('taskDetail.sidebar.sourceTask')}
                 </a>
               </span>
             </div>`

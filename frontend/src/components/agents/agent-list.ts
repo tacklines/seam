@@ -273,12 +273,12 @@ export class AgentList extends LitElement {
   private _relativeTime(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return t('time.justNow');
+    if (mins < 60) return t('time.minutesAgo', { count: mins });
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
+    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
     const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
+    return t('time.daysAgo', { count: days });
   }
 
   private _selectAgent(agent: ProjectAgentView) {
@@ -388,7 +388,7 @@ export class AgentList extends LitElement {
         ${agent.workspace ? html`
           <div class="workspace-section">
             <sl-icon name="terminal"></sl-icon>
-            <span class="ws-name">${agent.workspace.coder_workspace_name ?? 'workspace'}</span>
+            <span class="ws-name">${agent.workspace.coder_workspace_name ?? t('agentDetail.workspaceFallback')}</span>
             <sl-badge variant=${WS_STATUS_VARIANT[agent.workspace.status] ?? 'neutral'}>
               ${agent.workspace.status}
             </sl-badge>

@@ -8,6 +8,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { fetchDependencyGraph, type DependencyGraphView } from '../../state/task-api.js';
 import type { TaskView, TaskStatus, TaskType, TaskPriority } from '../../state/task-types.js';
 import { STATUS_LABELS, TASK_TYPE_LABELS, PRIORITY_LABELS } from '../../state/task-types.js';
+import { t } from '../../lib/i18n.js';
 
 // ─── Data structures ───
 
@@ -1667,7 +1668,7 @@ export class DependencyGraph extends LitElement {
         <sl-icon name="search" class="search-icon"></sl-icon>
         <input class="search-input"
                type="text"
-               placeholder="Search tasks..."
+               placeholder=${t('graph.searchPlaceholder')}
                .value=${this._searchQuery}
                @input=${this._onSearchInput}
         />
@@ -1680,13 +1681,13 @@ export class DependencyGraph extends LitElement {
       <div class="nav-controls">
         <button class="nav-btn view-toggle ${this._is2D ? '' : 'active'}"
                 @click=${() => this._toggleViewMode()}
-                title="Toggle 2D/3D view">
+                title=${t('graph.toggle2d3d')}>
           ${this._is2D ? '3D' : '2D'}
         </button>
-        <button class="nav-btn" @click=${() => this._zoomToFit()} title="Zoom to fit (F)">
+        <button class="nav-btn" @click=${() => this._zoomToFit()} title=${t('graph.zoomToFit')}>
           <sl-icon name="fullscreen"></sl-icon>
         </button>
-        <button class="nav-btn" @click=${() => this._resetView()} title="Reset view (R)">
+        <button class="nav-btn" @click=${() => this._resetView()} title=${t('graph.resetView')}>
           <sl-icon name="arrow-counterclockwise"></sl-icon>
         </button>
       </div>
@@ -1721,12 +1722,12 @@ export class DependencyGraph extends LitElement {
         </div>
 
         ${task.description ? html`
-          <div class="detail-section-title">Description</div>
+          <div class="detail-section-title">${t('graph.description')}</div>
           <div class="detail-description">${task.description}</div>
         ` : nothing}
 
         ${blockedBy.length > 0 ? html`
-          <div class="detail-section-title">Blocked by</div>
+          <div class="detail-section-title">${t('graph.blockedBy')}</div>
           <div class="detail-dep-list">
             ${blockedBy.map(n => html`
               <div class="detail-dep-item" @click=${() => this._selectNodeById(n.task.id)}>
@@ -1739,7 +1740,7 @@ export class DependencyGraph extends LitElement {
         ` : nothing}
 
         ${blocks.length > 0 ? html`
-          <div class="detail-section-title">Blocks</div>
+          <div class="detail-section-title">${t('graph.blocks')}</div>
           <div class="detail-dep-list">
             ${blocks.map(n => html`
               <div class="detail-dep-item" @click=${() => this._selectNodeById(n.task.id)}>
@@ -1769,11 +1770,11 @@ export class DependencyGraph extends LitElement {
   private _renderLegend() {
     return html`
       <div class="legend">
-        <div class="legend-title">Status</div>
-        <div class="legend-row"><span class="legend-dot" style="background: ${STATUS_HEX.open};"></span> Open</div>
-        <div class="legend-row"><span class="legend-dot" style="background: ${STATUS_HEX.in_progress};"></span> In Progress</div>
-        <div class="legend-row"><span class="legend-dot" style="background: ${STATUS_HEX.done};"></span> Done</div>
-        <div class="legend-row"><span class="legend-dot" style="background: ${STATUS_HEX.closed};"></span> Closed</div>
+        <div class="legend-title">${t('graph.legendStatus')}</div>
+        <div class="legend-row"><span class="legend-dot" style="background: ${STATUS_HEX.open};"></span> ${t('graph.legendOpen')}</div>
+        <div class="legend-row"><span class="legend-dot" style="background: ${STATUS_HEX.in_progress};"></span> ${t('graph.legendInProgress')}</div>
+        <div class="legend-row"><span class="legend-dot" style="background: ${STATUS_HEX.done};"></span> ${t('graph.legendDone')}</div>
+        <div class="legend-row"><span class="legend-dot" style="background: ${STATUS_HEX.closed};"></span> ${t('graph.legendClosed')}</div>
       </div>
     `;
   }
@@ -1784,7 +1785,7 @@ export class DependencyGraph extends LitElement {
     const edges = this._links.filter(l => l.visible).length;
     return html`
       <div class="stats-bar">
-        <span>${visible}/${total} nodes &middot; ${edges} edges</span>
+        <span>${t('graph.stats', { visible, total, edges })}</span>
       </div>
     `;
   }

@@ -331,12 +331,12 @@ export class AgentDetail extends LitElement {
   private _relativeTime(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return t('time.justNow');
+    if (mins < 60) return t('time.minutesAgo', { count: mins });
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
+    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
     const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
+    return t('time.daysAgo', { count: days });
   }
 
   private _goBack() {

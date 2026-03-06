@@ -740,7 +740,7 @@ export class TaskBoard extends LitElement {
         this._tasks = await fetchTasks(this.sessionCode, filters as any);
       }
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load tasks';
+      this._error = err instanceof Error ? err.message : t('taskBoard.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -873,10 +873,10 @@ export class TaskBoard extends LitElement {
   private async _handleStatusChange(task: TaskView, newStatus: TaskStatus) {
     try {
       await updateTask(this.sessionCode, task.id, { status: newStatus });
-      this._showToast(`Moved to ${STATUS_LABELS[newStatus]}`);
+      this._showToast(t('taskBoard.toast.movedTo', { status: STATUS_LABELS[newStatus] }));
       await this._loadTasks();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to update';
+      this._error = err instanceof Error ? err.message : t('taskBoard.errorUpdate');
     }
   }
 
@@ -901,11 +901,11 @@ export class TaskBoard extends LitElement {
       await Promise.all(
         [...this._selectedIds].map(id => updateTask(this.sessionCode, id, { status }))
       );
-      this._showToast(`${this._selectedIds.size} task(s) → ${STATUS_LABELS[status]}`);
+      this._showToast(t('taskBoard.toast.batchMoved', { count: this._selectedIds.size, status: STATUS_LABELS[status] }));
       this._selectedIds = new Set();
       await this._loadTasks();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Batch update failed';
+      this._error = err instanceof Error ? err.message : t('taskBoard.error.batchUpdate');
     } finally {
       this._batchLoading = false;
     }
@@ -918,11 +918,11 @@ export class TaskBoard extends LitElement {
       await Promise.all(
         [...this._selectedIds].map(id => deleteTask(this.sessionCode, id))
       );
-      this._showToast(`${this._selectedIds.size} task(s) deleted`);
+      this._showToast(t('taskBoard.toast.batchDeleted', { count: this._selectedIds.size }));
       this._selectedIds = new Set();
       await this._loadTasks();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Batch delete failed';
+      this._error = err instanceof Error ? err.message : t('taskBoard.error.batchDelete');
     } finally {
       this._batchLoading = false;
     }
@@ -932,10 +932,10 @@ export class TaskBoard extends LitElement {
     try {
       await deleteTask(this.sessionCode, taskId);
       if (this._selectedTaskId === taskId) this._deselectTask();
-      this._showToast('Task deleted');
+      this._showToast(t('taskBoard.toast.taskDeleted'));
       await this._loadTasks();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to delete';
+      this._error = err instanceof Error ? err.message : t('taskBoard.errorDelete');
     }
   }
 
@@ -964,10 +964,10 @@ export class TaskBoard extends LitElement {
       this._createPriority = 'medium';
       this._createComplexity = 'medium';
       this._createStatus = '';
-      this._showToast('Task created');
+      this._showToast(t('taskBoard.toast.taskCreated'));
       await this._loadTasks();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to create task';
+      this._error = err instanceof Error ? err.message : t('taskBoard.errorCreate');
     } finally {
       this._createLoading = false;
     }
@@ -1476,7 +1476,7 @@ export class TaskBoard extends LitElement {
         <div class="sprint-panel-header">
           ${this.sessions.length > 0 ? html`
             <sl-select
-              placeholder="Select a sprint session..."
+              placeholder=${t('taskBoard.sprint.selectSession')}
               size="small"
               clearable
               value=${this._sprintSessionCode}
@@ -1489,7 +1489,7 @@ export class TaskBoard extends LitElement {
           ` : nothing}
 
           <sl-input
-            placeholder="New sprint name..."
+            placeholder=${t('taskBoard.sprint.newName')}
             size="small"
             value=${this._sprintSessionName}
             @sl-input=${(e: Event) => { this._sprintSessionName = (e.target as HTMLInputElement).value; }}
@@ -1498,20 +1498,20 @@ export class TaskBoard extends LitElement {
           <sl-button size="small" variant="default" ?loading=${this._sprintCreating}
             ?disabled=${!this._sprintSessionName.trim()}
             @click=${() => void this._createSprint()}>
-            Create Sprint
+            ${t('taskBoard.sprint.createSprint')}
           </sl-button>
 
           <span style="flex: 1;"></span>
 
           ${sprintTasks.length > 0 ? html`
-            <sl-badge variant="primary" pill>${sprintTasks.length} task${sprintTasks.length !== 1 ? 's' : ''}</sl-badge>
+            <sl-badge variant="primary" pill>${t('taskBoard.sprint.taskCount', { count: sprintTasks.length, suffix: sprintTasks.length !== 1 ? 's' : '' })}</sl-badge>
           ` : nothing}
 
           ${this._sprintSessionCode ? html`
             <sl-button size="small" variant="primary"
               @click=${() => { navigateTo('/sessions/' + this._sprintSessionCode); }}>
               <sl-icon slot="prefix" name="play-fill"></sl-icon>
-              Start Sprint
+              ${t('taskBoard.sprint.startSprint')}
             </sl-button>
           ` : nothing}
         </div>
@@ -1532,9 +1532,9 @@ export class TaskBoard extends LitElement {
           }}
         >
           ${!this._sprintSessionCode ? html`
-            <div class="sprint-drop-zone-empty">Select or create a sprint session first</div>
+            <div class="sprint-drop-zone-empty">${t('taskBoard.sprint.selectFirst')}</div>
           ` : sprintTasks.length === 0 ? html`
-            <div class="sprint-drop-zone-empty">Drag tasks here to plan your sprint</div>
+            <div class="sprint-drop-zone-empty">${t('taskBoard.sprint.dragHint')}</div>
           ` : sprintTasks.map(task => html`
             <div class="sprint-task-chip" @click=${() => { this._selectTask(task.id); }}>
               <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${TASK_TYPE_COLORS[task.task_type]}; font-size: 0.75rem;"></sl-icon>
@@ -1554,10 +1554,10 @@ export class TaskBoard extends LitElement {
     if (!this._dragTaskId || !this._sprintSessionCode) return;
     try {
       await addTasksToSession(this._sprintSessionCode, [this._dragTaskId]);
-      this._showToast('Task added to sprint');
+      this._showToast(t('taskBoard.toast.addedToSprint'));
       await this._loadTasks();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to add task to sprint';
+      this._error = err instanceof Error ? err.message : t('taskBoard.sprint.errorAdd');
     }
     this._dragTaskId = null;
   }
@@ -1566,10 +1566,10 @@ export class TaskBoard extends LitElement {
     if (!this._sprintSessionCode) return;
     try {
       await removeTaskFromSession(this._sprintSessionCode, taskId);
-      this._showToast('Task removed from sprint');
+      this._showToast(t('taskBoard.toast.removedFromSprint'));
       await this._loadTasks();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to remove task from sprint';
+      this._error = err instanceof Error ? err.message : t('taskBoard.sprint.errorRemove');
     }
   }
 
@@ -1587,9 +1587,9 @@ export class TaskBoard extends LitElement {
       this.sessions = [...this.sessions, { code: data.session.code, name: data.session.name, id: data.session.id }];
       this._sprintSessionCode = data.session.code;
       this._sprintSessionName = '';
-      this._showToast('Sprint session created');
+      this._showToast(t('taskBoard.toast.sprintCreated'));
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to create sprint';
+      this._error = err instanceof Error ? err.message : t('taskBoard.errorSprint');
     } finally {
       this._sprintCreating = false;
     }
@@ -1603,7 +1603,7 @@ export class TaskBoard extends LitElement {
 
     return html`
       <sl-dialog
-        label="New Task"
+        label=${t('taskBoard.create.title')}
         ?open=${this._showCreateDialog}
         @sl-request-close=${() => { this._showCreateDialog = false; }}
         @sl-after-show=${() => {
@@ -1613,7 +1613,7 @@ export class TaskBoard extends LitElement {
       >
         <div class="create-form">
           <sl-select
-            label="Type"
+            label=${t('taskBoard.create.typeLabel')}
             value=${this._createType}
             @sl-change=${(e: Event) => { this._createType = (e.target as HTMLSelectElement).value as TaskType; }}
           >
@@ -1626,16 +1626,16 @@ export class TaskBoard extends LitElement {
           </sl-select>
 
           <sl-input
-            label="Title"
-            placeholder="What needs to be done?"
+            label=${t('taskBoard.create.titleLabel')}
+            placeholder=${t('taskBoard.create.titlePlaceholder')}
             value=${this._createTitle}
             @sl-input=${(e: Event) => { this._createTitle = (e.target as HTMLInputElement).value; }}
             @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._handleCreate(); }}
           ></sl-input>
 
           <sl-textarea
-            label="Description"
-            placeholder="Optional details (markdown supported)"
+            label=${t('taskBoard.create.descLabel')}
+            placeholder=${t('taskBoard.create.descPlaceholder')}
             value=${this._createDescription}
             @sl-input=${(e: Event) => { this._createDescription = (e.target as HTMLTextAreaElement).value; }}
             rows="3"
@@ -1643,8 +1643,8 @@ export class TaskBoard extends LitElement {
 
           ${this.participants.length > 0 ? html`
             <sl-select
-              label="Assignee"
-              placeholder="Unassigned"
+              label=${t('taskBoard.create.assigneeLabel')}
+              placeholder=${t('taskBoard.create.unassigned')}
               clearable
               value=${this._createAssignee}
               @sl-change=${(e: Event) => { this._createAssignee = (e.target as HTMLSelectElement).value; }}
@@ -1660,7 +1660,7 @@ export class TaskBoard extends LitElement {
 
           <div style="display: flex; gap: 0.75rem;">
             <sl-select
-              label="Priority"
+              label=${t('taskBoard.create.priorityLabel')}
               value=${this._createPriority}
               @sl-change=${(e: Event) => { this._createPriority = (e.target as HTMLSelectElement).value as TaskPriority; }}
               style="flex: 1;"
@@ -1674,7 +1674,7 @@ export class TaskBoard extends LitElement {
             </sl-select>
 
             <sl-select
-              label="Complexity"
+              label=${t('taskBoard.create.complexityLabel')}
               value=${this._createComplexity}
               @sl-change=${(e: Event) => { this._createComplexity = (e.target as HTMLSelectElement).value as TaskComplexity; }}
               style="flex: 1;"
@@ -1687,8 +1687,8 @@ export class TaskBoard extends LitElement {
 
           ${parentCandidates.length > 0 ? html`
             <sl-select
-              label="Parent"
-              placeholder="None (top-level)"
+              label=${t('taskBoard.create.parentLabel')}
+              placeholder=${t('taskBoard.create.parentNone')}
               clearable
               value=${this._createParentId}
               @sl-change=${(e: Event) => { this._createParentId = (e.target as HTMLSelectElement).value; }}
@@ -1708,7 +1708,7 @@ export class TaskBoard extends LitElement {
           variant="primary"
           ?loading=${this._createLoading}
           @click=${() => this._handleCreate()}
-        >Create</sl-button>
+        >${t('taskBoard.create.submit')}</sl-button>
       </sl-dialog>
     `;
   }
@@ -1717,42 +1717,42 @@ export class TaskBoard extends LitElement {
     if (!this._showAgentDialog) return nothing;
     return html`
       <sl-dialog
-        label="Launch Agent"
+        label=${t('taskBoard.agent.title')}
         ?open=${this._showAgentDialog}
         @sl-request-close=${() => { this._showAgentDialog = false; }}
       >
         <div class="create-form">
           ${this._agentError ? html`<sl-alert variant="danger" open>${this._agentError}</sl-alert>` : nothing}
           <sl-select
-            label="Agent Type"
+            label=${t('taskBoard.agent.typeLabel')}
             value=${this._agentType}
             @sl-change=${(e: Event) => { this._agentType = (e.target as HTMLSelectElement).value; }}
           >
             <sl-option value="coder">
               <sl-icon slot="prefix" name="code-slash"></sl-icon>
-              Coder
+              ${t('taskBoard.agent.typeCoder')}
             </sl-option>
             <sl-option value="planner">
               <sl-icon slot="prefix" name="diagram-3"></sl-icon>
-              Planner
+              ${t('taskBoard.agent.typePlanner')}
             </sl-option>
             <sl-option value="reviewer">
               <sl-icon slot="prefix" name="search"></sl-icon>
-              Reviewer
+              ${t('taskBoard.agent.typeReviewer')}
             </sl-option>
           </sl-select>
 
           <sl-input
-            label="Branch"
-            placeholder="Auto-generated (agent/<type>-<id>)"
-            help-text="Leave empty to auto-create a branch for this agent"
+            label=${t('taskBoard.agent.branchLabel')}
+            placeholder=${t('taskBoard.agent.branchPlaceholder')}
+            help-text=${t('taskBoard.agent.branchHelp')}
             value=${this._agentBranch}
             @sl-input=${(e: Event) => { this._agentBranch = (e.target as HTMLInputElement).value; }}
           ></sl-input>
 
           <sl-textarea
-            label="Instructions"
-            placeholder="Optional: what should the agent focus on?"
+            label=${t('taskBoard.agent.instructionsLabel')}
+            placeholder=${t('taskBoard.agent.instructionsPlaceholder')}
             value=${this._agentInstructions}
             @sl-input=${(e: Event) => { this._agentInstructions = (e.target as HTMLTextAreaElement).value; }}
             rows="3"
@@ -1766,7 +1766,7 @@ export class TaskBoard extends LitElement {
           @click=${() => this._handleLaunchAgent()}
         >
           <sl-icon slot="prefix" name="rocket-takeoff"></sl-icon>
-          Launch
+          ${t('taskBoard.agent.launch')}
         </sl-button>
       </sl-dialog>
     `;
@@ -1785,10 +1785,10 @@ export class TaskBoard extends LitElement {
       this._agentType = 'coder';
       this._agentBranch = '';
       this._agentInstructions = '';
-      this._toastMessage = `Agent launched on branch ${result.branch}. It will appear in the session shortly.`;
+      this._toastMessage = t('taskBoard.toast.agentLaunched', { branch: result.branch });
       setTimeout(() => { this._toastMessage = ''; }, 4000);
     } catch (err) {
-      this._agentError = err instanceof Error ? err.message : 'Failed to launch agent';
+      this._agentError = err instanceof Error ? err.message : t('taskBoard.errorLaunch');
     } finally {
       this._agentLoading = false;
     }
@@ -1799,11 +1799,11 @@ export class TaskBoard extends LitElement {
     return html`
       <div class="shortcuts-overlay" @click=${() => { this._showShortcuts = false; }}>
         <div class="shortcuts-card" @click=${(e: Event) => e.stopPropagation()}>
-          <h3>Keyboard Shortcuts</h3>
-          <div class="shortcut-row"><span>New task</span><span class="shortcut-key">N</span></div>
-          <div class="shortcut-row"><span>Search</span><span class="shortcut-key">/</span></div>
-          <div class="shortcut-row"><span>Go back / Clear selection</span><span class="shortcut-key">Esc</span></div>
-          <div class="shortcut-row"><span>This help</span><span class="shortcut-key">?</span></div>
+          <h3>${t('taskBoard.shortcuts.title')}</h3>
+          <div class="shortcut-row"><span>${t('taskBoard.shortcuts.newTask')}</span><span class="shortcut-key">N</span></div>
+          <div class="shortcut-row"><span>${t('taskBoard.shortcuts.search')}</span><span class="shortcut-key">/</span></div>
+          <div class="shortcut-row"><span>${t('taskBoard.shortcuts.escape')}</span><span class="shortcut-key">Esc</span></div>
+          <div class="shortcut-row"><span>${t('taskBoard.shortcuts.help')}</span><span class="shortcut-key">?</span></div>
         </div>
       </div>
     `;
