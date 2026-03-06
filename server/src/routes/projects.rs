@@ -326,19 +326,27 @@ pub async fn list_project_sessions(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let mut views = Vec::new();
-    for session in sessions {
-        let participants: Vec<Participant> = sqlx::query_as(
-            "SELECT * FROM participants WHERE session_id = $1 AND disconnected_at IS NULL ORDER BY joined_at"
-        )
-        .bind(session.id)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Batch-fetch all participants for these sessions (avoids N+1)
+    let session_ids: Vec<Uuid> = sessions.iter().map(|s| s.id).collect();
+    let all_participants: Vec<Participant> = sqlx::query_as(
+        "SELECT * FROM participants WHERE session_id = ANY($1) AND disconnected_at IS NULL ORDER BY joined_at"
+    )
+    .bind(&session_ids)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Group participants by session_id
+    let mut participants_by_session: std::collections::HashMap<Uuid, Vec<Participant>> = std::collections::HashMap::new();
+    for p in all_participants {
+        participants_by_session.entry(p.session_id).or_default().push(p);
+    }
+
+    let views: Vec<SessionView> = sessions.into_iter().map(|session| {
         let online_ids = state.connections.online_participant_ids(&session.code);
+        let participants = participants_by_session.remove(&session.id).unwrap_or_default();
 
-        views.push(SessionView {
+        SessionView {
             id: session.id,
             code: session.code.clone(),
             name: session.name,
@@ -356,8 +364,8 @@ pub async fn list_project_sessions(
                     is_online,
                 }
             }).collect(),
-        });
-    }
+        }
+    }).collect();
 
     Ok(Json(views))
 }
