@@ -452,6 +452,9 @@ export class AgentList extends LitElement {
         }}
       >
         <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <p style="margin: 0; font-size: 0.85rem; color: var(--text-tertiary);">
+            ${t("agentList.launch.subtitle")}
+          </p>
           ${this._launchError
             ? html`<sl-alert variant="danger" open
                 >${this._launchError}</sl-alert
