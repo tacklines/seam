@@ -231,21 +231,23 @@ if __name__ == "__main__": main()
 FORWARDER
     chmod +x /opt/seam/log-forwarder.py
 
-    # Start log forwarder early so startup output is visible in Seam
-    STARTUP_LOG=/tmp/seam-startup.log
+    # Start a single log forwarder that streams all output to Seam.
+    # We use one combined log file for both startup and agent output,
+    # and tee startup output into it so the forwarder picks up everything.
+    AGENT_LOG=/tmp/claude-agent.log
     if [ -n "${data.coder_parameter.workspace_id.value}" ] && [ -n "${data.coder_parameter.seam_url.value}" ]; then
-      touch "$STARTUP_LOG"
+      touch "$AGENT_LOG"
       python3 /opt/seam/log-forwarder.py \
-        "$STARTUP_LOG" \
+        "$AGENT_LOG" \
         "${data.coder_parameter.seam_url.value}" \
         "${data.coder_parameter.workspace_id.value}" \
         "${data.coder_parameter.seam_token.value}" \
-        > /dev/null 2>&1 &
-      STARTUP_FORWARDER_PID=$!
-      # Save original fds, tee output to both stdout and startup log
+        > /tmp/seam-forwarder.log 2>&1 &
+      FORWARDER_PID=$!
+      # Tee startup output into the same log file the forwarder is tailing
       exec 3>&1 4>&2
-      exec > >(tee -a "$STARTUP_LOG") 2>&1
-      echo "Startup log forwarder started (PID: $STARTUP_FORWARDER_PID)"
+      exec > >(tee -a "$AGENT_LOG") 2>&1
+      echo "Log forwarder started (PID: $FORWARDER_PID)"
     fi
 
     # --- Phase 1: Inject credentials (before any git operations) ---
@@ -323,36 +325,39 @@ FORWARDER
       echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
       echo "Agent type: ${data.coder_parameter.agent_type.value}"
 
-      # Stop startup log forwarder, restore original stdout/stderr
-      if [ -n "$STARTUP_FORWARDER_PID" ]; then
+      # Restore original stdout/stderr — agent output goes directly to the log file
+      # which the single forwarder is already tailing.
+      if [ -n "$FORWARDER_PID" ]; then
         sleep 1
         exec 1>&3 2>&4 3>&- 4>&-
-        kill "$STARTUP_FORWARDER_PID" 2>/dev/null || true
-        wait "$STARTUP_FORWARDER_PID" 2>/dev/null || true
       fi
 
-      # Launch Claude Code agent
+      # Launch Claude Code agent — output goes to the same log file the forwarder tails
       echo "Launching agent..."
       cd /workspace
       claude --dangerously-skip-permissions --verbose \
         "/agent ${data.coder_parameter.agent_code.value}" \
-        > /tmp/claude-agent.log 2>&1 &
+        >> "$AGENT_LOG" 2>&1 &
       AGENT_PID=$!
       echo "Agent PID: $AGENT_PID"
 
-      # Start agent log forwarder — streams agent output to Seam server
-      if [ -n "${data.coder_parameter.workspace_id.value}" ]; then
-        python3 /opt/seam/log-forwarder.py \
-          /tmp/claude-agent.log \
-          "${data.coder_parameter.seam_url.value}" \
-          "${data.coder_parameter.workspace_id.value}" \
-          "${data.coder_parameter.seam_token.value}" \
-          > /dev/null 2>&1 &
-        echo "Agent log forwarder PID: $!"
+      echo "Workspace ready. Waiting for agent to finish..."
+
+      # Keep the startup script alive so background processes (forwarder) aren't orphaned.
+      # When claude exits, clean up the forwarder and exit.
+      wait $AGENT_PID 2>/dev/null || true
+      AGENT_EXIT=$?
+      echo "Agent exited with code: $AGENT_EXIT" >> "$AGENT_LOG"
+
+      # Give forwarder time to flush remaining lines, then stop it
+      sleep 3
+      if [ -n "$FORWARDER_PID" ]; then
+        kill "$FORWARDER_PID" 2>/dev/null || true
+        wait "$FORWARDER_PID" 2>/dev/null || true
       fi
     fi
 
-    echo "Workspace ready."
+    echo "Workspace done."
   EOT
 
   env = {
