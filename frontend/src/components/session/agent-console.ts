@@ -1,57 +1,49 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property, state, query } from 'lit/decorators.js';
-import { fetchActivity, type ActivityEvent } from '../../state/task-api.js';
-import { fetchMessages, sendMessage, fetchProjectAgent, type MessageView, type ProjectAgentDetailView } from '../../state/agent-api.js';
-import { store, type SessionParticipant } from '../../state/app-state.js';
-import { t } from '../../lib/i18n.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property, state, query } from "lit/decorators.js";
+import {
+  fetchMessages,
+  sendMessage,
+  fetchProjectAgent,
+  type MessageView,
+  type ProjectAgentDetailView,
+} from "../../state/agent-api.js";
+import { store, type SessionParticipant } from "../../state/app-state.js";
+import { t } from "../../lib/i18n.js";
 
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
-import '@shoelace-style/shoelace/dist/components/tab/tab.js';
-import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
-import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
-import '@shoelace-style/shoelace/dist/components/divider/divider.js';
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
+import "@shoelace-style/shoelace/dist/components/tab-group/tab-group.js";
+import "@shoelace-style/shoelace/dist/components/tab/tab.js";
+import "@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js";
+import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
+import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 
-const EVENT_ICONS: Record<string, string> = {
-  task_created: 'plus-circle-fill',
-  task_updated: 'pencil-fill',
-  task_closed: 'check-circle-fill',
-  task_deleted: 'trash-fill',
-  comment_added: 'chat-left-text-fill',
-  participant_joined: 'person-plus-fill',
-  workspace_running: 'play-circle-fill',
-  workspace_stopped: 'stop-circle-fill',
-  workspace_failed: 'exclamation-triangle-fill',
-};
+import "../agents/agent-activity-panel.js";
 
-const EVENT_COLORS: Record<string, string> = {
-  task_created: 'var(--sl-color-success-500)',
-  task_updated: 'var(--sl-color-primary-500)',
-  task_closed: 'var(--sl-color-success-600)',
-  task_deleted: 'var(--sl-color-danger-500)',
-  comment_added: 'var(--sl-color-neutral-400)',
-  participant_joined: 'var(--sl-color-teal-500)',
-  workspace_running: 'var(--sl-color-success-500)',
-  workspace_stopped: 'var(--sl-color-neutral-500)',
-  workspace_failed: 'var(--sl-color-danger-500)',
+const WS_STATUS_VARIANT: Record<string, string> = {
+  running: "success",
+  creating: "warning",
+  pending: "warning",
+  failed: "danger",
+  stopped: "neutral",
+  stopping: "neutral",
 };
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return t('time.justNow');
+  if (seconds < 60) return t("time.justNow");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return t('time.minutesAgo', { count: minutes });
+  if (minutes < 60) return t("time.minutesAgo", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return t('time.hoursAgo', { count: hours });
-  return t('time.daysAgo', { count: Math.floor(hours / 24) });
+  if (hours < 24) return t("time.hoursAgo", { count: hours });
+  return t("time.daysAgo", { count: Math.floor(hours / 24) });
 }
 
-@customElement('agent-console')
+@customElement("agent-console")
 export class AgentConsole extends LitElement {
   static styles = css`
     :host {
@@ -118,7 +110,10 @@ export class AgentConsole extends LitElement {
       width: 40px;
       height: 40px;
       border-radius: 50%;
-      background: var(--avatar-agent-gradient, linear-gradient(135deg, #6366f1, #a855f7));
+      background: var(
+        --avatar-agent-gradient,
+        linear-gradient(135deg, #6366f1, #a855f7)
+      );
       display: flex;
       align-items: center;
       justify-content: center;
@@ -317,65 +312,6 @@ export class AgentConsole extends LitElement {
       min-height: 36px;
     }
 
-    /* -- Activity tab -- */
-    .activity-scroll {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0.75rem 1rem;
-    }
-
-    .activity-event {
-      display: flex;
-      gap: 0.5rem;
-      padding: 0.4rem 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      align-items: flex-start;
-    }
-
-    .activity-event:last-child {
-      border-bottom: none;
-    }
-
-    .activity-icon {
-      flex-shrink: 0;
-      font-size: 0.75rem;
-      margin-top: 0.15rem;
-    }
-
-    .activity-body {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .activity-summary {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-      line-height: 1.35;
-    }
-
-    .activity-time {
-      font-size: 0.65rem;
-      color: var(--text-tertiary);
-      margin-top: 0.1rem;
-    }
-
-    .activity-empty {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 3rem 1rem;
-      color: var(--text-tertiary);
-      font-size: 0.85rem;
-      text-align: center;
-    }
-
-    .activity-empty sl-icon {
-      font-size: 2rem;
-      margin-bottom: 0.5rem;
-      opacity: 0.5;
-    }
-
     .loading {
       display: flex;
       align-items: center;
@@ -383,93 +319,156 @@ export class AgentConsole extends LitElement {
       padding: 2rem;
     }
 
-    /* -- Workspace status -- */
-    .workspace-status {
+    /* -- Activity tab -- */
+    .activity-panel-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 0.75rem;
+    }
+
+    .activity-panel-header {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.5rem 1rem;
-      background: var(--surface-2, #1a1d2e);
-      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 0.5rem;
+    }
+
+    .activity-panel-title {
       font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
       color: var(--text-tertiary);
-      flex-shrink: 0;
     }
 
-    .workspace-status sl-badge {
-      font-size: 0.7rem;
+    agent-activity-panel {
+      flex: 1;
     }
 
-    /* -- Workspace tab -- */
-    .workspace-scroll {
+    /* -- Info tab -- */
+    .info-scroll {
       flex: 1;
       overflow-y: auto;
       padding: 0.75rem 1rem;
     }
 
-    .ws-card {
-      background: var(--surface-card);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
-      margin-bottom: 0.75rem;
+    .info-section {
+      margin-bottom: 1.25rem;
     }
 
-    .ws-card-label {
+    .info-section-title {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
       font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--text-tertiary);
-      margin-bottom: 0.35rem;
+      margin-bottom: 0.5rem;
     }
 
-    .ws-card-value {
-      font-size: 0.85rem;
+    .info-row-grid {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-row-label {
+      font-size: 0.7rem;
+      color: var(--text-tertiary);
+      flex-shrink: 0;
+      min-width: 5rem;
+    }
+
+    .info-row-value {
+      font-size: 0.82rem;
       color: var(--text-primary);
+      word-break: break-all;
+    }
+
+    .info-row-value.mono {
       font-family: var(--sl-font-mono);
     }
 
-    .ws-card-value.muted {
+    .info-empty-hint {
       color: var(--text-tertiary);
-      font-family: inherit;
+      font-size: 0.82rem;
       font-style: italic;
     }
 
-    .ws-status-row {
+    /* -- Workspace card (reused in info tab) -- */
+    .ws-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+
+    .ws-header {
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      margin-bottom: 0.5rem;
     }
 
-    .ws-status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
-      padding: 0.2rem 0.5rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
+    .ws-name {
+      font-family: var(--sl-font-mono);
+      font-size: 0.85rem;
+      color: var(--text-primary);
       font-weight: 600;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .ws-status-badge.running {
-      background: rgba(34, 197, 94, 0.15);
-      color: var(--sl-color-success-500);
-    }
-
-    .ws-status-badge.stopped {
-      background: rgba(107, 114, 128, 0.15);
+    .ws-details {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      font-size: 0.78rem;
       color: var(--text-tertiary);
     }
 
-    .ws-status-badge.failed {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--sl-color-danger-500);
+    .ws-detail {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
     }
 
-    .ws-status-badge.pending, .ws-status-badge.creating {
-      background: rgba(99, 102, 241, 0.15);
-      color: var(--sl-color-primary-400);
+    .branch-badge {
+      font-family: var(--sl-font-mono);
+      font-size: 0.75rem;
+      background: var(--surface-active, rgba(255, 255, 255, 0.06));
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      color: var(--text-secondary);
+    }
+
+    .ws-error {
+      margin-top: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      background: rgba(239, 68, 68, 0.08);
+      border-radius: 4px;
+      color: var(--sl-color-danger-500);
+      font-size: 0.78rem;
     }
 
     .ws-empty {
@@ -507,27 +506,128 @@ export class AgentConsole extends LitElement {
       color: var(--text-primary);
     }
 
+    /* -- Timeline (recent activity in info tab) -- */
+    .info-timeline {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .timeline-item {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 0.78rem;
+    }
+
+    .timeline-item:last-child {
+      border-bottom: none;
+    }
+
+    .timeline-time {
+      font-size: 0.68rem;
+      color: var(--text-tertiary);
+      min-width: 4rem;
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    .timeline-event {
+      font-size: 0.68rem;
+      font-family: var(--sl-font-mono);
+      color: var(--sl-color-primary-400);
+      min-width: 6.5rem;
+      flex-shrink: 0;
+    }
+
+    .timeline-summary {
+      color: var(--text-primary);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* -- Comments in info tab -- */
+    .comment-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .comment-card {
+      padding: 0.6rem 0.75rem;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+    }
+
+    .comment-header {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.35rem;
+      font-size: 0.75rem;
+    }
+
+    .comment-ticket {
+      font-family: var(--sl-font-mono);
+      font-size: 0.7rem;
+      color: var(--sl-color-primary-400);
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .comment-task-title {
+      color: var(--text-secondary);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .comment-time {
+      font-size: 0.68rem;
+      color: var(--text-tertiary);
+      flex-shrink: 0;
+    }
+
+    .comment-content {
+      font-size: 0.82rem;
+      color: var(--text-primary);
+      line-height: 1.45;
+      white-space: pre-wrap;
+      max-height: 5rem;
+      overflow: hidden;
+    }
+
     @media (max-width: 480px) {
-      .panel { width: 100vw; }
-      :host { width: 100vw; }
+      .panel {
+        width: 100vw;
+      }
+      :host {
+        width: 100vw;
+      }
     }
   `;
 
-  @property({ type: String, attribute: 'session-code' }) sessionCode = '';
+  @property({ type: String, attribute: "session-code" }) sessionCode = "";
   @property({ type: Object }) participant: SessionParticipant | null = null;
   @property({ type: Boolean, reflect: true }) open = false;
 
   @state() private _messages: MessageView[] = [];
-  @state() private _activity: ActivityEvent[] = [];
   @state() private _agentDetail: ProjectAgentDetailView | null = null;
   @state() private _loadingMessages = false;
-  @state() private _loadingActivity = false;
-  @state() private _loadingWorkspace = false;
+  @state() private _loadingInfo = false;
   @state() private _sendingMessage = false;
-  @state() private _messageText = '';
-  @state() private _activeTab = 'messages';
+  @state() private _messageText = "";
+  @state() private _activeTab = "messages";
+  @state() private _agentState = "";
 
-  @query('.messages-scroll') private _messagesScroll!: HTMLElement;
+  @query(".messages-scroll") private _messagesScroll!: HTMLElement;
 
   private _storeUnsub: (() => void) | null = null;
   private _refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -535,34 +635,32 @@ export class AgentConsole extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._storeUnsub = store.subscribe((event) => {
-      if (event.type === 'activity-changed' || event.type === 'tasks-changed') {
+      if (event.type === "activity-changed" || event.type === "tasks-changed") {
         if (this.open && this.participant) {
-          this._loadActivity();
           this._loadMessages();
         }
       }
     });
-    document.addEventListener('keydown', this._onKeydown);
+    document.addEventListener("keydown", this._onKeydown);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._storeUnsub?.();
     this._stopRefresh();
-    document.removeEventListener('keydown', this._onKeydown);
+    document.removeEventListener("keydown", this._onKeydown);
   }
 
   private _onKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && this.open) {
+    if (e.key === "Escape" && this.open) {
       this._close();
     }
   };
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('open') || changed.has('participant')) {
+    if (changed.has("open") || changed.has("participant")) {
       if (this.open && this.participant) {
         this._loadMessages();
-        this._loadActivity();
         this._loadAgentDetail();
         this._startRefresh();
       } else {
@@ -576,7 +674,7 @@ export class AgentConsole extends LitElement {
     this._refreshInterval = setInterval(() => {
       if (this.open && this.participant) {
         this._loadMessages();
-        this._loadActivity();
+        this._loadAgentDetail();
       }
     }, 10000);
   }
@@ -592,7 +690,11 @@ export class AgentConsole extends LitElement {
     if (!this.sessionCode || !this.participant) return;
     try {
       this._loadingMessages = this._messages.length === 0;
-      this._messages = await fetchMessages(this.sessionCode, this.participant.id, { limit: 100 });
+      this._messages = await fetchMessages(
+        this.sessionCode,
+        this.participant.id,
+        { limit: 100 },
+      );
       await this.updateComplete;
       this._scrollToBottom();
     } catch {
@@ -602,32 +704,20 @@ export class AgentConsole extends LitElement {
     }
   }
 
-  private async _loadActivity() {
-    if (!this.sessionCode || !this.participant) return;
-    try {
-      this._loadingActivity = this._activity.length === 0;
-      this._activity = await fetchActivity(this.sessionCode, {
-        actor_id: this.participant.id,
-        limit: 50,
-      });
-    } catch {
-      // silent
-    } finally {
-      this._loadingActivity = false;
-    }
-  }
-
   private async _loadAgentDetail() {
     if (!this.participant) return;
     const projectId = store.get().sessionState?.session.project_id;
     if (!projectId) return;
     try {
-      this._loadingWorkspace = !this._agentDetail;
-      this._agentDetail = await fetchProjectAgent(projectId, this.participant.id);
+      this._loadingInfo = !this._agentDetail;
+      this._agentDetail = await fetchProjectAgent(
+        projectId,
+        this.participant.id,
+      );
     } catch {
       // Agent may not have a project-level record yet
     } finally {
-      this._loadingWorkspace = false;
+      this._loadingInfo = false;
     }
   }
 
@@ -640,12 +730,17 @@ export class AgentConsole extends LitElement {
   }
 
   private async _sendMessage() {
-    if (!this._messageText.trim() || !this.sessionCode || !this.participant) return;
+    if (!this._messageText.trim() || !this.sessionCode || !this.participant)
+      return;
     this._sendingMessage = true;
     try {
-      const msg = await sendMessage(this.sessionCode, this.participant.id, this._messageText.trim());
+      const msg = await sendMessage(
+        this.sessionCode,
+        this.participant.id,
+        this._messageText.trim(),
+      );
       this._messages = [...this._messages, msg];
-      this._messageText = '';
+      this._messageText = "";
       await this.updateComplete;
       this._scrollToBottom();
     } catch {
@@ -656,19 +751,22 @@ export class AgentConsole extends LitElement {
   }
 
   private _onComposeKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       this._sendMessage();
     }
   }
 
   private _close() {
-    this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent("close", { bubbles: true, composed: true }),
+    );
   }
 
   private _getInitials(name: string): string {
     const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    if (parts.length >= 2)
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     return name.slice(0, 2).toUpperCase();
   }
 
@@ -683,26 +781,36 @@ export class AgentConsole extends LitElement {
       <div class="panel">
         ${this._renderHeader(p)}
         <div class="tab-area">
-          <sl-tab-group @sl-tab-show=${(e: CustomEvent) => { this._activeTab = (e.detail as any).name; }}>
+          <sl-tab-group
+            @sl-tab-show=${(e: CustomEvent) => {
+              this._activeTab = (e.detail as any).name;
+            }}
+          >
             <sl-tab slot="nav" panel="messages">
-              ${t('agentConsole.tab.messages')}
-              ${this._messages.length > 0 ? html`<sl-badge variant="primary" pill style="margin-left: 0.3rem">${this._messages.length}</sl-badge>` : nothing}
+              ${t("agentConsole.tab.messages")}
+              ${this._messages.length > 0
+                ? html`<sl-badge
+                    variant="primary"
+                    pill
+                    style="margin-left: 0.3rem"
+                    >${this._messages.length}</sl-badge
+                  >`
+                : nothing}
             </sl-tab>
             <sl-tab slot="nav" panel="activity">
-              ${t('agentConsole.tab.activity')}
-              ${this._activity.length > 0 ? html`<sl-badge variant="neutral" pill style="margin-left: 0.3rem">${this._activity.length}</sl-badge>` : nothing}
+              ${t("agentConsole.tab.activity")}
             </sl-tab>
-            <sl-tab slot="nav" panel="workspace">${t('agentConsole.tab.workspace')}</sl-tab>
+            <sl-tab slot="nav" panel="info"
+              >${t("agentConsole.tab.info")}</sl-tab
+            >
 
             <sl-tab-panel name="messages">
               ${this._renderMessages(myId)}
             </sl-tab-panel>
             <sl-tab-panel name="activity">
-              ${this._renderActivity()}
+              ${this._renderActivityPanel()}
             </sl-tab-panel>
-            <sl-tab-panel name="workspace">
-              ${this._renderWorkspace()}
-            </sl-tab-panel>
+            <sl-tab-panel name="info"> ${this._renderInfo()} </sl-tab-panel>
           </sl-tab-group>
         </div>
       </div>
@@ -711,7 +819,9 @@ export class AgentConsole extends LitElement {
 
   private _renderHeader(p: SessionParticipant) {
     const sponsor = p.sponsor_id
-      ? store.get().sessionState?.session.participants.find(s => s.id === p.sponsor_id)
+      ? store
+          .get()
+          .sessionState?.session.participants.find((s) => s.id === p.sponsor_id)
       : null;
 
     return html`
@@ -723,13 +833,25 @@ export class AgentConsole extends LitElement {
         <div class="header-info">
           <div class="header-name">${p.display_name}</div>
           <div class="header-meta">
-            <span class="status-dot ${p.is_online ? '' : 'offline'}"></span>
-            ${p.is_online ? t('agentConsole.online') : t('agentConsole.offline')}
-            ${sponsor ? html`<span>${t('agentConsole.agentOf', { name: sponsor.display_name })}</span>` : nothing}
+            <span class="status-dot ${p.is_online ? "" : "offline"}"></span>
+            ${p.is_online
+              ? t("agentConsole.online")
+              : t("agentConsole.offline")}
+            ${sponsor
+              ? html`<span
+                  >${t("agentConsole.agentOf", {
+                    name: sponsor.display_name,
+                  })}</span
+                >`
+              : nothing}
           </div>
         </div>
-        <sl-tooltip content="${t('agentConsole.closeEsc')}">
-          <sl-icon-button class="close-btn" name="x-lg" @click=${this._close}></sl-icon-button>
+        <sl-tooltip content="${t("agentConsole.closeEsc")}">
+          <sl-icon-button
+            class="close-btn"
+            name="x-lg"
+            @click=${this._close}
+          ></sl-icon-button>
         </sl-tooltip>
       </div>
     `;
@@ -744,34 +866,40 @@ export class AgentConsole extends LitElement {
       <div class="messages-container">
         ${this._messages.length === 0
           ? html`
-            <div class="message-empty">
-              <sl-icon name="chat-left-dots"></sl-icon>
-              <div>${t('agentConsole.messages.empty')}</div>
-              <div style="font-size: 0.75rem; margin-top: 0.25rem; opacity: 0.7">
-                ${t('agentConsole.messages.emptyHint')}
+              <div class="message-empty">
+                <sl-icon name="chat-left-dots"></sl-icon>
+                <div>${t("agentConsole.messages.empty")}</div>
+                <div
+                  style="font-size: 0.75rem; margin-top: 0.25rem; opacity: 0.7"
+                >
+                  ${t("agentConsole.messages.emptyHint")}
+                </div>
               </div>
-            </div>
-          `
+            `
           : html`
-            <div class="messages-scroll">
-              ${this._messages.map(m => {
-                const isSent = m.sender_id === myId;
-                return html`
-                  <div class="message ${isSent ? 'sent' : 'received'}">
-                    <div>${m.content}</div>
-                    <div class="message-time">${timeAgo(m.created_at)}</div>
-                  </div>
-                `;
-              })}
-            </div>
-          `}
+              <div class="messages-scroll">
+                ${this._messages.map((m) => {
+                  const isSent = m.sender_id === myId;
+                  return html`
+                    <div class="message ${isSent ? "sent" : "received"}">
+                      <div>${m.content}</div>
+                      <div class="message-time">${timeAgo(m.created_at)}</div>
+                    </div>
+                  `;
+                })}
+              </div>
+            `}
         <div class="compose">
           <sl-textarea
-            placeholder="${t('agentConsole.messages.placeholder', { name: this.participant?.display_name ?? 'agent' })}"
+            placeholder="${t("agentConsole.messages.placeholder", {
+              name: this.participant?.display_name ?? "agent",
+            })}"
             rows="1"
             resize="auto"
             .value=${this._messageText}
-            @sl-input=${(e: Event) => { this._messageText = (e.target as HTMLTextAreaElement).value; }}
+            @sl-input=${(e: Event) => {
+              this._messageText = (e.target as HTMLTextAreaElement).value;
+            }}
             @keydown=${this._onComposeKeydown}
           ></sl-textarea>
           <sl-button
@@ -788,127 +916,265 @@ export class AgentConsole extends LitElement {
     `;
   }
 
-  private _renderActivity() {
-    if (this._loadingActivity) {
-      return html`<div class="loading"><sl-spinner></sl-spinner></div>`;
-    }
-
-    if (this._activity.length === 0) {
-      return html`
-        <div class="activity-empty">
-          <sl-icon name="clock-history"></sl-icon>
-          <div>${t('agentConsole.activity.empty')}</div>
-          <div style="font-size: 0.75rem; margin-top: 0.25rem; opacity: 0.7">
-            ${t('agentConsole.activity.emptyHint')}
-          </div>
-        </div>
-      `;
-    }
-
+  private _renderActivityPanel() {
+    if (!this.participant) return nothing;
     return html`
-      <div class="activity-scroll">
-        ${this._activity.map(e => {
-          const icon = EVENT_ICONS[e.event_type] || 'circle';
-          const color = EVENT_COLORS[e.event_type] || 'var(--text-tertiary)';
-          return html`
-            <div class="activity-event">
-              <sl-icon class="activity-icon" name=${icon} style="color: ${color}"></sl-icon>
-              <div class="activity-body">
-                <div class="activity-summary">${e.summary}</div>
-                <div class="activity-time">${timeAgo(e.created_at)}</div>
-              </div>
-            </div>
-          `;
-        })}
+      <div class="activity-panel-wrap">
+        <div class="activity-panel-header">
+          <span class="activity-panel-title"
+            >${t("agentDetail.liveActivity")}</span
+          >
+          ${this._agentState
+            ? html`
+                <sl-badge
+                  variant=${this._agentState === "working"
+                    ? "primary"
+                    : this._agentState === "idle"
+                      ? "neutral"
+                      : "warning"}
+                >
+                  ${this._agentState}
+                </sl-badge>
+              `
+            : nothing}
+        </div>
+        <agent-activity-panel
+          .sessionCode=${this.sessionCode}
+          .participantId=${this.participant.id}
+          .workspaceId=${this._agentDetail?.agent?.workspace?.id ?? ""}
+          @agent-state-change=${(e: CustomEvent) => {
+            this._agentState = (e.detail as any).state;
+          }}
+        ></agent-activity-panel>
       </div>
     `;
   }
-  private _renderWorkspace() {
-    if (this._loadingWorkspace) {
+
+  private _renderInfo() {
+    if (this._loadingInfo) {
       return html`<div class="loading"><sl-spinner></sl-spinner></div>`;
     }
 
-    const agent = this._agentDetail?.agent;
-    const ws = agent?.workspace;
-    const task = agent?.current_task;
+    const detail = this._agentDetail;
+    const agent = detail?.agent;
 
     if (!agent) {
       return html`
         <div class="ws-empty">
           <sl-icon name="hdd-stack"></sl-icon>
-          <div>${t('agentConsole.workspace.empty')}</div>
+          <div>${t("agentConsole.info.empty")}</div>
           <div style="font-size: 0.75rem; margin-top: 0.25rem; opacity: 0.7">
-            ${t('agentConsole.workspace.emptyHint')}
+            ${t("agentConsole.info.emptyHint")}
           </div>
         </div>
       `;
     }
 
+    const ws = agent.workspace;
+    const task = agent.current_task;
+    const recentActivity = detail.recent_activity ?? [];
+    const recentComments = detail.recent_comments ?? [];
+
     return html`
-      <div class="workspace-scroll">
-        ${ws ? html`
-          <div class="ws-card">
-            <div class="ws-card-label">${t('agentConsole.workspace.status')}</div>
-            <div class="ws-status-row">
-              <span class="ws-status-badge ${ws.status}">${ws.status}</span>
-              ${ws.coder_workspace_name ? html`
-                <span style="font-size: 0.75rem; color: var(--text-tertiary);">${ws.coder_workspace_name}</span>
-              ` : nothing}
+      <div class="info-scroll">
+        <!-- Agent Info -->
+        <div class="info-section">
+          <div class="info-section-title">
+            <sl-icon name="robot"></sl-icon> ${t(
+              "agentConsole.workspace.agentInfo",
+            )}
+          </div>
+          <div class="info-row-grid">
+            ${agent.model
+              ? html`
+                  <div class="info-row">
+                    <span class="info-row-label"
+                      >${t("agentDetail.model")}</span
+                    >
+                    <span class="info-row-value mono">${agent.model}</span>
+                  </div>
+                `
+              : nothing}
+            ${agent.client_name
+              ? html`
+                  <div class="info-row">
+                    <span class="info-row-label"
+                      >${t("agentDetail.client")}</span
+                    >
+                    <span class="info-row-value mono"
+                      >${agent.client_name}${agent.client_version
+                        ? ` v${agent.client_version}`
+                        : ""}</span
+                    >
+                  </div>
+                `
+              : nothing}
+            <div class="info-row">
+              <span class="info-row-label">${t("agentDetail.session")}</span>
+              <span class="info-row-value"
+                >${agent.session_name || agent.session_code}</span
+              >
+            </div>
+            ${agent.sponsor_name
+              ? html`
+                  <div class="info-row">
+                    <span class="info-row-label"
+                      >${t("agentDetail.sponsoredBy")}</span
+                    >
+                    <span class="info-row-value">${agent.sponsor_name}</span>
+                  </div>
+                `
+              : nothing}
+            <div class="info-row">
+              <span class="info-row-label">${t("agentDetail.joined")}</span>
+              <span class="info-row-value">${timeAgo(agent.joined_at)}</span>
             </div>
           </div>
+        </div>
 
-          ${ws.branch ? html`
-            <div class="ws-card">
-              <div class="ws-card-label">${t('agentConsole.workspace.branch')}</div>
-              <div class="ws-card-value">
-                <sl-icon name="git-branch" style="font-size: 0.8rem; vertical-align: middle; margin-right: 0.25rem;"></sl-icon>
-                ${ws.branch}
+        <!-- Workspace -->
+        ${ws
+          ? html`
+              <div class="info-section">
+                <div class="info-section-title">
+                  <sl-icon name="terminal"></sl-icon> ${t(
+                    "agentDetail.workspace",
+                  )}
+                </div>
+                <div class="ws-card">
+                  <div class="ws-header">
+                    <span class="ws-name"
+                      >${ws.coder_workspace_name ??
+                      t("agentDetail.workspaceFallback")}</span
+                    >
+                    <sl-badge
+                      variant=${WS_STATUS_VARIANT[ws.status] ?? "neutral"}
+                      >${ws.status}</sl-badge
+                    >
+                  </div>
+                  <div class="ws-details">
+                    ${ws.branch
+                      ? html`
+                          <span class="ws-detail">
+                            <sl-icon
+                              name="git-branch"
+                              style="font-size: 0.85rem;"
+                            ></sl-icon>
+                            <span class="branch-badge">${ws.branch}</span>
+                          </span>
+                        `
+                      : nothing}
+                    ${ws.started_at
+                      ? html`
+                          <span class="ws-detail">
+                            <sl-icon
+                              name="clock"
+                              style="font-size: 0.85rem;"
+                            ></sl-icon>
+                            ${t("agentDetail.started", {
+                              time: timeAgo(ws.started_at),
+                            })}
+                          </span>
+                        `
+                      : nothing}
+                  </div>
+                  ${ws.error_message
+                    ? html` <div class="ws-error">${ws.error_message}</div> `
+                    : nothing}
+                </div>
               </div>
-            </div>
-          ` : nothing}
+            `
+          : nothing}
 
-          ${ws.error_message ? html`
-            <div class="ws-card" style="border-color: var(--sl-color-danger-500);">
-              <div class="ws-card-label" style="color: var(--sl-color-danger-500);">${t('agentConsole.workspace.error')}</div>
-              <div class="ws-card-value" style="color: var(--sl-color-danger-400); font-size: 0.8rem; white-space: pre-wrap;">
-                ${ws.error_message}
+        <!-- Current Task -->
+        ${task
+          ? html`
+              <div class="info-section">
+                <div class="info-section-title">
+                  <sl-icon name="kanban"></sl-icon> ${t(
+                    "agentDetail.currentTask",
+                  )}
+                </div>
+                <div class="ws-card">
+                  <div class="ws-task-card">
+                    <span class="ticket-id">${task.ticket_id}</span>
+                    <span class="title">${task.title}</span>
+                  </div>
+                  <sl-badge
+                    variant=${task.status === "in_progress"
+                      ? "primary"
+                      : task.status === "done"
+                        ? "success"
+                        : "neutral"}
+                    style="margin-top: 0.35rem;"
+                  >
+                    ${task.status.replace("_", " ")}
+                  </sl-badge>
+                </div>
               </div>
-            </div>
-          ` : nothing}
+            `
+          : nothing}
 
-          ${ws.started_at ? html`
-            <div class="ws-card">
-              <div class="ws-card-label">${t('agentConsole.workspace.started')}</div>
-              <div class="ws-card-value muted">${timeAgo(ws.started_at)}</div>
-            </div>
-          ` : nothing}
-        ` : html`
-          <div class="ws-card">
-            <div class="ws-card-label">${t('agentConsole.workspace.label')}</div>
-            <div class="ws-card-value muted">${t('agentConsole.workspace.noWorkspace')}</div>
+        <!-- Recent Activity -->
+        <div class="info-section">
+          <div class="info-section-title">
+            <sl-icon name="activity"></sl-icon> ${t(
+              "agentDetail.recentActivity",
+            )}
           </div>
-        `}
+          ${recentActivity.length === 0
+            ? html`<div class="info-empty-hint">
+                ${t("agentDetail.noActivity")}
+              </div>`
+            : html`
+                <div class="info-timeline">
+                  ${recentActivity.slice(0, 10).map(
+                    (a) => html`
+                      <div class="timeline-item">
+                        <span class="timeline-time"
+                          >${timeAgo(a.created_at)}</span
+                        >
+                        <span class="timeline-event">${a.event_type}</span>
+                        <span class="timeline-summary">${a.summary}</span>
+                      </div>
+                    `,
+                  )}
+                </div>
+              `}
+        </div>
 
-        ${task ? html`
-          <div class="ws-card">
-            <div class="ws-card-label">${t('agentConsole.workspace.currentTask')}</div>
-            <div class="ws-task-card">
-              <span class="ticket-id">${task.ticket_id}</span>
-              <span class="title">${task.title}</span>
-            </div>
-            <sl-badge variant=${task.status === 'in_progress' ? 'primary' : task.status === 'done' ? 'success' : 'neutral'} style="margin-top: 0.35rem;">
-              ${task.status}
-            </sl-badge>
+        <!-- Recent Comments -->
+        <div class="info-section">
+          <div class="info-section-title">
+            <sl-icon name="chat-dots"></sl-icon> ${t(
+              "agentDetail.recentComments",
+            )}
           </div>
-        ` : nothing}
-
-        ${agent.client_name || agent.model ? html`
-          <div class="ws-card">
-            <div class="ws-card-label">${t('agentConsole.workspace.agentInfo')}</div>
-            ${agent.client_name ? html`<div style="font-size: 0.8rem; color: var(--text-secondary);">${agent.client_name}${agent.client_version ? ` v${agent.client_version}` : ''}</div>` : nothing}
-            ${agent.model ? html`<div style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 0.15rem;">${t('agentConsole.workspace.model', { model: agent.model })}</div>` : nothing}
-          </div>
-        ` : nothing}
+          ${recentComments.length === 0
+            ? html`<div class="info-empty-hint">
+                ${t("agentDetail.noComments")}
+              </div>`
+            : html`
+                <div class="comment-list">
+                  ${recentComments.slice(0, 5).map(
+                    (c) => html`
+                      <div class="comment-card">
+                        <div class="comment-header">
+                          <span class="comment-ticket">${c.ticket_id}</span>
+                          <span class="comment-task-title"
+                            >${c.task_title}</span
+                          >
+                          <span class="comment-time"
+                            >${timeAgo(c.created_at)}</span
+                          >
+                        </div>
+                        <div class="comment-content">${c.content}</div>
+                      </div>
+                    `,
+                  )}
+                </div>
+              `}
+        </div>
       </div>
     `;
   }
@@ -916,6 +1182,6 @@ export class AgentConsole extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'agent-console': AgentConsole;
+    "agent-console": AgentConsole;
   }
 }

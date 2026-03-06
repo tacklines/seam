@@ -238,16 +238,13 @@ export const messagesEn: Record<string, string> = {
   "agentConsole.closeEsc": "Close (Esc)",
   "agentConsole.tab.messages": "Messages",
   "agentConsole.tab.activity": "Activity",
-  "agentConsole.tab.workspace": "Workspace",
+  "agentConsole.tab.info": "Info",
   "agentConsole.messages.empty": "No messages yet",
   "agentConsole.messages.emptyHint": "Send a message to direct this agent.",
   "agentConsole.messages.placeholder": "Message {{name}}...",
-  "agentConsole.activity.empty": "No activity yet",
-  "agentConsole.activity.emptyHint":
-    "Activity will appear here as the agent works.",
-  "agentConsole.workspace.empty": "No workspace info available",
-  "agentConsole.workspace.emptyHint":
-    "Workspace details appear here when the agent has an active Coder workspace.",
+  "agentConsole.info.empty": "No agent info available",
+  "agentConsole.info.emptyHint":
+    "Agent details appear here once the agent has joined a project session.",
   "agentConsole.workspace.status": "Status",
   "agentConsole.workspace.branch": "Branch",
   "agentConsole.workspace.error": "Error",
