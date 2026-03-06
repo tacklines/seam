@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # LLM — provider/model are now defaults; the router overrides per-request
     llm_provider: str = "ollama"  # ollama | anthropic
-    default_model: str = "qwen35-tuned"
+    default_model: str = "qwen3-coder-30b"
     ollama_base_url: str = "http://localhost:11434"
     llamacpp_base_url: str = "http://192.168.1.14:8080/v1"
     anthropic_api_key: str = ""

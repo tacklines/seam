@@ -8,14 +8,18 @@ without nesting event loops or conflicting with anyio's task tracking.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from dataclasses import dataclass, field
 from typing import Any
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.shared.exceptions import McpError
 
 from seam_agents.config import settings
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,7 +106,12 @@ class SeamMCPClient:
         return self._run(self._async_list_tools())
 
     async def _async_list_tools(self) -> list[dict]:
-        result = await self._require_session().list_tools()
+        try:
+            result = await self._require_session().list_tools()
+        except (McpError, RuntimeError, ConnectionError, OSError) as e:
+            log.warning("MCP list_tools failed: %s — reconnecting", e)
+            await self._async_reconnect()
+            result = await self._require_session().list_tools()
         return [
             {
                 "name": tool.name,
@@ -116,8 +125,23 @@ class SeamMCPClient:
         """Call an MCP tool and return the text result (synchronous)."""
         return self._run(self._async_call_tool(name, arguments))
 
+    async def _async_reconnect(self):
+        """Tear down the current session and reconnect."""
+        log.info("Reconnecting MCP session...")
+        try:
+            await self._async_disconnect()
+        except Exception:
+            pass
+        await self._async_connect()
+        log.info("MCP session reconnected")
+
     async def _async_call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> str:
-        result = await self._require_session().call_tool(name, arguments or {})
+        try:
+            result = await self._require_session().call_tool(name, arguments or {})
+        except (McpError, RuntimeError, ConnectionError, OSError) as e:
+            log.warning("MCP call_tool(%s) failed: %s — reconnecting", name, e)
+            await self._async_reconnect()
+            result = await self._require_session().call_tool(name, arguments or {})
         parts = []
         for content in result.content:
             if hasattr(content, "text"):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,7 +15,7 @@ from seam_agents.coder_client import CoderMCPClient
 from seam_agents.mcp_client import SeamMCPClient
 from seam_agents.models import ModelProfile, ModelRequirement, ModelRouter
 from seam_agents.skills import get_skill, list_skills
-from seam_agents.tools import mcp_tools_from_client
+from seam_agents.tools import mcp_tools_from_client, CORE_TOOLS
 from seam_agents.tracing import get_langfuse_handler
 from seam_agents.workflows.skills_bridge import WORKFLOW_MARKER
 from seam_agents.workflows.composer import PIPELINES, compose_pipeline
@@ -37,6 +38,7 @@ Available skills: {skills}
 When asked to run a skill, follow its system prompt closely.
 When working autonomously, focus on what advances the session's goals.
 Be concise and action-oriented. Use tools proactively.
+Prefer task_summary over list_tasks when you just need an overview — it's more compact.
 """
 
 
@@ -67,6 +69,8 @@ def _build_llm(requirement: ModelRequirement | None = None) -> tuple[BaseChatMod
             base_url=settings.llamacpp_base_url,
             api_key="not-needed",
             max_tokens=4096,
+            timeout=600,  # Local inference can be slow with large context
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
     elif profile.provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
@@ -104,8 +108,13 @@ def build_session_agent(
     Returns (compiled_graph, model_profile).
     """
 
-    # Convert MCP tools to LangChain tools
-    tools = mcp_tools_from_client(mcp_client)
+    # Route to best model first so we know the provider
+    llm_raw, profile = _build_llm(requirement)
+
+    # Filter tools for local LLMs to keep prompt manageable
+    is_local = profile.provider in ("ollama", "llamacpp")
+    allowed = CORE_TOOLS if is_local else None
+    tools = mcp_tools_from_client(mcp_client, allowed=allowed)
     if coder_client is not None:
         coder_tools = mcp_tools_from_client(coder_client)
         # Prefix coder tool names to avoid collisions
@@ -114,11 +123,9 @@ def build_session_agent(
         tools.extend(coder_tools)
     tool_node = ToolNode(tools)
 
-    # Route to best model and bind tools
-    llm_raw, profile = _build_llm(requirement)
     llm = llm_raw.bind_tools(tools)
-    log.info("Agent using model: %s (%s, %d ctx, ~%.0f tok/s)",
-             profile.name, profile.provider, profile.context_window, profile.tok_per_sec)
+    log.info("Agent using model: %s (%s, %d ctx, ~%.0f tok/s, %d tools)",
+             profile.name, profile.provider, profile.context_window, profile.tok_per_sec, len(tools))
 
     skill_list = ", ".join(f"/{s.name} — {s.description}" for s in list_skills())
     coder_context = (
@@ -133,7 +140,14 @@ def build_session_agent(
             skills=skill_list, coder_context=coder_context,
         ))
         messages = [system] + state["messages"]
+        n_msgs = len(state["messages"])
+        print(f"[agent] thinking... ({n_msgs} messages in context)", file=sys.stderr, flush=True)
         response = llm.invoke(messages)
+        if response.content:
+            print(f"[agent] {response.content[:200]}", file=sys.stderr, flush=True)
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            for tc in response.tool_calls:
+                print(f"[agent] -> tool: {tc['name']}({tc.get('args', {})})", file=sys.stderr, flush=True)
         return {"messages": [response]}
 
     def should_continue(state: MessagesState) -> str:
@@ -169,8 +183,10 @@ def _run_workflow(
     llm_raw, profile = _build_llm(requirement)
     log.info("Workflow using model: %s (%s)", profile.name, profile.provider)
 
-    # Gather available tools
-    tools = mcp_tools_from_client(mcp_client)
+    # Gather available tools (filter for local LLMs)
+    is_local = profile.provider in ("ollama", "llamacpp")
+    allowed = CORE_TOOLS if is_local else None
+    tools = mcp_tools_from_client(mcp_client, allowed=allowed)
     if coder_client is not None:
         coder_tools = mcp_tools_from_client(coder_client)
         for tool in coder_tools:
