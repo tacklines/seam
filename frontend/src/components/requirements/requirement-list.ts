@@ -298,7 +298,7 @@ export class RequirementList extends LitElement {
       `}
 
       <sl-dialog label=${t('requirementList.dialogLabel')} ?open=${this._showNew}
-                 @sl-after-hide=${() => { this._showNew = false; }}>
+                 @sl-after-hide=${(e: Event) => { if (e.target === e.currentTarget) this._showNew = false; }}>
         <div class="dialog-form">
           <sl-input label=${t('requirementList.titleLabel')} placeholder=${t('requirementList.titlePlaceholder')}
                     value=${this._newTitle}

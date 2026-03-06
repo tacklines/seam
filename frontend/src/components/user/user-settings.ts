@@ -318,7 +318,7 @@ export class UserSettings extends LitElement {
           </div>
 
           <!-- Add credential dialog -->
-          <sl-dialog label=${t('userSettings.addDialog')} ?open=${this._showAddCred} @sl-after-hide=${() => { this._showAddCred = false; }}>
+          <sl-dialog label=${t('userSettings.addDialog')} ?open=${this._showAddCred} @sl-after-hide=${(e: Event) => { if (e.target === e.currentTarget) this._showAddCred = false; }}>
             <div class="dialog-form">
               <sl-input label=${t('cred.nameLabel')} placeholder=${t('userSettings.namePlaceholder')} value=${this._newCredName}
                         @sl-input=${(e: CustomEvent) => { this._newCredName = (e.target as HTMLInputElement).value; }}
@@ -352,7 +352,7 @@ export class UserSettings extends LitElement {
           </sl-dialog>
 
           <!-- Rotate dialog -->
-          <sl-dialog label=${t('cred.rotateDialog')} ?open=${this._showRotateDialog} @sl-after-hide=${() => { this._showRotateDialog = false; }}>
+          <sl-dialog label=${t('cred.rotateDialog')} ?open=${this._showRotateDialog} @sl-after-hide=${(e: Event) => { if (e.target === e.currentTarget) this._showRotateDialog = false; }}>
             <div class="dialog-form">
               <sl-input label=${t('cred.rotateNewValue')} type="password" placeholder=${t('cred.rotatePlaceholder')} value=${this._rotateValue}
                         @sl-input=${(e: CustomEvent) => { this._rotateValue = (e.target as HTMLInputElement).value; }}

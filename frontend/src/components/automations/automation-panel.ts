@@ -521,7 +521,7 @@ export class AutomationPanel extends LitElement {
     return html`
       <sl-dialog label=${isEdit ? 'Edit Reaction' : 'New Event Reaction'}
                  ?open=${this._showReactionDialog}
-                 @sl-after-hide=${() => { this._showReactionDialog = false; }}>
+                 @sl-after-hide=${(e: Event) => { if (e.target === e.currentTarget) this._showReactionDialog = false; }}>
         <div class="dialog-form">
           <sl-input label="Name" placeholder="e.g. Auto-triage new tasks"
             value=${this._reactionName}
@@ -572,7 +572,7 @@ export class AutomationPanel extends LitElement {
     return html`
       <sl-dialog label=${isEdit ? 'Edit Scheduled Job' : 'New Scheduled Job'}
                  ?open=${this._showJobDialog}
-                 @sl-after-hide=${() => { this._showJobDialog = false; }}>
+                 @sl-after-hide=${(e: Event) => { if (e.target === e.currentTarget) this._showJobDialog = false; }}>
         <div class="dialog-form">
           <sl-input label="Name" placeholder="e.g. Nightly cleanup"
             value=${this._jobName}
