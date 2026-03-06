@@ -1,5 +1,6 @@
 mod agent_token;
 mod auth;
+pub mod code_search;
 mod coder;
 mod credentials;
 mod db;
@@ -34,6 +35,7 @@ pub struct AppState {
     pub coder: Option<coder::CoderClient>,
     pub keycloak_issuer: String,
     pub log_buffer: log_buffer::LogBuffer,
+    pub code_index: Option<std::sync::Arc<code_search::CodeIndex>>,
 }
 
 #[tokio::main]
@@ -75,6 +77,22 @@ async fn main() {
 
     let keycloak_issuer = format!("{}/realms/{}", keycloak_url, realm);
 
+    // Initialize code search index
+    let code_index: Option<std::sync::Arc<code_search::CodeIndex>> = {
+        let index_path = std::env::var("DATA_DIR")
+            .unwrap_or_else(|_| "/tmp/seam-code-index".to_string());
+        match code_search::CodeIndex::new(std::path::Path::new(&index_path)) {
+            Ok(idx) => {
+                tracing::info!(path = %index_path, "Code search index initialized");
+                Some(std::sync::Arc::new(idx))
+            }
+            Err(e) => {
+                tracing::warn!("Code search index initialization failed, code search disabled: {e}");
+                None
+            }
+        }
+    };
+
     let state = Arc::new(AppState {
         db,
         jwks: auth::JwksCache::new(&keycloak_url, &realm),
@@ -82,6 +100,7 @@ async fn main() {
         log_buffer: log_buffer::LogBuffer::new(500),
         coder,
         keycloak_issuer: keycloak_issuer.clone(),
+        code_index: code_index.clone(),
     });
 
     let cors = CorsLayer::new()
@@ -188,6 +207,8 @@ async fn main() {
         // Project agents
         .route("/api/projects/{project_id}/agents", get(routes::agents::list_project_agents))
         .route("/api/projects/{project_id}/agents/{agent_id}", get(routes::agents::get_project_agent))
+        // Code Search
+        .route("/api/projects/{project_id}/code-index", post(routes::code_index::index_file).delete(routes::code_index::clear_project_index))
         // Automations
         .route("/api/projects/{project_id}/reactions", get(routes::automations::list_reactions).post(routes::automations::create_reaction))
         .route("/api/projects/{project_id}/reactions/{reaction_id}", patch(routes::automations::update_reaction).delete(routes::automations::delete_reaction))
@@ -211,8 +232,9 @@ async fn main() {
     }
 
     let mcp_db = state.db.clone();
+    let mcp_code_index = code_index.clone();
     let mcp_service = StreamableHttpService::new(
-        move || Ok(mcp_handler::SeamMcp::new(mcp_db.clone())),
+        move || Ok(mcp_handler::SeamMcp::with_code_index(mcp_db.clone(), mcp_code_index.clone())),
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );

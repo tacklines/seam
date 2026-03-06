@@ -363,6 +363,18 @@ struct GetKnowledgeDetailParams {
     source_id: String,
 }
 
+// --- Code search params ---
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SearchCodeParams {
+    /// Code search query (supports keywords, function names, identifiers, etc.)
+    query: String,
+    /// Filter by programming language (e.g., "rust", "typescript", "python")
+    language: Option<String>,
+    /// Maximum results (default 10, max 30)
+    limit: Option<i64>,
+}
+
 // --- MCP Server ---
 
 #[derive(Default)]
@@ -378,15 +390,24 @@ pub(crate) struct SessionState {
 pub struct SeamMcp {
     pub(crate) db: PgPool,
     pub(crate) state: Mutex<SessionState>,
+    pub(crate) code_index: Option<std::sync::Arc<crate::code_search::CodeIndex>>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl SeamMcp {
     pub fn new(db: PgPool) -> Self {
+        Self::with_code_index(db, None)
+    }
+
+    pub fn with_code_index(
+        db: PgPool,
+        code_index: Option<std::sync::Arc<crate::code_search::CodeIndex>>,
+    ) -> Self {
         Self {
             db,
             state: Mutex::new(SessionState::default()),
+            code_index,
             tool_router: Self::tool_router(),
         }
     }
@@ -2932,6 +2953,74 @@ impl SeamMcp {
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&output).unwrap_or_default(),
         )]))
+    }
+
+    #[tool(description = "Search source code in the project repository. Returns matching files with relevant snippets. Useful for finding function definitions, usages, patterns, or any code construct.")]
+    async fn search_code(
+        &self,
+        Parameters(params): Parameters<SearchCodeParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let code_index = match &self.code_index {
+            Some(idx) => idx,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Code search is not available (index not initialized)",
+                )]));
+            }
+        };
+
+        let org_id = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT org_id FROM projects WHERE id = $1",
+        )
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
+
+        let limit = params.limit.unwrap_or(10).min(30).max(1) as usize;
+        // Fetch more to allow post-filtering by language
+        let fetch_limit = if params.language.is_some() { limit * 3 } else { limit };
+
+        let mut results = match code_index.search(org_id, Some(project_id), &params.query, fetch_limit) {
+            Ok(r) => r,
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(format!("Search failed: {e}"))]));
+            }
+        };
+
+        // Post-filter by language if specified
+        if let Some(ref lang) = params.language {
+            results.retain(|r| r.language.eq_ignore_ascii_case(lang));
+        }
+
+        results.truncate(limit);
+
+        if results.is_empty() {
+            return Ok(CallToolResult::success(vec![Content::text(
+                "No code results found for your query.",
+            )]));
+        }
+
+        let output = results
+            .iter()
+            .map(|r| {
+                format!(
+                    "<code_result path=\"{}\" language=\"{}\" score=\"{:.2}\">\n{}\n</code_result>",
+                    r.path,
+                    r.language,
+                    r.score,
+                    r.snippet,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        Ok(CallToolResult::success(vec![Content::text(output)]))
     }
 }
 

@@ -1,5 +1,6 @@
 pub mod activity;
 pub mod agent;
+pub mod code_index;
 pub mod agents;
 pub mod automations;
 pub mod credentials;

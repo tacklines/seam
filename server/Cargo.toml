@@ -47,6 +47,7 @@ fernet = "0.2"
 base64 = "0.22"
 lapin = "2"
 cron = "0.15"
+tantivy = "0.22"
 
 [dev-dependencies]
 axum-test = "16"
