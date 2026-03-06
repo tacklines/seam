@@ -27,6 +27,7 @@ Workflow: dispatch -> wait for completion -> review -> dispatch next task
 ```bash
 just dev                  # Start everything (infra + server + frontend)
 just dev-noauth           # Same but with MCP auth disabled
+just worker               # Start the seam-worker (event bridge + scheduler)
 just test                 # cargo test (server)
 just check-all            # cargo check + tsc --noEmit
 just token                # Get test JWT from Keycloak
@@ -49,7 +50,9 @@ just token                # Get test JWT from Keycloak
 - **Backend**: `server/` — Rust (Axum) with PostgreSQL
 - **Auth**: Keycloak OIDC (realm: `seam`, client: `web-app` public PKCE)
 - **Sandboxes**: Coder workspaces for agent task execution (optional)
-- **Infra**: Docker Compose (Keycloak + Postgres; Coder via `--profile coder`)
+- **Worker**: `server/src/bin/worker.rs` — seam-worker binary (event bridge + reactions + scheduler)
+- **Message Queue**: RabbitMQ (topic exchange `seam.events`, queue `seam.reactions`)
+- **Infra**: Docker Compose (Keycloak + Postgres + RabbitMQ; Coder via `--profile coder`)
 
 ## Data Model
 
@@ -177,6 +180,41 @@ Agents get a structured git workflow for propagating changes back to the repo.
 - `anthropic_api_key` → `ANTHROPIC_API_KEY`
 - `git_token` → `GIT_TOKEN`
 - User credentials override org credentials of the same type
+
+## Task Scheduler & Message Queue
+
+Event-driven reactions and scheduled jobs, powered by RabbitMQ.
+
+### Architecture
+
+- **Event Bridge** (`worker/bridge.rs`): Polls `domain_events` table with cursor, publishes to RabbitMQ `seam.events` topic exchange. Routing keys: `{aggregate_type}.{event_type}`.
+- **Reaction Engine** (`worker/reactions.rs`): Consumes from `seam.reactions` queue, matches against `event_reactions` table, dispatches actions.
+- **Cron Scheduler** (`worker/scheduler.rs`): Polls `scheduled_jobs` table every 30s, dispatches due jobs.
+- All three run as concurrent tokio tasks in the `seam-worker` binary.
+
+### Tables
+
+- `event_reactions` — per-project configurable reactions to domain events
+- `scheduled_jobs` — per-project cron-based recurring jobs
+- `event_bridge_cursor` — singleton tracking last processed event ID
+
+### Action Types
+
+- `launch_agent` — launch a Coder workspace with agent config
+- `webhook` — HTTP callback (not yet implemented)
+- `mcp_tool` — invoke an MCP tool (not yet implemented)
+
+### API Endpoints
+
+- `GET/POST /api/projects/:id/reactions` — list/create event reactions
+- `PATCH/DELETE /api/projects/:id/reactions/:id` — update/delete
+- `GET/POST /api/projects/:id/scheduled-jobs` — list/create scheduled jobs
+- `PATCH/DELETE /api/projects/:id/scheduled-jobs/:id` — update/delete
+
+### Environment
+
+- `AMQP_URL` — RabbitMQ connection (default: `amqp://seam:seam@localhost:5672`)
+- RabbitMQ management UI: `http://localhost:15672` (seam/seam)
 
 ## Conventions
 
