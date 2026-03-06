@@ -209,7 +209,13 @@ export class InvocationDetail extends LitElement {
     this._pollTimer = setInterval(async () => {
       try {
         const inv = await fetchInvocation(this.invocationId);
+        const hadNewOutput =
+          inv.output.length !== this._invocation?.output.length;
         this._invocation = inv;
+        if (hadNewOutput) {
+          await this.updateComplete;
+          this._scrollOutputToBottom();
+        }
         if (inv.status !== "running" && inv.status !== "pending") {
           clearInterval(this._pollTimer!);
           this._pollTimer = null;
@@ -217,7 +223,12 @@ export class InvocationDetail extends LitElement {
       } catch {
         // ignore poll errors
       }
-    }, 3000);
+    }, 2000);
+  }
+
+  private _scrollOutputToBottom() {
+    const el = this.shadowRoot?.querySelector(".output-lines");
+    if (el) el.scrollTop = el.scrollHeight;
   }
 
   private _formatDuration(): string {
