@@ -1,4 +1,5 @@
 use lapin::{options::*, types::FieldTable, Connection, ConnectionProperties, ExchangeKind};
+use seam_server::worker;
 use sqlx::postgres::PgPoolOptions;
 use tracing::info;
 
@@ -66,16 +67,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("seam-worker is ready");
 
-    // TODO: Spawn the domain-event bridge (PG NOTIFY → RabbitMQ)
-    // TODO: Spawn the reactions consumer (RabbitMQ → reaction handlers)
-    // TODO: Spawn the cron scheduler
-
-    // Keep the pool alive for background tasks
-    let _pool = pool;
+    // Spawn all worker subsystems
+    let bridge_handle = tokio::spawn(worker::bridge::run(pool.clone(), channel.clone()));
+    let reactions_handle = tokio::spawn(worker::reactions::run(pool.clone(), channel));
+    let scheduler_handle = tokio::spawn(worker::scheduler::run(pool));
 
     // Wait for shutdown signal
     tokio::signal::ctrl_c().await?;
     info!("Shutting down seam-worker");
+
+    bridge_handle.abort();
+    reactions_handle.abort();
+    scheduler_handle.abort();
 
     Ok(())
 }
