@@ -240,13 +240,15 @@ pub async fn cancel_question(
     let user = crate::db::upsert_user(&state.db, &claims).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
-    let _participant = resolve_participant_for_user(&state.db, session.id, user.id).await?;
+    let participant = resolve_participant_for_user(&state.db, session.id, user.id).await?;
 
+    // Only the asker can cancel their own question
     let result = sqlx::query(
-        "UPDATE questions SET status = 'cancelled' WHERE id = $1 AND session_id = $2 AND status = 'pending'"
+        "UPDATE questions SET status = 'cancelled' WHERE id = $1 AND session_id = $2 AND asked_by = $3 AND status = 'pending'"
     )
     .bind(question_id)
     .bind(session.id)
+    .bind(participant.id)
     .execute(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

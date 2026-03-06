@@ -160,16 +160,23 @@ async fn test_pg_notify_trigger() {
     .await
     .unwrap();
 
-    // Should receive notification within 5 seconds
-    let notification = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        listener.recv(),
-    )
-    .await
-    .expect("Timeout waiting for PG NOTIFY")
-    .expect("Error receiving notification");
+    // Drain and find our specific notification (other tests may emit events concurrently)
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let notification = tokio::time::timeout_at(
+            deadline,
+            listener.recv(),
+        )
+        .await
+        .expect("Timeout waiting for PG NOTIFY")
+        .expect("Error receiving notification");
 
-    let payload: serde_json::Value = serde_json::from_str(notification.payload()).unwrap();
-    assert_eq!(payload["event_type"], "task.created");
-    assert_eq!(payload["aggregate_type"], "task");
+        let payload: serde_json::Value = serde_json::from_str(notification.payload()).unwrap();
+        if payload["aggregate_id"] == aggregate_id.to_string() {
+            assert_eq!(payload["event_type"], "task.created");
+            assert_eq!(payload["aggregate_type"], "task");
+            break;
+        }
+        // Not our event, keep draining
+    }
 }
