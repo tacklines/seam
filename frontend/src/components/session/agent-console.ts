@@ -199,18 +199,24 @@ export class AgentConsole extends LitElement {
     }
 
     sl-tab-panel {
-      flex: 1;
       overflow: hidden;
+    }
+
+    sl-tab-panel[active] {
+      flex: 1;
       display: flex;
       flex-direction: column;
     }
 
     sl-tab-panel::part(base) {
+      padding: 0;
+    }
+
+    sl-tab-panel[active]::part(base) {
       flex: 1;
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      padding: 0;
     }
 
     /* -- Messages tab -- */
