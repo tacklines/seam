@@ -298,7 +298,7 @@ FORWARDER
       echo "Installing tackline..."
       sudo git clone --depth 1 "${data.coder_parameter.tackline_repo_url.value}" /opt/tackline
       sudo chown -R "$(id -u):$(id -g)" /opt/tackline
-      /opt/tackline/install.sh
+      /opt/tackline/install.sh || echo "WARN: tackline install failed (continuing)"
       echo "Tackline installed: $(ls ~/.claude/skills/ 2>/dev/null | wc -l) skills"
     fi
 
@@ -307,18 +307,16 @@ FORWARDER
       echo "Configuring Seam MCP connection..."
 
       mkdir -p /workspace/.claude
-      cat > /workspace/.claude/settings.local.json <<SETTINGS
-    {
-      "mcpServers": {
-        "seam": {
-          "url": "${data.coder_parameter.seam_url.value}/mcp",
-          "headers": {
-            "Authorization": "Bearer ${data.coder_parameter.seam_token.value}"
-          }
-        }
-      }
-    }
-    SETTINGS
+      printf '%s\n' '{' \
+        '  "mcpServers": {' \
+        '    "seam": {' \
+        '      "url": "'"${data.coder_parameter.seam_url.value}"'/mcp",' \
+        '      "headers": {' \
+        '        "Authorization": "Bearer '"${data.coder_parameter.seam_token.value}"'"' \
+        '      }' \
+        '    }' \
+        '  }' \
+        '}' > /workspace/.claude/settings.local.json
 
       echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
       echo "Agent type: ${data.coder_parameter.agent_type.value}"
