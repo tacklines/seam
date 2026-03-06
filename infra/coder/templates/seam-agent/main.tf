@@ -177,11 +177,12 @@ resource "coder_agent" "dev" {
     #!/bin/bash
     set -e
 
-    # Install log forwarder script
+    # --- Phase 0: Log forwarder + startup log tee ---
+    # Install log forwarder script (streams log file to Seam server)
     mkdir -p /opt/seam
     cat > /opt/seam/log-forwarder.py <<'FORWARDER'
 #!/usr/bin/env python3
-"""Tails agent output and POSTs batches to the Seam server."""
+"""Tails a log file and POSTs batches to the Seam server."""
 import json, os, sys, time, urllib.request, urllib.error
 from datetime import datetime, timezone
 from threading import Thread, Event
@@ -212,10 +213,10 @@ def main():
         while not stop.wait(FLUSH_INTERVAL):
             if batch and time.monotonic() - last_flush >= FLUSH_INTERVAL: flush()
     Thread(target=timer, daemon=True).start()
+    # Start from beginning of file (don't seek to end) to capture prior output
     while not os.path.exists(log_file) and not stop.is_set(): time.sleep(0.5)
     try:
         with open(log_file) as f:
-            f.seek(0, 2)
             while not stop.is_set():
                 line = f.readline()
                 if line:
@@ -230,19 +231,43 @@ if __name__ == "__main__": main()
 FORWARDER
     chmod +x /opt/seam/log-forwarder.py
 
-    # Configure git credential helper if GIT_TOKEN is available
-    if [ -n "$GIT_TOKEN" ]; then
-      echo "Configuring git credentials..."
-      git config --global credential.helper '!f() { echo "password=$GIT_TOKEN"; }; f'
-      # Also set up for HTTPS clone URLs that need auth
-      REPO_HOST=$(echo "${data.coder_parameter.repo_url.value}" | sed -n 's|https://\([^/]*\)/.*|\1|p')
-      if [ -n "$REPO_HOST" ]; then
-        git config --global "credential.https://$REPO_HOST.helper" \
-          '!f() { echo "username=git"; echo "password='"$GIT_TOKEN"'"; }; f'
-      fi
+    # Start log forwarder early so startup output is visible in Seam
+    STARTUP_LOG=/tmp/seam-startup.log
+    if [ -n "${data.coder_parameter.workspace_id.value}" ] && [ -n "${data.coder_parameter.seam_url.value}" ]; then
+      touch "$STARTUP_LOG"
+      python3 /opt/seam/log-forwarder.py \
+        "$STARTUP_LOG" \
+        "${data.coder_parameter.seam_url.value}" \
+        "${data.coder_parameter.workspace_id.value}" \
+        "${data.coder_parameter.seam_token.value}" &
+      STARTUP_FORWARDER_PID=$!
+      # Tee all subsequent output to both stdout and the startup log
+      exec > >(tee -a "$STARTUP_LOG") 2>&1
+      echo "Startup log forwarder started (PID: $STARTUP_FORWARDER_PID)"
     fi
 
-    # Clone repo if specified and /workspace is empty
+    # --- Phase 1: Inject credentials (before any git operations) ---
+    CREDS_JSON='${data.coder_parameter.credentials_json.value}'
+    if [ "$CREDS_JSON" != "{}" ] && [ -n "$CREDS_JSON" ]; then
+      echo "Injecting credentials..."
+      eval "$(echo "$CREDS_JSON" | jq -r 'to_entries[] | "export \(.key)=\(.value | @sh)"')"
+      echo "Injected $(echo "$CREDS_JSON" | jq 'length') credential(s)"
+    fi
+
+    # --- Phase 2: Git credential helper (GIT_TOKEN now available) ---
+    if [ -n "$GIT_TOKEN" ]; then
+      echo "Configuring git credentials..."
+      git config --global credential.helper \
+        '!f() { echo "username=git"; echo "password='"$GIT_TOKEN"'"; }; f'
+    fi
+
+    # --- Phase 3: Ensure /workspace is writable ---
+    if [ ! -w "/workspace" ]; then
+      echo "Fixing /workspace permissions..."
+      sudo chown -R "$(id -u):$(id -g)" /workspace 2>/dev/null || true
+    fi
+
+    # --- Phase 4: Clone repo ---
     if [ -n "${data.coder_parameter.repo_url.value}" ] && [ ! -d "/workspace/.git" ]; then
       echo "Cloning ${data.coder_parameter.repo_url.value}..."
       git clone "${data.coder_parameter.repo_url.value}" /workspace
@@ -255,18 +280,10 @@ FORWARDER
       fi
     fi
 
-    # Install Claude Code CLI if not present
+    # --- Phase 5: Install tools ---
     if ! command -v claude &> /dev/null; then
       echo "Installing Claude Code CLI..."
       npm install -g @anthropic-ai/claude-code
-    fi
-
-    # Inject credentials as environment variables (before agent launch)
-    CREDS_JSON='${data.coder_parameter.credentials_json.value}'
-    if [ "$CREDS_JSON" != "{}" ] && [ -n "$CREDS_JSON" ]; then
-      echo "Injecting credentials..."
-      eval "$(echo "$CREDS_JSON" | jq -r 'to_entries[] | "export \(.key)=\(.value | @sh)"')"
-      echo "Injected $(echo "$CREDS_JSON" | jq 'length') credential(s)"
     fi
 
     # Install tackline skills
@@ -277,7 +294,7 @@ FORWARDER
       echo "Tackline installed: $(ls ~/.claude/skills/ 2>/dev/null | wc -l) skills"
     fi
 
-    # Configure Seam MCP tools if agent_code is provided
+    # --- Phase 6: Launch agent ---
     if [ -n "${data.coder_parameter.agent_code.value}" ] && [ -n "${data.coder_parameter.seam_url.value}" ]; then
       echo "Configuring Seam MCP connection..."
 
@@ -298,6 +315,14 @@ FORWARDER
       echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
       echo "Agent type: ${data.coder_parameter.agent_type.value}"
 
+      # Stop startup log forwarder, switch to agent log forwarder
+      if [ -n "$STARTUP_FORWARDER_PID" ]; then
+        # Give it a moment to flush remaining startup output
+        sleep 1
+        kill "$STARTUP_FORWARDER_PID" 2>/dev/null || true
+        wait "$STARTUP_FORWARDER_PID" 2>/dev/null || true
+      fi
+
       # Launch Claude Code agent
       echo "Launching agent..."
       cd /workspace
@@ -307,14 +332,14 @@ FORWARDER
       AGENT_PID=$!
       echo "Agent PID: $AGENT_PID"
 
-      # Start log forwarder sidecar — streams agent output to Seam server
+      # Start agent log forwarder — streams agent output to Seam server
       if [ -n "${data.coder_parameter.workspace_id.value}" ]; then
         python3 /opt/seam/log-forwarder.py \
           /tmp/claude-agent.log \
           "${data.coder_parameter.seam_url.value}" \
           "${data.coder_parameter.workspace_id.value}" \
           "${data.coder_parameter.seam_token.value}" &
-        echo "Log forwarder PID: $!"
+        echo "Agent log forwarder PID: $!"
       fi
     fi
 
