@@ -198,6 +198,7 @@ export const messagesBn: Record<string, string> = {
   'cred.type.openaiApiKey': 'ওপেনএআই এপিআই কী।',
   'cred.type.googleApiKey': 'Google API কী',
   'cred.type.gitToken': 'গিট টোকেন',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'কাস্টম',
   'cred.emptyTitle': 'এখনও পর্যন্ত কোনো প্রমাণপত্র সংরক্ষণ করা হয়নি।',
   'cred.emptyHint': 'API কী অথবা টোকেন যোগ করুন, যা এজেন্টদের কাজের জায়গায় ব্যবহার করা হবে।',

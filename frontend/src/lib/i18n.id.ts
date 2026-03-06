@@ -198,6 +198,7 @@ export const messagesId: Record<string, string> = {
   'cred.type.openaiApiKey': 'Kunci API OpenAI',
   'cred.type.googleApiKey': 'Kunci API Google',
   'cred.type.gitToken': 'Token Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Khusus',
   'cred.emptyTitle': 'Belum ada kredensial yang disimpan.',
   'cred.emptyHint': 'Tambahkan kunci API atau token yang akan disisipkan ke ruang kerja agen.',

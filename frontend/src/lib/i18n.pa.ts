@@ -198,6 +198,7 @@ export const messagesPa: Record<string, string> = {
   'cred.type.openaiApiKey': 'ਓਪਨਏਆਈ ਏਪੀਆਈ (API) ਕੁੰਜੀ',
   'cred.type.googleApiKey': 'ਗੂਗਲ ਏਪੀਆਈ ਕੀ',
   'cred.type.gitToken': 'ਗਿੱਟ ਟੋਕਨ',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'ਕਸਟਮ',
   'cred.emptyTitle': 'ਅਜੇ ਤੱਕ ਕੋਈ ਵੀ ਪ੍ਰਮਾਣ ਪੱਤਰ ਸਟੋਰ ਨਹੀਂ ਕੀਤਾ ਗਿਆ।',
   'cred.emptyHint': 'ਏਜੰਟ ਵਰਕਸਪੇਸ ਵਿੱਚ ਜੋੜਨ ਲਈ API ਕੁੰਜੀਆਂ ਜਾਂ ਟੋਕਨ ਸ਼ਾਮਲ ਕਰੋ।',

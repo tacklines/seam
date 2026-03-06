@@ -198,6 +198,7 @@ export const messagesPtBr: Record<string, string> = {
   'cred.type.openaiApiKey': 'Chave da API OpenAI',
   'cred.type.googleApiKey': 'Chave da API do Google',
   'cred.type.gitToken': 'Token do Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Personalizado',
   'cred.emptyTitle': 'Nenhuma credencial armazenada até o momento.',
   'cred.emptyHint': 'Adicione chaves de API ou tokens que serão injetados nos espaços de trabalho dos agentes.',

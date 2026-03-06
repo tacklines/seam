@@ -180,6 +180,7 @@ Agents get a structured git workflow for propagating changes back to the repo.
 - `claude_oauth` → `CLAUDE_CODE_OAUTH_TOKEN`
 - `anthropic_api_key` → `ANTHROPIC_API_KEY`
 - `git_token` → `GIT_TOKEN`
+- `ssh_key` → `SSH_PRIVATE_KEY` (written to `~/.ssh/id_ed25519` in workspace, ssh-agent started)
 - User credentials override org credentials of the same type
 
 ## Task Scheduler & Message Queue

@@ -198,6 +198,7 @@ export const messagesHi: Record<string, string> = {
   'cred.type.openaiApiKey': 'ओपनएआई एपीआई कुंजी',
   'cred.type.googleApiKey': 'गूगल एपीआई कुंजी',
   'cred.type.gitToken': 'गिट टोकन',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'अनुकूलित / कस्टम',
   'cred.emptyTitle': 'अभी तक कोई क्रेडेंशियल संग्रहीत नहीं किया गया है।',
   'cred.emptyHint': 'एपीआई कुंजियाँ या टोकन जोड़ें जिन्हें एजेंट कार्यस्थानों में डाला जाएगा।',

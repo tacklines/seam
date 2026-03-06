@@ -265,6 +265,23 @@ FORWARDER
         '!f() { echo "username=git"; echo "password='"$GIT_TOKEN"'"; }; f'
     fi
 
+    # --- Phase 2b: SSH key setup (SSH_PRIVATE_KEY now available) ---
+    if [ -n "$SSH_PRIVATE_KEY" ]; then
+      echo "Configuring SSH key..."
+      mkdir -p ~/.ssh && chmod 700 ~/.ssh
+      printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+      chmod 600 ~/.ssh/id_ed25519
+      # Generate public key from private key
+      ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub 2>/dev/null || true
+      # Accept all host keys automatically (agent non-interactive)
+      printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' > ~/.ssh/config
+      chmod 600 ~/.ssh/config
+      # Start ssh-agent and add key
+      eval "$(ssh-agent -s)" > /dev/null 2>&1
+      ssh-add ~/.ssh/id_ed25519 > /dev/null 2>&1
+      echo "SSH key configured"
+    fi
+
     # --- Phase 3: Ensure /workspace is writable ---
     if [ ! -w "/workspace" ]; then
       echo "Fixing /workspace permissions..."

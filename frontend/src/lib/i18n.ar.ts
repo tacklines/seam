@@ -196,6 +196,7 @@ export const messagesAr: Record<string, string> = {
   'cred.type.openaiApiKey': 'مفتاح واجهة برمجة التطبيقات (API) الخاص بـ OpenAI.',
   'cred.type.googleApiKey': 'مفتاح واجهة برمجة تطبيقات جوجل.',
   'cred.type.gitToken': 'رمز Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'مخصص',
   'cred.emptyTitle': 'لم يتم تخزين أي بيانات اعتماد حتى الآن.',
   'cred.emptyHint': 'أضف مفاتيح أو رموز API التي سيتم إدخالها في مساحات عمل الوكلاء.',

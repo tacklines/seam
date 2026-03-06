@@ -198,6 +198,7 @@ export const messagesAm: Record<string, string> = {
   'cred.type.openaiApiKey': 'የኦፔንኤአይ ኤፒአይ ቁልፍ',
   'cred.type.googleApiKey': 'የGoogle API ቁልፍ',
   'cred.type.gitToken': 'Git መለያ',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'ብጁ',
   'cred.emptyTitle': 'እስከ አሁን ምንም መረጃ አልተከማቸም።',
   'cred.emptyHint': 'የኤጀንት የስራ ቦታዎች ውስጥ እንዲከተቡ የሚፈልጉትን API ቁልፎች ወይም ቶከኖችን ይጨምሩ።',

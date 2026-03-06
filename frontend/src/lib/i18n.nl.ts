@@ -198,6 +198,7 @@ export const messagesNl: Record<string, string> = {
   'cred.type.openaiApiKey': 'OpenAI API-sleutel',
   'cred.type.googleApiKey': 'Google API-sleutel',
   'cred.type.gitToken': 'Git-token',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Aangepast',
   'cred.emptyTitle': 'Er zijn nog geen inloggegevens opgeslagen.',
   'cred.emptyHint': 'Voeg API-sleutels of -tokens toe die in de agentwerkruimtes worden geïmplementeerd.',

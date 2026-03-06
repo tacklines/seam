@@ -198,6 +198,7 @@ export const messagesUr: Record<string, string> = {
   'cred.type.openaiApiKey': 'اوپن اے آئی اے پی آئی کی',
   'cred.type.googleApiKey': 'گوگل اے پی آئی کی',
   'cred.type.gitToken': 'گٹ ٹوکن',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'خاص',
   'cred.emptyTitle': 'اب تک کوئی بھی صارف نام یا پاس ورڈ محفوظ نہیں ہے۔',
   'cred.emptyHint': 'ای پی آئی (API) کیز یا ٹوکنز شامل کریں جو ایجنٹ کے ورک اسپیس میں شامل کیے جائیں گے۔',

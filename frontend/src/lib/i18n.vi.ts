@@ -198,6 +198,7 @@ export const messagesVi: Record<string, string> = {
   'cred.type.openaiApiKey': 'Khóa API OpenAI',
   'cred.type.googleApiKey': 'Khóa API của Google',
   'cred.type.gitToken': 'Token Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Tùy chỉnh',
   'cred.emptyTitle': 'Chưa lưu trữ thông tin đăng nhập nào.',
   'cred.emptyHint': 'Thêm các khóa API hoặc mã thông báo sẽ được chèn vào không gian làm việc của các tác nhân.',

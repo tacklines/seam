@@ -198,6 +198,7 @@ export const messagesKo: Record<string, string> = {
   'cred.type.openaiApiKey': 'OpenAI API 키',
   'cred.type.googleApiKey': 'Google API 키',
   'cred.type.gitToken': 'Git 토큰',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': '맞춤 설정',
   'cred.emptyTitle': '아직 저장된 인증 정보가 없습니다.',
   'cred.emptyHint': '에이전트 작업 공간에 삽입될 API 키 또는 토큰을 추가합니다.',

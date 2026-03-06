@@ -16,6 +16,7 @@ pub enum CredentialError {
     #[error("invalid master key: {0}")]
     InvalidMasterKey(String),
     #[error("encryption failed: {0}")]
+    #[allow(dead_code)]
     EncryptionFailed(String),
     #[error("decryption failed: {0}")]
     DecryptionFailed(String),
@@ -119,6 +120,7 @@ pub fn credential_env_var(credential_type: &str, custom_env_var: Option<&str>) -
         "openai_api_key" => Some("OPENAI_API_KEY".to_string()),
         "google_api_key" => Some("GOOGLE_API_KEY".to_string()),
         "git_token" => Some("GIT_TOKEN".to_string()),
+        "ssh_key" => Some("SSH_PRIVATE_KEY".to_string()),
         "custom" => custom_env_var.map(|s| s.to_string()),
         _ => None,
     }

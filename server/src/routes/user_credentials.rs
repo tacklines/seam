@@ -80,7 +80,7 @@ pub async fn create_user_credential(
     let user = db::upsert_user(&state.db, &claims).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let valid_types = ["claude_oauth", "anthropic_api_key", "openai_api_key", "google_api_key", "git_token", "custom"];
+    let valid_types = ["claude_oauth", "anthropic_api_key", "openai_api_key", "google_api_key", "git_token", "ssh_key", "custom"];
     if !valid_types.contains(&req.credential_type.as_str()) {
         return Err(StatusCode::BAD_REQUEST);
     }

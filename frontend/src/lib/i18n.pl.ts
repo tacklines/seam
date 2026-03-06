@@ -198,6 +198,7 @@ export const messagesPl: Record<string, string> = {
   'cred.type.openaiApiKey': 'Klucz API OpenAI',
   'cred.type.googleApiKey': 'Klucz API Google',
   'cred.type.gitToken': 'Token Git.',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Dostosowane / Niestandardowe',
   'cred.emptyTitle': 'Na razie nie zapisano żadnych danych uwierzytelniających.',
   'cred.emptyHint': 'Dodaj klucze API lub tokeny, które zostaną wstrzyknięte do przestrzeni roboczych agentów.',

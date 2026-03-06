@@ -198,6 +198,7 @@ export const messagesUk: Record<string, string> = {
   'cred.type.openaiApiKey': 'Ключ API OpenAI',
   'cred.type.googleApiKey': 'Ключ Google API',
   'cred.type.gitToken': 'Токен Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Спеціальний',
   'cred.emptyTitle': 'Поки що не збережено жодних облікових даних.',
   'cred.emptyHint': 'Додайте ключі API або токени, які будуть передаватися в робочі простори агентів.',

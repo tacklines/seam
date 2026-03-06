@@ -198,6 +198,7 @@ export const messagesFa: Record<string, string> = {
   'cred.type.openaiApiKey': 'کلید API اوپن‌ای‌آی',
   'cred.type.googleApiKey': 'کلید API گوگل',
   'cred.type.gitToken': 'توکن گیت',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'سفارشی',
   'cred.emptyTitle': 'هنوز هیچ اطلاعات کاربری ذخیره نشده است.',
   'cred.emptyHint': 'کلیدهای API یا توکن‌هایی را اضافه کنید که در محیط‌های کاری عامل تزریق خواهند شد.',

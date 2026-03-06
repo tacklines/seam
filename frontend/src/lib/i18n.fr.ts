@@ -198,6 +198,7 @@ export const messagesFr: Record<string, string> = {
   'cred.type.openaiApiKey': 'Clé d\\\'API OpenAI',
   'cred.type.googleApiKey': 'Clé d\\\'API Google',
   'cred.type.gitToken': 'Jeton Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Personnalisé',
   'cred.emptyTitle': 'Aucun identifiant n\\\'a été enregistré pour le moment.',
   'cred.emptyHint': 'Ajoutez les clés API ou les jetons qui seront injectés dans les espaces de travail des agents.',

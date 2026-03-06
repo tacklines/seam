@@ -198,6 +198,7 @@ export const messagesTh: Record<string, string> = {
   'cred.type.openaiApiKey': 'คีย์ API ของ OpenAI',
   'cred.type.googleApiKey': 'คีย์ API ของ Google',
   'cred.type.gitToken': 'โทเค็น Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'กำหนดเอง',
   'cred.emptyTitle': 'ยังไม่มีข้อมูลรับรองถูกบันทึกไว้',
   'cred.emptyHint': 'เพิ่มคีย์ API หรือโทเค็นที่จะถูกนำไปใช้ในพื้นที่ทำงานของเอเจนต์',

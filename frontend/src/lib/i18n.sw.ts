@@ -197,6 +197,7 @@ export const messagesSw: Record<string, string> = {
   'cred.type.openaiApiKey': 'Kitufe cha API cha OpenAI',
   'cred.type.googleApiKey': 'Ufunguo wa API wa Google',
   'cred.type.gitToken': 'Kitambulisho cha Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Iliyobadilishwa',
   'cred.emptyTitle': 'Hakuna taarifa za akaunti zilizohifadhiwa bado.',
   'cred.emptyHint': 'Ongeza funguo au tokeni za API ambazo zitaingizwa katika maeneo ya kazi ya wakala.',

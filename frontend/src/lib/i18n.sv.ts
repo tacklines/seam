@@ -198,6 +198,7 @@ export const messagesSv: Record<string, string> = {
   'cred.type.openaiApiKey': 'OpenAI API-nyckel',
   'cred.type.googleApiKey': 'Google API-nyckel',
   'cred.type.gitToken': 'Git-token',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Anpassad',
   'cred.emptyTitle': 'Inga inloggningsuppgifter är lagrade ännu.',
   'cred.emptyHint': 'Lägg till API-nycklar eller -token som ska användas i agenternas arbetsytor.',

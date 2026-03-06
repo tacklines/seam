@@ -198,6 +198,7 @@ export const messagesIt: Record<string, string> = {
   'cred.type.openaiApiKey': 'Chiave API di OpenAI',
   'cred.type.googleApiKey': 'Chiave API di Google',
   'cred.type.gitToken': 'Token Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Personalizzato',
   'cred.emptyTitle': 'Nessuna credenziale salvata finora.',
   'cred.emptyHint': 'Aggiungere le chiavi API o i token che verranno inseriti negli ambienti di lavoro degli agenti.',

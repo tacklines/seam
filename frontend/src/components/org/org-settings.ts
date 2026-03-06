@@ -35,6 +35,7 @@ import '@shoelace-style/shoelace/dist/components/tab/tab.js';
 import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
+import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
 
 const CREDENTIAL_TYPE_KEYS: Record<string, string> = {
   claude_oauth: 'cred.type.claudeOauth',
@@ -42,6 +43,7 @@ const CREDENTIAL_TYPE_KEYS: Record<string, string> = {
   openai_api_key: 'cred.type.openaiApiKey',
   google_api_key: 'cred.type.googleApiKey',
   git_token: 'cred.type.gitToken',
+  ssh_key: 'cred.type.sshKey',
   custom: 'cred.type.custom',
 };
 
@@ -51,6 +53,7 @@ const CREDENTIAL_TYPE_ENV: Record<string, string> = {
   openai_api_key: 'OPENAI_API_KEY',
   google_api_key: 'GOOGLE_API_KEY',
   git_token: 'GIT_TOKEN',
+  ssh_key: 'SSH_PRIVATE_KEY',
 };
 
 @customElement('org-settings')
@@ -465,9 +468,16 @@ export class OrgSettings extends LitElement {
               ${t('cred.injectedAs')} <code>${CREDENTIAL_TYPE_ENV[this._newCredType] ?? '?'}</code>
             </div>
           `}
-          <sl-input label=${t('cred.valueLabel')} type="password" placeholder=${t('cred.valuePlaceholder')} value=${this._newCredValue}
-                    @sl-input=${(e: CustomEvent) => { this._newCredValue = (e.target as HTMLInputElement).value; }}
-          ></sl-input>
+          ${this._newCredType === 'ssh_key' ? html`
+            <sl-textarea label=${t('cred.valueLabel')} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" rows="6"
+                         value=${this._newCredValue} style="font-family: var(--sl-font-mono); font-size: 0.8rem;"
+                         @sl-input=${(e: CustomEvent) => { this._newCredValue = (e.target as HTMLInputElement).value; }}
+            ></sl-textarea>
+          ` : html`
+            <sl-input label=${t('cred.valueLabel')} type="password" placeholder=${t('cred.valuePlaceholder')} value=${this._newCredValue}
+                      @sl-input=${(e: CustomEvent) => { this._newCredValue = (e.target as HTMLInputElement).value; }}
+            ></sl-input>
+          `}
         </div>
         <sl-button slot="footer" variant="primary" ?loading=${this._addingCred} @click=${() => void this._addCredential()}>
           ${t('cred.save')}

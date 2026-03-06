@@ -198,6 +198,7 @@ export const messagesZh: Record<string, string> = {
   'cred.type.openaiApiKey': 'OpenAI API 密钥',
   'cred.type.googleApiKey': 'Google API 密钥',
   'cred.type.gitToken': 'Git 令牌',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': '自定义',
   'cred.emptyTitle': '尚未存储任何凭据。',
   'cred.emptyHint': '添加 API 密钥或令牌，这些密钥或令牌将被注入到代理工作区中。',

@@ -198,6 +198,7 @@ export const messagesTr: Record<string, string> = {
   'cred.type.openaiApiKey': 'OpenAI API Anahtarı',
   'cred.type.googleApiKey': 'Google API Anahtarı',
   'cred.type.gitToken': 'Git Token',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Özel',
   'cred.emptyTitle': 'Henüz herhangi bir kimlik bilgisi kaydedilmedi.',
   'cred.emptyHint': 'Aracı çalışma alanlarına eklenecek API anahtarlarını veya belirteçlerini ekleyin.',

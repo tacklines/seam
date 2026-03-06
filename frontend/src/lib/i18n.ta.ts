@@ -198,6 +198,7 @@ export const messagesTa: Record<string, string> = {
   'cred.type.openaiApiKey': 'ஓபன்ஏஐ ஏபிஐ சாவி',
   'cred.type.googleApiKey': 'கூகிள் ஏபிஐ சாவி.',
   'cred.type.gitToken': 'கிட் டோக்கன்',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'தனிப்பயன்',
   'cred.emptyTitle': 'இதுவரை எந்த அங்கீகாரத் தகவலும் சேமிக்கப்படவில்லை.',
   'cred.emptyHint': 'ஏஜென்ட் பணிச்சூழல்களில் பயன்படுத்தப்படும் API விசைகள் அல்லது டோக்கன்களைச் சேர்க்கவும்.',

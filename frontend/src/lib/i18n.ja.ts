@@ -198,6 +198,7 @@ export const messagesJa: Record<string, string> = {
   'cred.type.openaiApiKey': 'OpenAI APIキー',
   'cred.type.googleApiKey': 'Google APIキー',
   'cred.type.gitToken': 'Gitトークン',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'カスタム',
   'cred.emptyTitle': 'まだ認証情報が保存されていません。',
   'cred.emptyHint': 'エージェントのワークスペースに挿入される API キーまたはトークンを追加します。',

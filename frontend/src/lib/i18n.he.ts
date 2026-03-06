@@ -197,6 +197,7 @@ export const messagesHe: Record<string, string> = {
   'cred.type.openaiApiKey': 'מפתח API של OpenAI',
   'cred.type.googleApiKey': 'מפתח API של גוגל',
   'cred.type.gitToken': 'אסימון Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'מותאם אישית',
   'cred.emptyTitle': 'לא נשמרו עדיין פרטי התחברות.',
   'cred.emptyHint': 'הוסף מפתחות API או אסימונים שיוזרקו לסביבות העבודה של הסוכנים.',

@@ -198,6 +198,7 @@ export const messagesCs: Record<string, string> = {
   'cred.type.openaiApiKey': 'Klíč OpenAI API',
   'cred.type.googleApiKey': 'Klíč API Google',
   'cred.type.gitToken': 'Token Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Vlastní',
   'cred.emptyTitle': 'Zatím nejsou uložena žádná přihlašovací data.',
   'cred.emptyHint': 'Přidejte API klíče nebo tokeny, které budou vloženy do pracovních prostorů agentů.',

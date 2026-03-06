@@ -388,6 +388,7 @@ export const messagesEn: Record<string, string> = {
   "cred.type.openaiApiKey": "OpenAI API Key",
   "cred.type.googleApiKey": "Google API Key",
   "cred.type.gitToken": "Git Token",
+  "cred.type.sshKey": "SSH Key",
   "cred.type.custom": "Custom",
   "cred.emptyTitle": "No credentials stored yet.",
   "cred.emptyHint":

@@ -198,6 +198,7 @@ export const messagesTe: Record<string, string> = {
   'cred.type.openaiApiKey': 'ఓపెన్ఏఐ ఏపిఐ కీ',
   'cred.type.googleApiKey': 'గూగుల్ API కీ',
   'cred.type.gitToken': 'గిట్ టోకెన్',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'అనుకూలీకరించిన',
   'cred.emptyTitle': 'ఇంకా ఏ ఆధారాలను నిల్వ చేయలేదు.',
   'cred.emptyHint': 'ఏజెంట్ వర్క్‌స్పేస్‌లలోకి చేర్చబడే API కీలు లేదా టోకెన్‌లను జోడించండి.',

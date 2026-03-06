@@ -197,6 +197,7 @@ export const messagesEsMx: Record<string, string> = {
   'cred.type.openaiApiKey': 'Clave API de OpenAI',
   'cred.type.googleApiKey': 'Clave de la API de Google',
   'cred.type.gitToken': 'Token de Git',
+  'cred.type.sshKey': 'SSH Key',
   'cred.type.custom': 'Personalizado/a',
   'cred.emptyTitle': 'Aún no se han guardado credenciales.',
   'cred.emptyHint': 'Agregue las claves de API o los tokens que se inyectarán en los espacios de trabajo de los agentes.',
