@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     llamacpp_base_url: str = "http://192.168.1.14:8080/v1"
     anthropic_api_key: str = ""
+    openrouter_api_key: str = ""  # enables OpenRouter models if set
 
     # Seam MCP (Streamable HTTP)
     seam_url: str = "http://localhost:3002"
@@ -62,6 +63,12 @@ def build_model_registry():
     if settings.anthropic_api_key:
         for name, profile in KNOWN_PROFILES.items():
             if profile.provider == "anthropic":
+                registry.register(profile)
+
+    # Register OpenRouter models if API key is set
+    if settings.openrouter_api_key:
+        for name, profile in KNOWN_PROFILES.items():
+            if profile.provider == "openrouter":
                 registry.register(profile)
 
     return registry

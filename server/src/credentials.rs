@@ -118,6 +118,7 @@ pub fn credential_env_var(credential_type: &str, custom_env_var: Option<&str>) -
         "claude_oauth" => Some("CLAUDE_CODE_OAUTH_TOKEN".to_string()),
         "anthropic_api_key" => Some("ANTHROPIC_API_KEY".to_string()),
         "openai_api_key" => Some("OPENAI_API_KEY".to_string()),
+        "openrouter_api_key" => Some("OPENROUTER_API_KEY".to_string()),
         "google_api_key" => Some("GOOGLE_API_KEY".to_string()),
         "git_token" => Some("GIT_TOKEN".to_string()),
         "ssh_key" => Some("SSH_PRIVATE_KEY".to_string()),

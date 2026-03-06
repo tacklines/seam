@@ -387,6 +387,7 @@ export const messagesEn: Record<string, string> = {
   "cred.type.claudeOauth": "Claude OAuth Token",
   "cred.type.anthropicApiKey": "Anthropic API Key",
   "cred.type.openaiApiKey": "OpenAI API Key",
+  "cred.type.openrouterApiKey": "OpenRouter API Key",
   "cred.type.googleApiKey": "Google API Key",
   "cred.type.gitToken": "Git Token",
   "cred.type.sshKey": "SSH Key",

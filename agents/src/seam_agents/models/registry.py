@@ -98,6 +98,56 @@ KNOWN_PROFILES: dict[str, ModelProfile] = {
         tok_per_sec=30.0,
     ),
 
+    # OpenRouter models — available via OpenRouter API (OpenAI-compatible)
+    "qwen/qwen3.5-coder-32b": ModelProfile(
+        name="qwen/qwen3.5-coder-32b",
+        provider="openrouter",
+        capabilities={
+            Capability.CODING: 0.9,
+            Capability.REASONING: 0.85,
+            Capability.TOOL_USE: 0.8,
+            Capability.LONG_CONTEXT: 0.9,
+            Capability.SPEED: 0.7,
+            Capability.CREATIVE: 0.7,
+            Capability.INSTRUCTION_FOLLOWING: 0.85,
+        },
+        budget=Budget.ECONOMY,
+        context_window=131072,
+        tok_per_sec=80.0,
+    ),
+    "deepseek/deepseek-v3-0324": ModelProfile(
+        name="deepseek/deepseek-v3-0324",
+        provider="openrouter",
+        capabilities={
+            Capability.CODING: 0.9,
+            Capability.REASONING: 0.9,
+            Capability.TOOL_USE: 0.85,
+            Capability.LONG_CONTEXT: 0.9,
+            Capability.SPEED: 0.6,
+            Capability.CREATIVE: 0.8,
+            Capability.INSTRUCTION_FOLLOWING: 0.85,
+        },
+        budget=Budget.ECONOMY,
+        context_window=131072,
+        tok_per_sec=60.0,
+    ),
+    "meta-llama/llama-4-maverick": ModelProfile(
+        name="meta-llama/llama-4-maverick",
+        provider="openrouter",
+        capabilities={
+            Capability.CODING: 0.85,
+            Capability.REASONING: 0.85,
+            Capability.TOOL_USE: 0.8,
+            Capability.LONG_CONTEXT: 0.85,
+            Capability.SPEED: 0.65,
+            Capability.CREATIVE: 0.8,
+            Capability.INSTRUCTION_FOLLOWING: 0.85,
+        },
+        budget=Budget.ECONOMY,
+        context_window=131072,
+        tok_per_sec=70.0,
+    ),
+
     # API models — available only when API keys are configured
     "claude-opus-4-6": ModelProfile(
         name="claude-opus-4-6",
@@ -160,6 +210,12 @@ MODEL_ALIASES: dict[str, str] = {
     "qwen3.5:35b": "qwen35-tuned",
     "devstral-small-2:latest": "devstral-tuned",
     "devstral-small-2": "devstral-tuned",
+    "qwen3.5": "qwen/qwen3.5-coder-32b",
+    "qwen3.5-coder": "qwen/qwen3.5-coder-32b",
+    "deepseek": "deepseek/deepseek-v3-0324",
+    "deepseek-v3": "deepseek/deepseek-v3-0324",
+    "maverick": "meta-llama/llama-4-maverick",
+    "llama-4": "meta-llama/llama-4-maverick",
 }
 
 
