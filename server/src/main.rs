@@ -4,6 +4,7 @@ pub mod code_search;
 mod coder;
 mod credentials;
 mod db;
+pub mod dispatch;
 mod embeddings;
 mod events;
 mod indexer;

@@ -177,6 +177,22 @@ pub async fn create_invocation(
         tracing::warn!("Failed to emit domain event: {e}");
     }
 
+    // Dispatch the invocation asynchronously
+    let invocation_id = inv.id;
+    let dispatch_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        if let Err(e) = crate::dispatch::dispatch_invocation(
+            &dispatch_state.db,
+            &dispatch_state.log_buffer,
+            &dispatch_state.connections,
+            invocation_id,
+        )
+        .await
+        {
+            tracing::error!(invocation_id = %invocation_id, "Dispatch failed: {e}");
+        }
+    });
+
     Ok((StatusCode::CREATED, Json(to_view(inv))))
 }
 
