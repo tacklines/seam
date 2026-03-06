@@ -1,32 +1,37 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import { fetchProjectAgent, type ProjectAgentDetailView } from '../../state/agent-api.js';
-import { t } from '../../lib/i18n.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import {
+  fetchProjectAgent,
+  type ProjectAgentDetailView,
+} from "../../state/agent-api.js";
+import { t } from "../../lib/i18n.js";
 
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
-import '@shoelace-style/shoelace/dist/components/alert/alert.js';
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/divider/divider.js';
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
+import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
+import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 
-import '../shared/markdown-content.js';
-import './agent-activity-panel.js';
+import "../shared/markdown-content.js";
+import "./agent-activity-panel.js";
 
 const WS_STATUS_VARIANT: Record<string, string> = {
-  running: 'success',
-  creating: 'warning',
-  pending: 'warning',
-  failed: 'danger',
-  stopped: 'neutral',
-  stopping: 'neutral',
+  running: "success",
+  creating: "warning",
+  pending: "warning",
+  failed: "danger",
+  stopped: "neutral",
+  stopping: "neutral",
 };
 
-@customElement('agent-detail')
+@customElement("agent-detail")
 export class AgentDetail extends LitElement {
   static styles = css`
-    :host { display: block; }
+    :host {
+      display: block;
+    }
 
     .back-link {
       display: inline-flex;
@@ -37,7 +42,9 @@ export class AgentDetail extends LitElement {
       font-size: 0.85rem;
       margin-bottom: 1.25rem;
     }
-    .back-link:hover { color: var(--sl-color-primary-400); }
+    .back-link:hover {
+      color: var(--sl-color-primary-400);
+    }
 
     .agent-header {
       display: flex;
@@ -52,8 +59,13 @@ export class AgentDetail extends LitElement {
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .status-indicator.online { background: var(--sl-color-success-500); box-shadow: 0 0 6px var(--sl-color-success-500); }
-    .status-indicator.offline { background: var(--sl-color-neutral-400); }
+    .status-indicator.online {
+      background: var(--sl-color-success-500);
+      box-shadow: 0 0 6px var(--sl-color-success-500);
+    }
+    .status-indicator.offline {
+      background: var(--sl-color-neutral-400);
+    }
 
     .agent-header h2 {
       margin: 0;
@@ -113,7 +125,9 @@ export class AgentDetail extends LitElement {
       gap: 0.5rem;
     }
 
-    .section-title sl-icon { font-size: 0.9rem; }
+    .section-title sl-icon {
+      font-size: 0.9rem;
+    }
 
     .task-card {
       padding: 1rem;
@@ -198,7 +212,9 @@ export class AgentDetail extends LitElement {
       font-size: 0.85rem;
     }
 
-    .timeline-item:last-child { border-bottom: none; }
+    .timeline-item:last-child {
+      border-bottom: none;
+    }
 
     .timeline-time {
       font-size: 0.75rem;
@@ -296,13 +312,13 @@ export class AgentDetail extends LitElement {
     }
   `;
 
-  @property() projectId = '';
-  @property() agentId = '';
+  @property() projectId = "";
+  @property() agentId = "";
 
   @state() private _detail: ProjectAgentDetailView | null = null;
   @state() private _loading = true;
-  @state() private _error = '';
-  @state() private _agentState = '';
+  @state() private _error = "";
+  @state() private _agentState = "";
 
   connectedCallback() {
     super.connectedCallback();
@@ -310,7 +326,11 @@ export class AgentDetail extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if ((changed.has('projectId') || changed.has('agentId')) && this.projectId && this.agentId) {
+    if (
+      (changed.has("projectId") || changed.has("agentId")) &&
+      this.projectId &&
+      this.agentId
+    ) {
       this._load();
     }
   }
@@ -318,11 +338,12 @@ export class AgentDetail extends LitElement {
   private async _load() {
     if (!this.projectId || !this.agentId) return;
     this._loading = true;
-    this._error = '';
+    this._error = "";
     try {
       this._detail = await fetchProjectAgent(this.projectId, this.agentId);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('agentDetail.errorLoad');
+      this._error =
+        err instanceof Error ? err.message : t("agentDetail.errorLoad");
     } finally {
       this._loading = false;
     }
@@ -331,27 +352,36 @@ export class AgentDetail extends LitElement {
   private _relativeTime(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t('time.justNow');
-    if (mins < 60) return t('time.minutesAgo', { count: mins });
+    if (mins < 1) return t("time.justNow");
+    if (mins < 60) return t("time.minutesAgo", { count: mins });
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
+    if (hrs < 24) return t("time.hoursAgo", { count: hrs });
     const days = Math.floor(hrs / 24);
-    return t('time.daysAgo', { count: days });
+    return t("time.daysAgo", { count: days });
   }
 
   private _goBack() {
-    this.dispatchEvent(new CustomEvent('agent-back', { bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent("agent-back", { bubbles: true, composed: true }),
+    );
   }
 
   render() {
     if (this._loading) {
-      return html`<div class="loading"><sl-spinner style="font-size: 1.5rem;"></sl-spinner></div>`;
+      return html`<div class="loading">
+        <sl-spinner style="font-size: 1.5rem;"></sl-spinner>
+      </div>`;
     }
 
     if (this._error) {
       return html`
-        <span class="back-link" role="button" tabindex="0" @click=${this._goBack}>
-          <sl-icon name="arrow-left"></sl-icon> ${t('agentDetail.back')}
+        <span
+          class="back-link"
+          role="button"
+          tabindex="0"
+          @click=${this._goBack}
+        >
+          <sl-icon name="arrow-left"></sl-icon> ${t("agentDetail.back")}
         </span>
         <sl-alert variant="danger" open>${this._error}</sl-alert>
       `;
@@ -363,182 +393,252 @@ export class AgentDetail extends LitElement {
     const isOnline = agent.is_online;
 
     return html`
-      <span class="back-link" role="button" tabindex="0"
-            @click=${this._goBack}
-            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._goBack(); }}>
-        <sl-icon name="arrow-left"></sl-icon> ${t('agentDetail.back')}
+      <span
+        class="back-link"
+        role="button"
+        tabindex="0"
+        @click=${this._goBack}
+        @keydown=${(e: KeyboardEvent) => {
+          if (e.key === "Enter") this._goBack();
+        }}
+      >
+        <sl-icon name="arrow-left"></sl-icon> ${t("agentDetail.back")}
       </span>
 
       <div class="agent-header">
-        <span class="status-indicator ${isOnline ? 'online' : 'offline'}"></span>
+        <span
+          class="status-indicator ${isOnline ? "online" : "offline"}"
+        ></span>
         <h2>${agent.display_name}</h2>
-        <sl-badge variant=${isOnline ? 'success' : 'neutral'}>${isOnline ? t('agentDetail.online') : t('agentDetail.offline')}</sl-badge>
+        <sl-badge variant=${isOnline ? "success" : "neutral"}
+          >${isOnline
+            ? t("agentDetail.online")
+            : t("agentDetail.offline")}</sl-badge
+        >
       </div>
 
       <div class="info-grid">
-        ${agent.model ? html`
-          <div class="info-card">
-            <div class="info-label">${t('agentDetail.model')}</div>
-            <div class="info-value mono">${agent.model}</div>
-          </div>
-        ` : nothing}
-        ${agent.client_name ? html`
-          <div class="info-card">
-            <div class="info-label">${t('agentDetail.client')}</div>
-            <div class="info-value mono">${agent.client_name}${agent.client_version ? ` v${agent.client_version}` : ''}</div>
-          </div>
-        ` : nothing}
+        ${agent.model
+          ? html`
+              <div class="info-card">
+                <div class="info-label">${t("agentDetail.model")}</div>
+                <div class="info-value mono">${agent.model}</div>
+              </div>
+            `
+          : nothing}
+        ${agent.client_name
+          ? html`
+              <div class="info-card">
+                <div class="info-label">${t("agentDetail.client")}</div>
+                <div class="info-value mono">
+                  ${agent.client_name}${agent.client_version
+                    ? ` v${agent.client_version}`
+                    : ""}
+                </div>
+              </div>
+            `
+          : nothing}
         <div class="info-card">
-          <div class="info-label">${t('agentDetail.session')}</div>
-          <div class="info-value">${agent.session_name || agent.session_code}</div>
+          <div class="info-label">${t("agentDetail.session")}</div>
+          <div class="info-value">
+            ${agent.session_name || agent.session_code}
+          </div>
         </div>
-        ${agent.sponsor_name ? html`
-          <div class="info-card">
-            <div class="info-label">${t('agentDetail.sponsoredBy')}</div>
-            <div class="info-value">${agent.sponsor_name}</div>
-          </div>
-        ` : nothing}
+        ${agent.sponsor_name
+          ? html`
+              <div class="info-card">
+                <div class="info-label">${t("agentDetail.sponsoredBy")}</div>
+                <div class="info-value">${agent.sponsor_name}</div>
+              </div>
+            `
+          : nothing}
         <div class="info-card">
-          <div class="info-label">${t('agentDetail.joined')}</div>
+          <div class="info-label">${t("agentDetail.joined")}</div>
           <div class="info-value">${this._relativeTime(agent.joined_at)}</div>
         </div>
-        ${agent.disconnected_at ? html`
-          <div class="info-card">
-            <div class="info-label">${t('agentDetail.disconnected')}</div>
-            <div class="info-value">${this._relativeTime(agent.disconnected_at)}</div>
-          </div>
-        ` : nothing}
+        ${agent.disconnected_at
+          ? html`
+              <div class="info-card">
+                <div class="info-label">${t("agentDetail.disconnected")}</div>
+                <div class="info-value">
+                  ${this._relativeTime(agent.disconnected_at)}
+                </div>
+              </div>
+            `
+          : nothing}
       </div>
 
-      ${this._renderTask(agent)}
-      ${this._renderWorkspace(agent)}
+      ${this._renderTask(agent)} ${this._renderWorkspace(agent)}
 
-      ${isOnline ? html`
-        <div class="section">
-          <div class="section-title">
-            <sl-icon name="terminal"></sl-icon> ${t('agentDetail.liveActivity')}
-            ${this._agentState ? html`
-              <sl-badge variant=${this._agentState === 'working' ? 'primary' : this._agentState === 'idle' ? 'neutral' : 'warning'}>
-                ${this._agentState}
-              </sl-badge>
-            ` : nothing}
-          </div>
-          <agent-activity-panel
-            .sessionCode=${agent.session_code}
-            .participantId=${agent.id}
-            .workspaceId=${agent.workspace?.id ?? ''}
-            @agent-state-change=${(e: CustomEvent) => { this._agentState = e.detail.state; }}
-          ></agent-activity-panel>
+      <div class="section">
+        <div class="section-title">
+          <sl-icon name="terminal"></sl-icon> ${isOnline
+            ? t("agentDetail.liveActivity")
+            : "Activity"}
+          ${isOnline && this._agentState
+            ? html`
+                <sl-badge
+                  variant=${this._agentState === "working"
+                    ? "primary"
+                    : this._agentState === "idle"
+                      ? "neutral"
+                      : "warning"}
+                >
+                  ${this._agentState}
+                </sl-badge>
+              `
+            : nothing}
         </div>
-      ` : nothing}
+        <agent-activity-panel
+          .sessionCode=${agent.session_code}
+          .participantId=${agent.id}
+          .workspaceId=${agent.workspace?.id ?? ""}
+          @agent-state-change=${(e: CustomEvent) => {
+            this._agentState = e.detail.state;
+          }}
+        ></agent-activity-panel>
+      </div>
 
       ${this._renderActivity(recent_activity)}
       ${this._renderComments(recent_comments)}
     `;
   }
 
-  private _renderTask(agent: ProjectAgentDetailView['agent']) {
+  private _renderTask(agent: ProjectAgentDetailView["agent"]) {
     if (!agent.current_task) return nothing;
     const ct = agent.current_task;
     return html`
       <div class="section">
         <div class="section-title">
-          <sl-icon name="kanban"></sl-icon> ${t('agentDetail.currentTask')}
+          <sl-icon name="kanban"></sl-icon> ${t("agentDetail.currentTask")}
         </div>
         <div class="task-card">
           <span class="task-ticket">${ct.ticket_id}</span>
           <span class="task-title">${ct.title}</span>
-          <sl-badge variant=${ct.status === 'in_progress' ? 'primary' : 'neutral'}>
-            ${ct.status.replace('_', ' ')}
+          <sl-badge
+            variant=${ct.status === "in_progress" ? "primary" : "neutral"}
+          >
+            ${ct.status.replace("_", " ")}
           </sl-badge>
         </div>
       </div>
     `;
   }
 
-  private _renderWorkspace(agent: ProjectAgentDetailView['agent']) {
+  private _renderWorkspace(agent: ProjectAgentDetailView["agent"]) {
     if (!agent.workspace) return nothing;
     const ws = agent.workspace;
     return html`
       <div class="section">
         <div class="section-title">
-          <sl-icon name="terminal"></sl-icon> ${t('agentDetail.workspace')}
+          <sl-icon name="terminal"></sl-icon> ${t("agentDetail.workspace")}
         </div>
         <div class="workspace-card">
           <div class="ws-header">
-            <sl-icon name="terminal" style="color: var(--text-tertiary);"></sl-icon>
-            <span class="ws-name">${ws.coder_workspace_name ?? t('agentDetail.workspaceFallback')}</span>
-            <sl-badge variant=${WS_STATUS_VARIANT[ws.status] ?? 'neutral'}>${ws.status}</sl-badge>
+            <sl-icon
+              name="terminal"
+              style="color: var(--text-tertiary);"
+            ></sl-icon>
+            <span class="ws-name"
+              >${ws.coder_workspace_name ??
+              t("agentDetail.workspaceFallback")}</span
+            >
+            <sl-badge variant=${WS_STATUS_VARIANT[ws.status] ?? "neutral"}
+              >${ws.status}</sl-badge
+            >
           </div>
           <div class="ws-details">
-            ${ws.branch ? html`
-              <span class="ws-detail">
-                <sl-icon name="git-branch" style="font-size: 0.85rem;"></sl-icon>
-                <span class="branch-badge">${ws.branch}</span>
-              </span>
-            ` : nothing}
-            ${ws.started_at ? html`
-              <span class="ws-detail">
-                <sl-icon name="clock" style="font-size: 0.85rem;"></sl-icon>
-                ${t('agentDetail.started', { time: this._relativeTime(ws.started_at) })}
-              </span>
-            ` : nothing}
+            ${ws.branch
+              ? html`
+                  <span class="ws-detail">
+                    <sl-icon
+                      name="git-branch"
+                      style="font-size: 0.85rem;"
+                    ></sl-icon>
+                    <span class="branch-badge">${ws.branch}</span>
+                  </span>
+                `
+              : nothing}
+            ${ws.started_at
+              ? html`
+                  <span class="ws-detail">
+                    <sl-icon name="clock" style="font-size: 0.85rem;"></sl-icon>
+                    ${t("agentDetail.started", {
+                      time: this._relativeTime(ws.started_at),
+                    })}
+                  </span>
+                `
+              : nothing}
           </div>
-          ${ws.error_message ? html`
-            <div class="ws-error">${ws.error_message}</div>
-          ` : nothing}
+          ${ws.error_message
+            ? html` <div class="ws-error">${ws.error_message}</div> `
+            : nothing}
         </div>
       </div>
     `;
   }
 
-  private _renderActivity(activity: ProjectAgentDetailView['recent_activity']) {
+  private _renderActivity(activity: ProjectAgentDetailView["recent_activity"]) {
     return html`
       <div class="section">
         <div class="section-title">
-          <sl-icon name="activity"></sl-icon> ${t('agentDetail.recentActivity')}
+          <sl-icon name="activity"></sl-icon> ${t("agentDetail.recentActivity")}
           <sl-badge variant="neutral" pill>${activity.length}</sl-badge>
         </div>
-        ${activity.length === 0 ? html`
-          <span class="empty-hint">${t('agentDetail.noActivity')}</span>
-        ` : html`
-          <div class="timeline">
-            ${activity.slice(0, 20).map(a => html`
-              <div class="timeline-item">
-                <span class="timeline-time">${this._relativeTime(a.created_at)}</span>
-                <span class="timeline-event">${a.event_type}</span>
-                <span class="timeline-summary">${a.summary}</span>
+        ${activity.length === 0
+          ? html`
+              <span class="empty-hint">${t("agentDetail.noActivity")}</span>
+            `
+          : html`
+              <div class="timeline">
+                ${activity.slice(0, 20).map(
+                  (a) => html`
+                    <div class="timeline-item">
+                      <span class="timeline-time"
+                        >${this._relativeTime(a.created_at)}</span
+                      >
+                      <span class="timeline-event">${a.event_type}</span>
+                      <span class="timeline-summary">${a.summary}</span>
+                    </div>
+                  `,
+                )}
               </div>
-            `)}
-          </div>
-        `}
+            `}
       </div>
     `;
   }
 
-  private _renderComments(comments: ProjectAgentDetailView['recent_comments']) {
+  private _renderComments(comments: ProjectAgentDetailView["recent_comments"]) {
     return html`
       <div class="section">
         <div class="section-title">
-          <sl-icon name="chat-dots"></sl-icon> ${t('agentDetail.recentComments')}
+          <sl-icon name="chat-dots"></sl-icon> ${t(
+            "agentDetail.recentComments",
+          )}
           <sl-badge variant="neutral" pill>${comments.length}</sl-badge>
         </div>
-        ${comments.length === 0 ? html`
-          <span class="empty-hint">${t('agentDetail.noComments')}</span>
-        ` : html`
-          <div class="comment-list">
-            ${comments.slice(0, 15).map(c => html`
-              <div class="comment-card">
-                <div class="comment-header">
-                  <span class="comment-ticket">${c.ticket_id}</span>
-                  <span class="comment-task-title">${c.task_title}</span>
-                  <span class="comment-time">${this._relativeTime(c.created_at)}</span>
-                </div>
-                <div class="comment-content">${c.content}</div>
+        ${comments.length === 0
+          ? html`
+              <span class="empty-hint">${t("agentDetail.noComments")}</span>
+            `
+          : html`
+              <div class="comment-list">
+                ${comments.slice(0, 15).map(
+                  (c) => html`
+                    <div class="comment-card">
+                      <div class="comment-header">
+                        <span class="comment-ticket">${c.ticket_id}</span>
+                        <span class="comment-task-title">${c.task_title}</span>
+                        <span class="comment-time"
+                          >${this._relativeTime(c.created_at)}</span
+                        >
+                      </div>
+                      <div class="comment-content">${c.content}</div>
+                    </div>
+                  `,
+                )}
               </div>
-            `)}
-          </div>
-        `}
+            `}
       </div>
     `;
   }
@@ -546,6 +646,6 @@ export class AgentDetail extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'agent-detail': AgentDetail;
+    "agent-detail": AgentDetail;
   }
 }

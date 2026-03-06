@@ -10,6 +10,8 @@ import { fetchPlans, type PlanListView } from "../../state/plan-api.js";
 import {
   fetchWorkspaces,
   fetchCoderStatus,
+  stopWorkspace,
+  destroyWorkspace,
   type WorkspaceView,
   type CoderStatus,
 } from "../../state/workspace-api.js";
@@ -29,6 +31,7 @@ import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
 import "@shoelace-style/shoelace/dist/components/dialog/dialog.js";
 import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
+import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
 
 import "../plans/plan-list.js";
 import "../plans/plan-detail.js";
@@ -320,10 +323,31 @@ export class ProjectWorkspace extends LitElement {
       padding: 0.6rem 1rem;
       background: var(--surface-card);
       font-size: 0.875rem;
+      cursor: pointer;
+      transition:
+        border-color 0.15s,
+        box-shadow 0.15s;
     }
 
     .workspace-row:not(:last-child) {
       border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .workspace-row:hover {
+      background: var(--surface-hover, var(--surface-active));
+      border-color: var(--color-primary-border);
+    }
+
+    .ws-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      margin-left: auto;
+    }
+
+    .ws-participant-name {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
     }
 
     .ws-name {
@@ -1070,6 +1094,9 @@ export class ProjectWorkspace extends LitElement {
     const active = this._workspaces.filter((w) => w.status !== "destroyed");
     if (active.length === 0) return nothing;
 
+    const orgSlug =
+      (this.location?.params as Record<string, string>)?.slug ?? "";
+
     return html`
       <div class="section">
         <div class="section-header">
@@ -1083,10 +1110,29 @@ export class ProjectWorkspace extends LitElement {
         <div class="workspace-list">
           ${active.map(
             (w) => html`
-              <div class="workspace-row">
+              <div
+                class="workspace-row"
+                @click=${(e: MouseEvent) => {
+                  // Don't navigate if an action button was clicked
+                  if ((e.target as HTMLElement).closest(".ws-actions")) return;
+                  this._switchTab("agents");
+                  if (w.participant_id) {
+                    this._selectedAgentId = w.participant_id;
+                    const base = orgSlug
+                      ? `/orgs/${orgSlug}/projects/${this.projectId}/agents/${w.participant_id}`
+                      : `/projects/${this.projectId}/agents/${w.participant_id}`;
+                    window.history.replaceState(null, "", base);
+                  }
+                }}
+              >
                 <span class="ws-name"
                   >${w.coder_workspace_name ?? w.id.slice(0, 8)}</span
                 >
+                ${w.participant_name
+                  ? html`<span class="ws-participant-name"
+                      >${w.participant_name}</span
+                    >`
+                  : nothing}
                 <sl-badge variant=${this._wsStatusVariant(w.status)}
                   >${w.status}</sl-badge
                 >
@@ -1113,12 +1159,65 @@ export class ProjectWorkspace extends LitElement {
                       </span>
                     `
                   : nothing}
+                <div class="ws-actions">
+                  ${w.status === "running"
+                    ? html`
+                        <sl-tooltip content="Stop workspace">
+                          <sl-icon-button
+                            name="stop-circle"
+                            label="Stop workspace"
+                            style="font-size: 1rem; color: var(--sl-color-warning-500);"
+                            @click=${(e: Event) => {
+                              e.stopPropagation();
+                              void this._stopWorkspace(w.id);
+                            }}
+                          ></sl-icon-button>
+                        </sl-tooltip>
+                      `
+                    : ["pending", "creating", "failed", "stopped"].includes(
+                          w.status,
+                        )
+                      ? html`
+                          <sl-tooltip content="Destroy workspace">
+                            <sl-icon-button
+                              name="trash"
+                              label="Destroy workspace"
+                              style="font-size: 1rem; color: var(--sl-color-danger-500);"
+                              @click=${(e: Event) => {
+                                e.stopPropagation();
+                                void this._destroyWorkspace(w.id);
+                              }}
+                            ></sl-icon-button>
+                          </sl-tooltip>
+                        `
+                      : nothing}
+                </div>
               </div>
             `,
           )}
         </div>
       </div>
     `;
+  }
+
+  private async _stopWorkspace(workspaceId: string) {
+    try {
+      await stopWorkspace(this.projectId, workspaceId);
+      this._workspaces = this._workspaces.map((w) =>
+        w.id === workspaceId ? { ...w, status: "stopping" as const } : w,
+      );
+    } catch (err) {
+      console.error("Failed to stop workspace", err);
+    }
+  }
+
+  private async _destroyWorkspace(workspaceId: string) {
+    try {
+      await destroyWorkspace(this.projectId, workspaceId);
+      this._workspaces = this._workspaces.filter((w) => w.id !== workspaceId);
+    } catch (err) {
+      console.error("Failed to destroy workspace", err);
+    }
   }
 
   private _renderTabNav() {
@@ -1213,6 +1312,12 @@ export class ProjectWorkspace extends LitElement {
   }
 
   private _renderAgents() {
+    const orgSlug =
+      (this.location?.params as Record<string, string>)?.slug ?? "";
+    const agentsBase = orgSlug
+      ? `/orgs/${orgSlug}/projects/${this.projectId}/agents`
+      : `/projects/${this.projectId}/agents`;
+
     return html`
       <div class="section">
         <div class="section-header">
@@ -1229,11 +1334,7 @@ export class ProjectWorkspace extends LitElement {
                 .agentId=${this._selectedAgentId}
                 @agent-back=${() => {
                   this._selectedAgentId = null;
-                  window.history.replaceState(
-                    null,
-                    "",
-                    `/projects/${this.projectId}/agents`,
-                  );
+                  window.history.replaceState(null, "", agentsBase);
                 }}
               ></agent-detail>
             `
@@ -1246,7 +1347,7 @@ export class ProjectWorkspace extends LitElement {
                   window.history.replaceState(
                     null,
                     "",
-                    `/projects/${this.projectId}/agents/${e.detail.agentId}`,
+                    `${agentsBase}/${e.detail.agentId}`,
                   );
                 }}
               ></agent-list>

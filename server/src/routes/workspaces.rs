@@ -12,11 +12,12 @@ use crate::db;
 use crate::models::*;
 use crate::AppState;
 
-fn workspace_view(w: &Workspace) -> WorkspaceView {
+fn workspace_view(w: &Workspace, participant_name: Option<String>) -> WorkspaceView {
     WorkspaceView {
         id: w.id,
         task_id: w.task_id,
         participant_id: w.participant_id,
+        participant_name,
         status: w.status,
         coder_workspace_name: w.coder_workspace_name.clone(),
         template_name: w.template_name.clone(),
@@ -141,7 +142,7 @@ pub async fn create_workspace(
         provision_workspace(&db, &client, ws_id, &template_name, branch.as_deref(), user_id).await;
     });
 
-    Ok((StatusCode::CREATED, Json(workspace_view(&workspace))))
+    Ok((StatusCode::CREATED, Json(workspace_view(&workspace, None))))
 }
 
 /// Look up the org_id for a workspace's project.
@@ -348,7 +349,26 @@ pub async fn list_workspaces(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(workspaces.iter().map(workspace_view).collect()))
+    // Batch-fetch participant names for workspaces that have a participant_id
+    let participant_ids: Vec<Uuid> = workspaces.iter().filter_map(|w| w.participant_id).collect();
+    let participant_names: std::collections::HashMap<Uuid, String> = if participant_ids.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        sqlx::query_as::<_, (Uuid, String)>(
+            "SELECT id, display_name FROM participants WHERE id = ANY($1)",
+        )
+        .bind(&participant_ids)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+    };
+
+    Ok(Json(workspaces.iter().map(|w| {
+        let name = w.participant_id.and_then(|pid| participant_names.get(&pid).cloned());
+        workspace_view(w, name)
+    }).collect()))
 }
 
 /// GET /api/projects/:project_id/workspaces/:workspace_id
@@ -377,7 +397,7 @@ pub async fn get_workspace(
     })?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    Ok(Json(workspace_view(&workspace)))
+    Ok(Json(workspace_view(&workspace, None)))
 }
 
 /// POST /api/projects/:project_id/workspaces/:workspace_id/stop
@@ -450,7 +470,7 @@ pub async fn stop_workspace(
                 tracing::warn!("Failed to emit domain event: {e}");
             }
 
-            Ok(Json(workspace_view(&updated)))
+            Ok(Json(workspace_view(&updated, None)))
         }
         Err(e) => {
             tracing::error!("Failed to stop Coder workspace: {e}");
