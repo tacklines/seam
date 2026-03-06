@@ -18,12 +18,15 @@ use crate::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateInvocationRequest {
-    pub workspace_id: Uuid,
+    /// Optional: if not provided, a workspace is resolved from the pool.
+    pub workspace_id: Option<Uuid>,
     pub agent_perspective: String,
     pub prompt: String,
     pub system_prompt_append: Option<String>,
     pub task_id: Option<Uuid>,
     pub session_id: Option<Uuid>,
+    /// Branch for workspace pool resolution (used when workspace_id is None).
+    pub branch: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,22 +125,41 @@ pub async fn create_invocation(
     })?;
     verify_project_member(&state.db, project_id, user.id).await?;
 
-    // Verify workspace belongs to this project
-    let ws_exists: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM workspaces WHERE id = $1 AND project_id = $2",
-    )
-    .bind(req.workspace_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to check workspace: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    if ws_exists.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
+    // Resolve workspace: use provided ID or find/create from pool
+    let workspace_id = match req.workspace_id {
+        Some(ws_id) => {
+            // Verify workspace belongs to this project
+            let ws_exists: Option<(Uuid,)> = sqlx::query_as(
+                "SELECT id FROM workspaces WHERE id = $1 AND project_id = $2",
+            )
+            .bind(ws_id)
+            .bind(project_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to check workspace: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            if ws_exists.is_none() {
+                return Err(StatusCode::NOT_FOUND);
+            }
+            ws_id
+        }
+        None => {
+            // Resolve from pool: find running workspace or create one
+            crate::dispatch::resolve_workspace(
+                &state.db,
+                project_id,
+                req.branch.as_deref(),
+                user.id,
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to resolve workspace from pool: {e}");
+                StatusCode::SERVICE_UNAVAILABLE
+            })?
+        }
+    };
 
     let inv = sqlx::query_as::<_, Invocation>(
         "INSERT INTO invocations
@@ -146,7 +168,7 @@ pub async fn create_invocation(
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual')
          RETURNING *",
     )
-    .bind(req.workspace_id)
+    .bind(workspace_id)
     .bind(project_id)
     .bind(req.session_id)
     .bind(req.task_id)
@@ -166,7 +188,7 @@ pub async fn create_invocation(
         inv.id,
         Some(user.id),
         serde_json::json!({
-            "workspace_id": req.workspace_id,
+            "workspace_id": workspace_id,
             "project_id": project_id,
             "agent_perspective": req.agent_perspective,
             "task_id": req.task_id,
@@ -262,8 +284,8 @@ pub async fn get_invocation(
     // Verify the requesting user is a member of the invocation's project
     verify_project_member(&state.db, inv.project_id, user.id).await?;
 
-    // Pull recent output lines from the in-memory log buffer (keyed by workspace_id)
-    let output = state.log_buffer.recent(inv.workspace_id, 200);
+    // Pull recent output lines from the in-memory log buffer (keyed by invocation_id)
+    let output = state.log_buffer.recent(inv.id, 200);
 
     let result_json = inv.result_json.clone();
     Ok(Json(InvocationDetailView {

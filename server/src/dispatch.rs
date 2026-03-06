@@ -1,5 +1,8 @@
 /// Invocation dispatcher: executes `claude -p` commands inside Coder workspaces
 /// via `coder ssh` and streams output back to the log buffer + WebSocket.
+///
+/// Also provides workspace pool resolution: find-or-create a workspace for a
+/// project so that invocations don't need to specify a workspace up front.
 use chrono::Utc;
 use sqlx::PgPool;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -24,6 +27,286 @@ pub enum DispatchError {
     Exec(#[from] std::io::Error),
     #[error("Coder not configured")]
     CoderNotConfigured,
+    #[error("No workspace available and Coder not configured to create one")]
+    NoWorkspaceAvailable,
+    #[error("Coder API error: {0}")]
+    CoderApi(String),
+}
+
+/// Resolve a running workspace for the given project, or create one.
+///
+/// Pool strategy:
+/// 1. Find a running workspace for this project (prefer one with matching pool_key)
+/// 2. If a stopped workspace exists, start it via Coder API
+/// 3. If no workspace exists at all, create one via Coder API
+///
+/// Returns the workspace_id of a running (or soon-to-be-running) workspace.
+pub async fn resolve_workspace(
+    db: &PgPool,
+    project_id: Uuid,
+    branch: Option<&str>,
+    user_id: Uuid,
+) -> Result<Uuid, DispatchError> {
+    let pool_key = pool_key_for(project_id, branch);
+
+    // 1. Try to find a running workspace with matching pool_key
+    let running: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT id FROM workspaces
+         WHERE project_id = $1 AND status = 'running' AND pool_key = $2
+         ORDER BY last_invocation_at DESC NULLS LAST
+         LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(&pool_key)
+    .fetch_optional(db)
+    .await?;
+
+    if let Some((ws_id,)) = running {
+        tracing::info!(workspace_id = %ws_id, "Resolved running workspace from pool");
+        return Ok(ws_id);
+    }
+
+    // 2. Try to find any running workspace for this project (fallback)
+    let any_running: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT id FROM workspaces
+         WHERE project_id = $1 AND status = 'running'
+         ORDER BY last_invocation_at DESC NULLS LAST
+         LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(db)
+    .await?;
+
+    if let Some((ws_id,)) = any_running {
+        tracing::info!(workspace_id = %ws_id, "Resolved running workspace (any) from pool");
+        return Ok(ws_id);
+    }
+
+    // 3. Try to find a stopped workspace to wake
+    let stopped: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+        "SELECT id, coder_workspace_id FROM workspaces
+         WHERE project_id = $1 AND status = 'stopped' AND pool_key = $2
+         ORDER BY stopped_at DESC NULLS LAST
+         LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(&pool_key)
+    .fetch_optional(db)
+    .await?;
+
+    if let Some((ws_id, coder_ws_id)) = stopped {
+        if let Some(coder_id) = coder_ws_id {
+            tracing::info!(workspace_id = %ws_id, "Waking stopped workspace");
+            wake_workspace(db, ws_id, coder_id).await?;
+            return Ok(ws_id);
+        }
+    }
+
+    // 4. Create a new workspace
+    tracing::info!(project_id = %project_id, pool_key = %pool_key, "Creating new workspace for pool");
+    create_pool_workspace(db, project_id, branch, &pool_key, user_id).await
+}
+
+/// Build a pool key for project + optional branch.
+fn pool_key_for(project_id: Uuid, branch: Option<&str>) -> String {
+    match branch {
+        Some(b) => format!("project:{}:branch:{}", project_id, b),
+        None => format!("project:{}", project_id),
+    }
+}
+
+/// Wake a stopped Coder workspace via the API.
+async fn wake_workspace(db: &PgPool, workspace_id: Uuid, coder_workspace_id: Uuid) -> Result<(), DispatchError> {
+    let coder_url = std::env::var("CODER_URL").map_err(|_| DispatchError::CoderNotConfigured)?;
+    let coder_token = std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
+
+    let client = crate::coder::CoderClient::new(coder_url, coder_token);
+    client.start_workspace(coder_workspace_id).await
+        .map_err(|e| DispatchError::CoderApi(e.to_string()))?;
+
+    // Update status to running
+    sqlx::query(
+        "UPDATE workspaces SET status = 'running', started_at = NOW(), stopped_at = NULL, updated_at = NOW()
+         WHERE id = $1",
+    )
+    .bind(workspace_id)
+    .execute(db)
+    .await?;
+
+    // Emit wake event
+    let event = crate::events::DomainEvent::new(
+        "workspace.running",
+        "workspace",
+        workspace_id,
+        None,
+        serde_json::json!({ "source": "wake_on_invoke" }),
+    );
+    if let Err(e) = crate::events::emit(db, &event).await {
+        tracing::warn!("Failed to emit workspace.running event: {e}");
+    }
+
+    // Wait briefly for workspace to be SSH-ready
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+    Ok(())
+}
+
+/// Create a new workspace in the pool via Coder API.
+async fn create_pool_workspace(
+    db: &PgPool,
+    project_id: Uuid,
+    branch: Option<&str>,
+    pool_key: &str,
+    user_id: Uuid,
+) -> Result<Uuid, DispatchError> {
+    let coder_url = std::env::var("CODER_URL").map_err(|_| DispatchError::CoderNotConfigured)?;
+    let coder_token = std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
+    let client = crate::coder::CoderClient::new(coder_url, coder_token);
+
+    let template_name = "seam-agent";
+
+    // Resolve template
+    let template = client
+        .get_template_by_name(template_name)
+        .await
+        .map_err(|e| DispatchError::CoderApi(e.to_string()))?
+        .ok_or_else(|| DispatchError::CoderApi(format!("Template '{template_name}' not found")))?;
+
+    // Insert workspace record
+    let workspace_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO workspaces (project_id, template_name, branch, pool_key, status)
+         VALUES ($1, $2, $3, $4, 'creating')
+         RETURNING id",
+    )
+    .bind(project_id)
+    .bind(template_name)
+    .bind(branch)
+    .bind(pool_key)
+    .fetch_one(db)
+    .await?;
+
+    // Build rich parameters
+    let mut params = vec![];
+
+    // Fetch project repo_url for cloning
+    let project: Option<(Option<String>, String)> = sqlx::query_as(
+        "SELECT repo_url, default_branch FROM projects WHERE id = $1",
+    )
+    .bind(project_id)
+    .fetch_optional(db)
+    .await?;
+
+    if let Some((repo_url, _default_branch)) = &project {
+        if let Some(url) = repo_url {
+            params.push(crate::coder::RichParameterValue {
+                name: "repo_url".to_string(),
+                value: url.clone(),
+            });
+        }
+    }
+
+    if let Some(b) = branch {
+        params.push(crate::coder::RichParameterValue {
+            name: "branch".to_string(),
+            value: b.to_string(),
+        });
+    }
+
+    // Inject workspace_id for log forwarding
+    params.push(crate::coder::RichParameterValue {
+        name: "workspace_id".to_string(),
+        value: workspace_id.to_string(),
+    });
+
+    // Inject Seam URL
+    if let Ok(seam_url) = std::env::var("SEAM_URL") {
+        params.push(crate::coder::RichParameterValue {
+            name: "seam_url".to_string(),
+            value: seam_url,
+        });
+    }
+
+    // Inject credentials
+    if let Some(org_id) = org_id_for_project(db, project_id).await {
+        if let Ok(creds) = crate::credentials::credentials_for_workspace(db, org_id, user_id).await {
+            if !creds.is_empty() {
+                let creds_map: serde_json::Map<String, serde_json::Value> = creds
+                    .into_iter()
+                    .map(|(k, v)| (k, serde_json::Value::String(v)))
+                    .collect();
+                params.push(crate::coder::RichParameterValue {
+                    name: "credentials_json".to_string(),
+                    value: serde_json::Value::Object(creds_map).to_string(),
+                });
+            }
+        }
+    }
+
+    let ws_name = format!("seam-{}", &workspace_id.to_string()[..8]);
+    let req = crate::coder::CreateWorkspaceRequest {
+        name: ws_name,
+        template_id: template.id,
+        rich_parameter_values: params,
+    };
+
+    match client.create_workspace("me", req).await {
+        Ok(coder_ws) => {
+            sqlx::query(
+                "UPDATE workspaces SET
+                    coder_workspace_id = $2, coder_workspace_name = $3,
+                    status = 'running', started_at = NOW(), updated_at = NOW()
+                 WHERE id = $1",
+            )
+            .bind(workspace_id)
+            .bind(coder_ws.id)
+            .bind(&coder_ws.name)
+            .execute(db)
+            .await?;
+
+            let event = crate::events::DomainEvent::new(
+                "workspace.running",
+                "workspace",
+                workspace_id,
+                None,
+                serde_json::json!({
+                    "coder_workspace_id": coder_ws.id,
+                    "coder_workspace_name": coder_ws.name,
+                    "pool_key": pool_key,
+                }),
+            );
+            if let Err(e) = crate::events::emit(db, &event).await {
+                tracing::warn!("Failed to emit workspace.running event: {e}");
+            }
+
+            tracing::info!(workspace_id = %workspace_id, "Pool workspace created and running");
+
+            // Wait for workspace startup to complete
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+
+            Ok(workspace_id)
+        }
+        Err(e) => {
+            let msg = format!("Failed to create Coder workspace: {e}");
+            let _ = sqlx::query(
+                "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
+            )
+            .bind(workspace_id)
+            .bind(&msg)
+            .execute(db)
+            .await;
+            Err(DispatchError::CoderApi(msg))
+        }
+    }
+}
+
+/// Look up org_id for a project.
+async fn org_id_for_project(db: &PgPool, project_id: Uuid) -> Option<Uuid> {
+    let row: Option<(Uuid,)> = sqlx::query_as("SELECT org_id FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(db)
+        .await
+        .ok()?;
+    row.map(|(id,)| id)
 }
 
 /// Row fetched from DB for dispatch.
