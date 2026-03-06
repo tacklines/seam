@@ -4,9 +4,67 @@
  * Missing keys fall back to English, then to the key itself.
  */
 
-export type Locale = 'en';
+import { messagesEsMx } from './i18n.es-mx.js';
+import { messagesNl } from './i18n.nl.js';
+import { messagesPl } from './i18n.pl.js';
+import { messagesHe } from './i18n.he.js';
+import { messagesHi } from './i18n.hi.js';
+import { messagesTe } from './i18n.te.js';
+import { messagesUr } from './i18n.ur.js';
+import { messagesPa } from './i18n.pa.js';
+import { messagesFr } from './i18n.fr.js';
+import { messagesDe } from './i18n.de.js';
+import { messagesIt } from './i18n.it.js';
+import { messagesPtBr } from './i18n.pt-br.js';
+import { messagesSv } from './i18n.sv.js';
+import { messagesUk } from './i18n.uk.js';
+import { messagesCs } from './i18n.cs.js';
+import { messagesTr } from './i18n.tr.js';
+import { messagesZh } from './i18n.zh.js';
+import { messagesJa } from './i18n.ja.js';
+import { messagesKo } from './i18n.ko.js';
+import { messagesTh } from './i18n.th.js';
+import { messagesVi } from './i18n.vi.js';
+import { messagesId } from './i18n.id.js';
+import { messagesBn } from './i18n.bn.js';
+import { messagesTa } from './i18n.ta.js';
+import { messagesAr } from './i18n.ar.js';
+import { messagesFa } from './i18n.fa.js';
+import { messagesSw } from './i18n.sw.js';
+import { messagesAm } from './i18n.am.js';
 
-export const RTL_LOCALES: ReadonlySet<Locale> = new Set<Locale>([]);
+export type Locale =
+  | 'en'
+  | 'es-mx'
+  | 'nl'
+  | 'pl'
+  | 'he'
+  | 'hi'
+  | 'te'
+  | 'ur'
+  | 'pa'
+  | 'fr'
+  | 'de'
+  | 'it'
+  | 'pt-br'
+  | 'sv'
+  | 'uk'
+  | 'cs'
+  | 'tr'
+  | 'zh'
+  | 'ja'
+  | 'ko'
+  | 'th'
+  | 'vi'
+  | 'id'
+  | 'bn'
+  | 'ta'
+  | 'ar'
+  | 'fa'
+  | 'sw'
+  | 'am';
+
+export const RTL_LOCALES: ReadonlySet<Locale> = new Set<Locale>(['he', 'ur', 'ar', 'fa']);
 
 let currentLocale: Locale = 'en';
 
@@ -40,6 +98,34 @@ export function detectLocale(): Locale {
 
 const localeMessages: Record<Locale, Record<string, string>> = {
   'en': {} as Record<string, string>, // populated below
+  'es-mx': messagesEsMx,
+  'nl': messagesNl,
+  'pl': messagesPl,
+  'he': messagesHe,
+  'hi': messagesHi,
+  'te': messagesTe,
+  'ur': messagesUr,
+  'pa': messagesPa,
+  'fr': messagesFr,
+  'de': messagesDe,
+  'it': messagesIt,
+  'pt-br': messagesPtBr,
+  'sv': messagesSv,
+  'uk': messagesUk,
+  'cs': messagesCs,
+  'tr': messagesTr,
+  'zh': messagesZh,
+  'ja': messagesJa,
+  'ko': messagesKo,
+  'th': messagesTh,
+  'vi': messagesVi,
+  'id': messagesId,
+  'bn': messagesBn,
+  'ta': messagesTa,
+  'ar': messagesAr,
+  'fa': messagesFa,
+  'sw': messagesSw,
+  'am': messagesAm,
 };
 
 export const messagesEn: Record<string, string> = {

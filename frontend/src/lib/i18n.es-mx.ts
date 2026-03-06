@@ -49,22 +49,6 @@ export const messagesEsMx: Record<string, string> = {
   'lobby.newSessionDesc': 'Crea una sesión y obtén un código de acceso para compartir.',
   'lobby.joinSession': 'Unirse a la sesión.',
   'lobby.joinSessionDesc': 'Ingrese un código para unirse a una sesión existente.',
-  'lobby.back': 'Aquí hay algunas opciones para traducir "Back" al español mexicano, dependiendo del contexto:
-
-*   **Regresar:** Esta es una opción general y versátil, que significa volver a un lugar o estado anterior.
-*   **Volver:** Similar a "regresar", también significa volver a un lugar o estado.
-*   **Atrás:** Se utiliza cuando se refiere a una dirección o movimiento en sentido contrario.
-*   **De vuelta:** Similar a "regresar" y "volver", pero puede tener un matiz de "de nuevo".
-*   **Espalda:** Si se refiere a la parte del cuerpo.
-
-**Ejemplos:**
-
-*   "I\'m going back to my hotel." - "Voy a regresar a mi hotel." / "Voy a volver a mi hotel."
-*   "Go back one step." - "Da un paso atrás."
-*   "He came back yesterday." - "Él regresó ayer." / "Él volvió ayer."
-*   "My back hurts." - "Me duele la espalda."
-
-En la mayoría de los casos, **regresar** o **volver** serán las mejores opciones. Si se refiere a una dirección, usa **atrás**.',
   'lobby.createTitle': 'Nueva sesión.',
   'lobby.sessionNameLabel': 'Nombre de la sesión',
   'lobby.sessionNamePlaceholder': 'por ejemplo, planificación de sprints, priorización de errores.',
@@ -260,9 +244,6 @@ En la mayoría de los casos, **regresar** o **volver** serán las mejores opcion
   'requirementList.updated': 'Actualizado a las {{time}}',
   'requirementList.status.draft': 'Borrador',
   'requirementList.status.active': 'Activo',
-  'requirementList.status.satisfied': 'Satisfecho/a.
-
-(Note: The gender depends on who is satisfied. Use "satisfecho" for a male and "satisfecha" for a female.)',
   'requirementList.status.archived': 'Archivado.',
   'requirementList.priority.critical': 'Crítico',
   'requirementList.priority.high': 'Alto/Alta',
@@ -495,14 +476,6 @@ En la mayoría de los casos, **regresar** o **volver** serán las mejores opcion
   'taskDetail.commentSend': 'Enviar',
   'taskDetail.commentPlaceholderShort': 'Añade un comentario...',
   'taskDetail.sidebar.details': 'Detalles',
-  'taskDetail.sidebar.ticket': 'Aquí hay algunas opciones de traducción, dependiendo del contexto:
-
-*   **Entrada:** Esta es la traducción más común y se usa para boletos de eventos, conciertos, películas, etc.
-*   **Boleto:** Similar a "entrada", también se usa para boletos de eventos, viajes, etc.
-*   **Ticket:**  En algunos contextos informales o de soporte técnico, la palabra inglesa "ticket" se usa directamente.
-*   **Comprobante:** Si se refiere a un recibo o comprobante de compra.
-
-Por lo tanto, la mejor traducción depende del contexto específico.  Si puedes proporcionar más detalles, puedo ayudarte a elegir la opción más adecuada.',
   'taskDetail.sidebar.type': 'Tipo',
   'taskDetail.sidebar.status': 'Estado',
   'taskDetail.sidebar.priority': 'Prioridad',
