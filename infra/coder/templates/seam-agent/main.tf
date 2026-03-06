@@ -281,15 +281,23 @@ FORWARDER
     fi
 
     # --- Phase 5: Install tools ---
+    # Ensure Node.js/npm are available
+    if ! command -v npm &> /dev/null; then
+      echo "Installing Node.js..."
+      curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+      sudo apt-get install -y nodejs
+    fi
+
     if ! command -v claude &> /dev/null; then
       echo "Installing Claude Code CLI..."
-      npm install -g @anthropic-ai/claude-code
+      sudo npm install -g @anthropic-ai/claude-code
     fi
 
     # Install tackline skills
     if [ -n "${data.coder_parameter.tackline_repo_url.value}" ]; then
       echo "Installing tackline..."
-      git clone --depth 1 "${data.coder_parameter.tackline_repo_url.value}" /opt/tackline
+      sudo git clone --depth 1 "${data.coder_parameter.tackline_repo_url.value}" /opt/tackline
+      sudo chown -R "$(id -u):$(id -g)" /opt/tackline
       /opt/tackline/install.sh
       echo "Tackline installed: $(ls ~/.claude/skills/ 2>/dev/null | wc -l) skills"
     fi
