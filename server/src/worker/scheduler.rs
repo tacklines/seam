@@ -129,32 +129,15 @@ fn compute_next_run(cron_expr: &str) -> Result<chrono::DateTime<Utc>, Box<dyn st
 }
 
 async fn dispatch_job_action(
-    _pool: &PgPool,
+    pool: &PgPool,
     job: &ScheduledJob,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    match job.action_type.as_str() {
-        "launch_agent" => {
-            info!(
-                project_id = %job.project_id,
-                job_name = %job.name,
-                "Would launch scheduled agent (Coder integration required)"
-            );
-            // TODO: Wire into actual Coder workspace provisioning
-            Ok(())
-        }
-        "webhook" => {
-            info!(job_id = %job.id, "Webhook action not yet implemented");
-            Ok(())
-        }
-        "mcp_tool" => {
-            info!(job_id = %job.id, "MCP tool action not yet implemented");
-            Ok(())
-        }
-        other => {
-            warn!(action_type = other, "Unknown action type for scheduled job");
-            Ok(())
-        }
-    }
+    let ctx = super::actions::ActionContext {
+        event_payload: None,
+        project_id: job.project_id,
+        source: format!("schedule:{}", job.name),
+    };
+    super::actions::dispatch(pool, &job.action_type, &job.action_config, &ctx).await
 }
 
 #[cfg(test)]

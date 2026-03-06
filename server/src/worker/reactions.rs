@@ -25,15 +25,6 @@ struct EventReaction {
     filter: serde_json::Value,
 }
 
-#[derive(Debug, Deserialize)]
-struct LaunchAgentConfig {
-    session_code: Option<String>,
-    agent_type: Option<String>,
-    skill: Option<String>,
-    model: Option<String>,
-    instructions: Option<String>,
-}
-
 /// Run the reactions consumer loop.
 pub async fn run(pool: PgPool, channel: Channel) {
     info!("Reactions consumer starting");
@@ -167,43 +158,16 @@ fn matches_filter(payload: &serde_json::Value, filter: &serde_json::Value) -> bo
 }
 
 async fn dispatch_action(
-    _pool: &PgPool,
+    pool: &PgPool,
     reaction: &EventReaction,
-    _event: &BridgedEvent,
+    event: &BridgedEvent,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    match reaction.action_type.as_str() {
-        "launch_agent" => {
-            let config: LaunchAgentConfig = serde_json::from_value(reaction.action_config.clone())?;
-            info!(
-                project_id = %reaction.project_id,
-                agent_type = config.agent_type.as_deref().unwrap_or("coder"),
-                skill = config.skill.as_deref().unwrap_or("none"),
-                "Would launch agent (Coder integration required)"
-            );
-            // TODO: Wire into actual Coder workspace provisioning
-            // This requires access to CoderClient and credentials, which the worker
-            // will need injected. For now, log the intent.
-            Ok(())
-        }
-        "webhook" => {
-            info!(
-                reaction_id = %reaction.id,
-                "Webhook action not yet implemented"
-            );
-            Ok(())
-        }
-        "mcp_tool" => {
-            info!(
-                reaction_id = %reaction.id,
-                "MCP tool action not yet implemented"
-            );
-            Ok(())
-        }
-        other => {
-            warn!(action_type = other, "Unknown action type");
-            Ok(())
-        }
-    }
+    let ctx = super::actions::ActionContext {
+        event_payload: Some(event.payload.clone()),
+        project_id: reaction.project_id,
+        source: format!("reaction:{}", reaction.name),
+    };
+    super::actions::dispatch(pool, &reaction.action_type, &reaction.action_config, &ctx).await
 }
 
 #[cfg(test)]
