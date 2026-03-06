@@ -425,6 +425,7 @@ export class AgentDetail extends LitElement {
           <agent-activity-panel
             .sessionCode=${agent.session_code}
             .participantId=${agent.id}
+            .workspaceId=${agent.workspace?.id ?? ''}
             @agent-state-change=${(e: CustomEvent) => { this._agentState = e.detail.state; }}
           ></agent-activity-panel>
         </div>

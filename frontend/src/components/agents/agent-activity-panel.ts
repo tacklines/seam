@@ -184,6 +184,7 @@ export class AgentActivityPanel extends LitElement {
 
   @property() sessionCode = '';
   @property() participantId = '';
+  @property() workspaceId = '';
 
   @state() private _allEntries: ActivityEntry[] = [];
   @state() private _outputLines: OutputLine[] = [];
@@ -276,11 +277,13 @@ export class AgentActivityPanel extends LitElement {
 
   private async _loadHistorical() {
     if (this._historicalLoaded) return;
-    try {
-      const token = authStore.getAccessToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
 
+    const token = authStore.getAccessToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    // Load historical tool invocations
+    try {
       const res = await fetch(
         `/api/sessions/${this.sessionCode}/tool-invocations?participant_id=${this.participantId}&limit=50`,
         { headers },
@@ -301,7 +304,6 @@ export class AgentActivityPanel extends LitElement {
           duration_ms: d.duration_ms,
           ts: d.created_at,
         }));
-        // Prepend historical to tool list (avoid dupes)
         const liveIds = new Set(this._toolEvents.map(t => t.id));
         const unique = this._historicalTools.filter(t => !liveIds.has(t.id));
         this._toolEvents = [...unique, ...this._toolEvents];
@@ -310,6 +312,34 @@ export class AgentActivityPanel extends LitElement {
     } catch {
       // Non-critical
     }
+
+    // Load historical output lines from workspace logs
+    if (this.workspaceId) {
+      try {
+        const logRes = await fetch(
+          `/api/workspaces/${this.workspaceId}/logs?limit=200`,
+          { headers },
+        );
+        if (logRes.ok) {
+          const logData = await logRes.json() as Array<{
+            line: string;
+            fd: string;
+            ts: string;
+          }>;
+          const historicalOutput: OutputLine[] = logData.map(d => ({
+            kind: 'output' as const,
+            line: d.line,
+            fd: d.fd,
+            ts: d.ts,
+          }));
+          this._outputLines = [...historicalOutput, ...this._outputLines];
+          this._allEntries = [...historicalOutput, ...this._allEntries];
+        }
+      } catch {
+        // Non-critical
+      }
+    }
+
     this._historicalLoaded = true;
   }
 

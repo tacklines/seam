@@ -1,12 +1,13 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     Json,
 };
 use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::agent_token;
 use crate::log_buffer::LogLine;
 use crate::AppState;
 
@@ -15,15 +16,49 @@ pub struct IngestPath {
     pub workspace_id: Uuid,
 }
 
+/// Extract and validate a Bearer token from headers.
+/// Returns Ok(()) if valid agent token or auth is disabled, Err(401) otherwise.
+async fn validate_agent_auth(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(), StatusCode> {
+    // Skip auth in dev mode
+    if std::env::var("MCP_AUTH_DISABLED").unwrap_or_default() == "true" {
+        return Ok(());
+    }
+
+    let auth_header = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let token = auth_header
+        .strip_prefix("Bearer ")
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    if !agent_token::is_agent_token(token) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    agent_token::validate_token(&state.db, token)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    Ok(())
+}
+
 /// POST /api/workspaces/:workspace_id/logs
 ///
 /// Accepts an array of log lines from the workspace sidecar.
-/// Authenticated via agent token (sat_) — validated by the workspace's session.
+/// Authenticated via agent token (sat_).
 pub async fn ingest_logs(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(workspace_id): Path<Uuid>,
     Json(lines): Json<Vec<LogLine>>,
 ) -> Result<StatusCode, StatusCode> {
+    validate_agent_auth(&state, &headers).await?;
     // Look up workspace to find participant_id and session_code
     let row: Option<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT w.id, w.task_id FROM workspaces w WHERE w.id = $1"

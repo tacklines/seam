@@ -168,6 +168,59 @@ resource "coder_agent" "dev" {
     #!/bin/bash
     set -e
 
+    # Install log forwarder script
+    mkdir -p /opt/seam
+    cat > /opt/seam/log-forwarder.py <<'FORWARDER'
+#!/usr/bin/env python3
+"""Tails agent output and POSTs batches to the Seam server."""
+import json, os, sys, time, urllib.request, urllib.error
+from datetime import datetime, timezone
+from threading import Thread, Event
+
+BATCH_SIZE, FLUSH_INTERVAL = 20, 2.0
+
+def post_batch(url, token, lines):
+    req = urllib.request.Request(url, data=json.dumps(lines).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+        method="POST")
+    for attempt in range(3):
+        try:
+            urllib.request.urlopen(req, timeout=10)
+            return
+        except (urllib.error.URLError, OSError):
+            time.sleep(1.0 * (attempt + 1))
+
+def main():
+    log_file, seam_url, ws_id, token = sys.argv[1:5]
+    url = f"{seam_url}/api/workspaces/{ws_id}/logs"
+    batch, last_flush, stop = [], time.monotonic(), Event()
+    def flush():
+        nonlocal batch, last_flush
+        if not batch: return
+        to_send, batch, last_flush = batch, [], time.monotonic()
+        post_batch(url, token, to_send)
+    def timer():
+        while not stop.wait(FLUSH_INTERVAL):
+            if batch and time.monotonic() - last_flush >= FLUSH_INTERVAL: flush()
+    Thread(target=timer, daemon=True).start()
+    while not os.path.exists(log_file) and not stop.is_set(): time.sleep(0.5)
+    try:
+        with open(log_file) as f:
+            f.seek(0, 2)
+            while not stop.is_set():
+                line = f.readline()
+                if line:
+                    batch.append({"line": line.rstrip("\n"), "fd": "stdout",
+                        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+                    if len(batch) >= BATCH_SIZE: flush()
+                else: time.sleep(0.1)
+    except KeyboardInterrupt: pass
+    finally: stop.set(); flush()
+
+if __name__ == "__main__": main()
+FORWARDER
+    chmod +x /opt/seam/log-forwarder.py
+
     # Clone repo if specified and /workspace is empty
     if [ -n "${data.coder_parameter.repo_url.value}" ] && [ ! -d "/workspace/.git" ]; then
       echo "Cloning ${data.coder_parameter.repo_url.value}..."
@@ -219,28 +272,11 @@ resource "coder_agent" "dev" {
 
       # Start log forwarder sidecar — streams agent output to Seam server
       if [ -n "${data.coder_parameter.workspace_id.value}" ]; then
-        (
-          # Wait for log file to exist
-          while [ ! -f /tmp/claude-agent.log ]; do sleep 0.5; done
-          tail -f /tmp/claude-agent.log | while IFS= read -r line; do
-            # Batch lines every 1s or 10 lines to reduce HTTP calls
-            echo "$line" >> /tmp/log-batch.tmp
-            LINES=$(wc -l < /tmp/log-batch.tmp 2>/dev/null || echo 0)
-            if [ "$LINES" -ge 10 ]; then
-              # Build JSON array from batch
-              PAYLOAD=$(while IFS= read -r bline; do
-                printf '{"line":%s,"fd":"stdout","ts":"%s"}' \
-                  "$(echo "$bline" | jq -Rs .)" \
-                  "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              done < /tmp/log-batch.tmp | jq -s '.')
-              curl -s -X POST "${data.coder_parameter.seam_url.value}/api/workspaces/${data.coder_parameter.workspace_id.value}/logs" \
-                -H "Authorization: Bearer ${data.coder_parameter.seam_token.value}" \
-                -H "Content-Type: application/json" \
-                -d "$PAYLOAD" > /dev/null 2>&1 || true
-              > /tmp/log-batch.tmp
-            fi
-          done
-        ) &
+        python3 /opt/seam/log-forwarder.py \
+          /tmp/claude-agent.log \
+          "${data.coder_parameter.seam_url.value}" \
+          "${data.coder_parameter.workspace_id.value}" \
+          "${data.coder_parameter.seam_token.value}" &
         echo "Log forwarder PID: $!"
       fi
     fi
