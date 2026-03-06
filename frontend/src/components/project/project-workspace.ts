@@ -1,11 +1,8 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchProject, fetchProjectSessions, updateProject, type ProjectView } from '../../state/project-api.js';
-import { fetchProjectTasks } from '../../state/task-api.js';
 import { fetchPlans, type PlanListView } from '../../state/plan-api.js';
 import { fetchWorkspaces, fetchCoderStatus, type WorkspaceView, type CoderStatus } from '../../state/workspace-api.js';
-import type { TaskView, TaskStatus } from '../../state/task-types.js';
-import { TASK_TYPE_ICONS, TASK_TYPE_COLORS, STATUS_LABELS, STATUS_VARIANTS, PRIORITY_ICONS, PRIORITY_COLORS } from '../../state/task-types.js';
 import { store, type SessionView } from '../../state/app-state.js';
 import { connectSession } from '../../state/session-connection.js';
 import { authStore } from '../../state/auth-state.js';
@@ -26,6 +23,7 @@ import '../plans/plan-list.js';
 import '../plans/plan-detail.js';
 import '../agents/agent-list.js';
 import '../agents/agent-detail.js';
+import '../tasks/task-board.js';
 // Lazy-loaded when graph tab is shown (Three.js is ~800KB)
 const ensureGraphLoaded = () => import('../graph/dependency-graph.js');
 
@@ -279,90 +277,6 @@ export class ProjectWorkspace extends LitElement {
       font-size: 1.25rem;
     }
 
-    /* ── Stats row ── */
-    .stats-row {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .stat-chip {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.35rem 0.75rem;
-      border-radius: var(--sl-border-radius-pill);
-      background: var(--surface-card);
-      border: 1px solid var(--border-subtle);
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-    }
-
-    .stat-chip .count {
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .stat-chip.active {
-      border-color: var(--color-primary-border);
-      background: var(--surface-active);
-    }
-
-    /* ── Task list ── */
-    .task-list {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--sl-border-radius-medium);
-      overflow: hidden;
-    }
-
-    .task-row {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.6rem 1rem;
-      background: var(--surface-card);
-      cursor: default;
-      font-size: 0.875rem;
-    }
-
-    .task-row:not(:last-child) {
-      border-bottom: 1px solid var(--border-subtle);
-    }
-
-    .task-row .type-icon {
-      font-size: 0.9rem;
-      flex-shrink: 0;
-    }
-
-    .task-row .ticket-id {
-      font-family: var(--sl-font-mono);
-      font-size: 0.75rem;
-      color: var(--text-tertiary);
-      flex-shrink: 0;
-      min-width: 5rem;
-    }
-
-    .task-row .task-title {
-      flex: 1;
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .task-row .priority-icon {
-      font-size: 0.8rem;
-      flex-shrink: 0;
-    }
-
-    .task-row sl-badge::part(base) {
-      font-size: 0.7rem;
-    }
-
     /* ── Workspace list ── */
     .workspace-list {
       display: flex;
@@ -559,8 +473,6 @@ export class ProjectWorkspace extends LitElement {
 
   @state() private _project: ProjectView | null = null;
   @state() private _sessions: SessionView[] = [];
-  @state() private _tasks: TaskView[] = [];
-  @state() private _taskCounts = { open: 0, in_progress: 0, done: 0, closed: 0, total: 0 };
   @state() private _plans: PlanListView[] = [];
   @state() private _planCount = 0;
   @state() private _workspaces: WorkspaceView[] = [];
@@ -625,7 +537,7 @@ export class ProjectWorkspace extends LitElement {
       this._loadProject();
     }
     if (changed.has('initialTab') && this.initialTab) {
-      const valid = ['overview', 'graph', 'settings'];
+      const valid = ['overview', 'tasks', 'graph', 'settings', 'agents'];
       if (valid.includes(this.initialTab)) {
         this._switchTab(this.initialTab, false);
       }
@@ -637,10 +549,9 @@ export class ProjectWorkspace extends LitElement {
     this._loading = true;
     this._error = '';
     try {
-      const [project, sessions, allTasks, plans, workspaces] = await Promise.all([
+      const [project, sessions, plans, workspaces] = await Promise.all([
         fetchProject(this.projectId),
         fetchProjectSessions(this.projectId),
-        fetchProjectTasks(this.projectId),
         fetchPlans(this.projectId),
         fetchWorkspaces(this.projectId).catch(() => [] as WorkspaceView[]),
       ]);
@@ -649,19 +560,6 @@ export class ProjectWorkspace extends LitElement {
       this._plans = plans;
       this._planCount = plans.length;
       this._workspaces = workspaces;
-
-      // Compute counts from all tasks
-      const counts = { open: 0, in_progress: 0, done: 0, closed: 0, total: allTasks.length };
-      for (const t of allTasks) {
-        counts[t.status as keyof typeof counts] = (counts[t.status as keyof typeof counts] as number) + 1;
-      }
-      this._taskCounts = counts;
-
-      // Show only open + in_progress tasks, sorted by updated_at desc, capped at 25
-      this._tasks = allTasks
-        .filter(t => t.status === 'open' || t.status === 'in_progress')
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-        .slice(0, 25);
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to load project';
     } finally {
@@ -767,10 +665,12 @@ export class ProjectWorkspace extends LitElement {
             ${this._activeTab === 'overview' ? html`
               ${this._renderRepo()}
               ${this._renderSessions()}
-              ${this._renderPlans()}
               ${this._renderWorkspaces()}
-              ${this._renderTasks()}
             ` : nothing}
+            ${this._activeTab === 'tasks' ? html`
+              <task-board project-id=${this.projectId}></task-board>
+            ` : nothing}
+            ${this._activeTab === 'plans' ? this._renderPlans() : nothing}
             ${this._activeTab === 'agents' ? this._renderAgents() : nothing}
             ${this._activeTab === 'settings' ? this._renderSettings() : nothing}
           </div>
@@ -951,71 +851,6 @@ export class ProjectWorkspace extends LitElement {
     `;
   }
 
-  private _renderTasks() {
-    const { open, in_progress, done, closed, total } = this._taskCounts;
-
-    return html`
-      <div class="section">
-        <div class="section-header">
-          <span class="section-title">
-            <sl-icon name="kanban"></sl-icon>
-            Tasks
-            <sl-badge variant="neutral" pill>${total}</sl-badge>
-          </span>
-        </div>
-
-        <div class="stats-row">
-          <div class="stat-chip ${open > 0 ? 'active' : ''}">
-            <span class="count">${open}</span> Open
-          </div>
-          <div class="stat-chip ${in_progress > 0 ? 'active' : ''}">
-            <span class="count">${in_progress}</span> In Progress
-          </div>
-          <div class="stat-chip">
-            <span class="count">${done}</span> Done
-          </div>
-          <div class="stat-chip">
-            <span class="count">${closed}</span> Closed
-          </div>
-        </div>
-
-        ${this._tasks.length === 0 ? html`
-          <div class="empty-state">
-            <sl-icon name="check-circle"></sl-icon>
-            ${total === 0
-              ? 'No tasks yet. Join a session to create tasks.'
-              : 'All tasks are done or closed.'}
-          </div>
-        ` : html`
-          <div class="task-list">
-            ${this._tasks.map(t => html`
-              <div class="task-row">
-                <sl-icon class="type-icon" name=${TASK_TYPE_ICONS[t.task_type]}
-                         style="color: ${TASK_TYPE_COLORS[t.task_type]}"></sl-icon>
-                <span class="ticket-id">${t.ticket_id}</span>
-                <span class="task-title">${t.title}</span>
-                <sl-icon class="priority-icon" name=${PRIORITY_ICONS[t.priority]}
-                         style="color: ${PRIORITY_COLORS[t.priority]}"></sl-icon>
-                <sl-badge variant=${STATUS_VARIANTS[t.status]}>${STATUS_LABELS[t.status]}</sl-badge>
-                <sl-tooltip content="Updated ${this._relativeTime(t.updated_at)}">
-                  <span class="date" style="font-size: 0.75rem; color: var(--text-tertiary);">
-                    ${this._relativeTime(t.updated_at)}
-                  </span>
-                </sl-tooltip>
-              </div>
-            `)}
-          </div>
-          ${this._tasks.length >= 25 ? html`
-            <div style="text-align: center; margin-top: 0.75rem;">
-              <span style="font-size: 0.8rem; color: var(--text-tertiary);">
-                Showing 25 of ${open + in_progress} active tasks. Join a session for the full board.
-              </span>
-            </div>
-          ` : nothing}
-        `}
-      </div>
-    `;
-  }
   private _renderTabNav() {
     const tab = (id: string, label: string, icon: string) => html`
       <button class="tab-btn ${this._activeTab === id ? 'active' : ''}"
@@ -1026,6 +861,8 @@ export class ProjectWorkspace extends LitElement {
     return html`
       <nav class="tab-nav">
         ${tab('overview', 'Overview', 'grid-1x2')}
+        ${tab('tasks', 'Tasks', 'kanban')}
+        ${tab('plans', 'Plans', 'file-earmark-text')}
         ${tab('agents', 'Agents', 'robot')}
         ${tab('graph', 'Graph', 'diagram-3')}
         ${tab('settings', 'Settings', 'gear')}
