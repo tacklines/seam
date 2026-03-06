@@ -1195,7 +1195,7 @@ impl SeamMcp {
                 ).await;
 
                 let event = crate::events::DomainEvent::new(
-                    "task.closed", "task", task_id, None,
+                    "task.closed", "task", task_id, Some(participant_id),
                     serde_json::json!({
                         "project_id": project_id,
                         "ticket_id": ticket_id,
@@ -1813,23 +1813,31 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<GetTaskParams>,
     ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
         };
 
         // Fetch task data before deleting for the domain event payload
+        // Scoped to project_id to prevent cross-project deletion
         let task: Option<(String, i32)> = sqlx::query_as(
-            "SELECT title, ticket_number FROM tasks WHERE id = $1"
+            "SELECT title, ticket_number FROM tasks WHERE id = $1 AND project_id = $2"
         )
         .bind(task_id)
+        .bind(project_id)
         .fetch_optional(&self.db)
         .await
         .ok()
         .flatten();
 
-        match sqlx::query("DELETE FROM tasks WHERE id = $1")
+        match sqlx::query("DELETE FROM tasks WHERE id = $1 AND project_id = $2")
             .bind(task_id)
+            .bind(project_id)
             .execute(&self.db)
             .await
         {
@@ -1844,7 +1852,7 @@ impl SeamMcp {
                         .unwrap_or((None, None));
                     if let Some(sid) = session_id {
                         let event = crate::events::DomainEvent::new(
-                            "task_deleted",
+                            "task.deleted",
                             "task",
                             task_id,
                             participant_id,
