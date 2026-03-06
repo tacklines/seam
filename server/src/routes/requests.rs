@@ -129,26 +129,31 @@ fn validate_request_status_transition(
     Ok(())
 }
 
-async fn build_list_view(db: &sqlx::PgPool, req: &Request) -> Result<RequestListView, StatusCode> {
-    let requirement_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM request_requirements WHERE request_id = $1")
-            .bind(req.id)
-            .fetch_one(db)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to count requirements: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+/// Batch-fetch requirement_count for a set of request IDs.
+async fn batch_requirement_counts(
+    db: &sqlx::PgPool,
+    ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, i64>, StatusCode> {
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
 
-    Ok(RequestListView {
-        id: req.id,
-        title: req.title.clone(),
-        status: req.status,
-        author_id: req.author_id,
-        requirement_count,
-        created_at: req.created_at,
-        updated_at: req.updated_at,
-    })
+    let counts: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT request_id, COUNT(*) FROM request_requirements WHERE request_id = ANY($1) GROUP BY request_id"
+    )
+    .bind(ids)
+    .fetch_all(db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to batch count requirements: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let mut result: std::collections::HashMap<Uuid, i64> = std::collections::HashMap::new();
+    for (id, count) in counts {
+        result.insert(id, count);
+    }
+    Ok(result)
 }
 
 // --- Handlers ---
@@ -186,10 +191,21 @@ pub async fn list_requests(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let mut views = Vec::new();
-    for r in &reqs {
-        views.push(build_list_view(&state.db, r).await?);
-    }
+    let ids: Vec<Uuid> = reqs.iter().map(|r| r.id).collect();
+    let counts = batch_requirement_counts(&state.db, &ids).await?;
+
+    let views: Vec<RequestListView> = reqs.iter().map(|r| {
+        let requirement_count = counts.get(&r.id).copied().unwrap_or(0);
+        RequestListView {
+            id: r.id,
+            title: r.title.clone(),
+            status: r.status,
+            author_id: r.author_id,
+            requirement_count,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }).collect();
     Ok(Json(views))
 }
 

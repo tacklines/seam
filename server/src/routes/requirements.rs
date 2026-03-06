@@ -124,30 +124,54 @@ fn validate_status_transition(current: RequirementStatus, new: RequirementStatus
     Ok(())
 }
 
-async fn build_list_view(db: &sqlx::PgPool, req: &Requirement) -> Result<RequirementListView, StatusCode> {
-    let child_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM requirements WHERE parent_id = $1"
+/// Batch-fetch child_count and task_count for a set of requirement IDs.
+/// Returns a HashMap keyed by requirement ID with (child_count, task_count).
+async fn batch_counts(
+    db: &sqlx::PgPool,
+    ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, (i64, i64)>, StatusCode> {
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let child_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT parent_id, COUNT(*) FROM requirements WHERE parent_id = ANY($1) GROUP BY parent_id"
     )
-    .bind(req.id)
-    .fetch_one(db)
+    .bind(ids)
+    .fetch_all(db)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to count children: {e}");
+        tracing::error!("Failed to batch count children: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let task_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM requirement_tasks WHERE requirement_id = $1"
+    let task_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT requirement_id, COUNT(*) FROM requirement_tasks WHERE requirement_id = ANY($1) GROUP BY requirement_id"
     )
-    .bind(req.id)
-    .fetch_one(db)
+    .bind(ids)
+    .fetch_all(db)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to count tasks: {e}");
+        tracing::error!("Failed to batch count tasks: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(RequirementListView {
+    let mut result: std::collections::HashMap<Uuid, (i64, i64)> = ids.iter().map(|id| (*id, (0, 0))).collect();
+    for (id, count) in child_counts {
+        if let Some(entry) = result.get_mut(&id) {
+            entry.0 = count;
+        }
+    }
+    for (id, count) in task_counts {
+        if let Some(entry) = result.get_mut(&id) {
+            entry.1 = count;
+        }
+    }
+    Ok(result)
+}
+
+fn build_list_view_from_counts(req: &Requirement, child_count: i64, task_count: i64) -> RequirementListView {
+    RequirementListView {
         id: req.id,
         title: req.title.clone(),
         status: req.status,
@@ -157,7 +181,7 @@ async fn build_list_view(db: &sqlx::PgPool, req: &Requirement) -> Result<Require
         task_count,
         created_at: req.created_at,
         updated_at: req.updated_at,
-    })
+    }
 }
 
 // --- Handlers ---
@@ -210,10 +234,13 @@ pub async fn list_requirements(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let mut views = Vec::new();
-    for r in &reqs {
-        views.push(build_list_view(&state.db, r).await?);
-    }
+    let ids: Vec<Uuid> = reqs.iter().map(|r| r.id).collect();
+    let counts = batch_counts(&state.db, &ids).await?;
+
+    let views: Vec<RequirementListView> = reqs.iter().map(|r| {
+        let (child_count, task_count) = counts.get(&r.id).copied().unwrap_or((0, 0));
+        build_list_view_from_counts(r, child_count, task_count)
+    }).collect();
     Ok(Json(views))
 }
 
@@ -253,10 +280,12 @@ pub async fn get_requirement(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let mut child_views = Vec::new();
-    for c in &children {
-        child_views.push(build_list_view(&state.db, c).await?);
-    }
+    let child_ids: Vec<Uuid> = children.iter().map(|c| c.id).collect();
+    let child_counts = batch_counts(&state.db, &child_ids).await?;
+    let child_views: Vec<RequirementListView> = children.iter().map(|c| {
+        let (cc, tc) = child_counts.get(&c.id).copied().unwrap_or((0, 0));
+        build_list_view_from_counts(c, cc, tc)
+    }).collect();
 
     let linked_task_ids: Vec<(Uuid,)> = sqlx::query_as(
         "SELECT task_id FROM requirement_tasks WHERE requirement_id = $1"
