@@ -77,10 +77,15 @@ pub async fn list_questions(
 
     let status_filter = query.status.as_deref().unwrap_or("pending");
 
-    let rows: Vec<(Uuid, String, QuestionStatus, Uuid, Option<Uuid>, Option<serde_json::Value>, Option<String>, Option<Uuid>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = if status_filter == "all" {
+    let rows: Vec<(Uuid, String, QuestionStatus, Uuid, String, Option<Uuid>, Option<serde_json::Value>, Option<String>, Option<Uuid>, Option<String>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = if status_filter == "all" {
         sqlx::query_as(
-            "SELECT q.id, q.question_text, q.status, q.asked_by, q.directed_to, q.context, q.answer_text, q.answered_by, q.created_at, q.answered_at
-             FROM questions q WHERE q.session_id = $1
+            "SELECT q.id, q.question_text, q.status, q.asked_by, pa.display_name,
+                    q.directed_to, q.context, q.answer_text, q.answered_by, pb.display_name,
+                    q.created_at, q.answered_at
+             FROM questions q
+             JOIN participants pa ON pa.id = q.asked_by
+             LEFT JOIN participants pb ON pb.id = q.answered_by
+             WHERE q.session_id = $1
              ORDER BY q.created_at DESC"
         )
         .bind(session.id)
@@ -88,8 +93,13 @@ pub async fn list_questions(
         .await
     } else {
         sqlx::query_as(
-            "SELECT q.id, q.question_text, q.status, q.asked_by, q.directed_to, q.context, q.answer_text, q.answered_by, q.created_at, q.answered_at
-             FROM questions q WHERE q.session_id = $1 AND q.status = $2
+            "SELECT q.id, q.question_text, q.status, q.asked_by, pa.display_name,
+                    q.directed_to, q.context, q.answer_text, q.answered_by, pb.display_name,
+                    q.created_at, q.answered_at
+             FROM questions q
+             JOIN participants pa ON pa.id = q.asked_by
+             LEFT JOIN participants pb ON pb.id = q.answered_by
+             WHERE q.session_id = $1 AND q.status = $2
              ORDER BY q.created_at DESC"
         )
         .bind(session.id)
@@ -101,36 +111,15 @@ pub async fn list_questions(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let mut views = Vec::with_capacity(rows.len());
-    for (id, question_text, status, asked_by, directed_to, context, answer_text, answered_by, created_at, answered_at) in rows {
-        let asked_by_name = sqlx::query_scalar::<_, String>(
-            "SELECT display_name FROM participants WHERE id = $1"
-        ).bind(asked_by).fetch_optional(&state.db).await
-            .ok().flatten().unwrap_or_else(|| "Unknown".to_string());
-
-        let answered_by_name = if let Some(by) = answered_by {
-            sqlx::query_scalar::<_, String>(
-                "SELECT display_name FROM participants WHERE id = $1"
-            ).bind(by).fetch_optional(&state.db).await.ok().flatten()
-        } else {
-            None
-        };
-
-        views.push(QuestionView {
-            id,
-            question_text,
-            status,
-            asked_by,
-            asked_by_name,
-            directed_to,
-            context,
-            answer_text,
-            answered_by,
-            answered_by_name,
-            created_at,
-            answered_at,
-        });
-    }
+    let views: Vec<QuestionView> = rows
+        .into_iter()
+        .map(|(id, question_text, status, asked_by, asked_by_name, directed_to, context, answer_text, answered_by, answered_by_name, created_at, answered_at)| {
+            QuestionView {
+                id, question_text, status, asked_by, asked_by_name, directed_to, context,
+                answer_text, answered_by, answered_by_name, created_at, answered_at,
+            }
+        })
+        .collect();
 
     Ok(Json(views))
 }
@@ -139,43 +128,25 @@ pub async fn get_question(
     State(state): State<Arc<AppState>>,
     Path((_session_code, question_id)): Path<(String, Uuid)>,
 ) -> Result<Json<QuestionView>, StatusCode> {
-    let row: Option<(Uuid, String, QuestionStatus, Uuid, Option<Uuid>, Option<serde_json::Value>, Option<String>, Option<Uuid>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
-        "SELECT q.id, q.question_text, q.status, q.asked_by, q.directed_to, q.context, q.answer_text, q.answered_by, q.created_at, q.answered_at
-         FROM questions q WHERE q.id = $1"
+    let row: Option<(Uuid, String, QuestionStatus, Uuid, String, Option<Uuid>, Option<serde_json::Value>, Option<String>, Option<Uuid>, Option<String>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+        "SELECT q.id, q.question_text, q.status, q.asked_by, pa.display_name,
+                q.directed_to, q.context, q.answer_text, q.answered_by, pb.display_name,
+                q.created_at, q.answered_at
+         FROM questions q
+         JOIN participants pa ON pa.id = q.asked_by
+         LEFT JOIN participants pb ON pb.id = q.answered_by
+         WHERE q.id = $1"
     )
     .bind(question_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let (id, question_text, status, asked_by, directed_to, context, answer_text, answered_by, created_at, answered_at) = row.ok_or(StatusCode::NOT_FOUND)?;
-
-    let asked_by_name = sqlx::query_scalar::<_, String>(
-        "SELECT display_name FROM participants WHERE id = $1"
-    ).bind(asked_by).fetch_optional(&state.db).await
-        .ok().flatten().unwrap_or_else(|| "Unknown".to_string());
-
-    let answered_by_name = if let Some(by) = answered_by {
-        sqlx::query_scalar::<_, String>(
-            "SELECT display_name FROM participants WHERE id = $1"
-        ).bind(by).fetch_optional(&state.db).await.ok().flatten()
-    } else {
-        None
-    };
+    let (id, question_text, status, asked_by, asked_by_name, directed_to, context, answer_text, answered_by, answered_by_name, created_at, answered_at) = row.ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(QuestionView {
-        id,
-        question_text,
-        status,
-        asked_by,
-        asked_by_name,
-        directed_to,
-        context,
-        answer_text,
-        answered_by,
-        answered_by_name,
-        created_at,
-        answered_at,
+        id, question_text, status, asked_by, asked_by_name, directed_to, context,
+        answer_text, answered_by, answered_by_name, created_at, answered_at,
     }))
 }
 

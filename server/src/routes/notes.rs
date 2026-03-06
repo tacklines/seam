@@ -29,46 +29,27 @@ pub struct NoteView {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-async fn note_to_view(db: &sqlx::PgPool, note: Note) -> NoteView {
-    let updated_by_name = if let Some(by) = note.updated_by {
-        sqlx::query_scalar::<_, String>(
-            "SELECT display_name FROM participants WHERE id = $1"
-        ).bind(by).fetch_optional(db).await.ok().flatten()
-    } else {
-        None
-    };
-
-    NoteView {
-        id: note.id,
-        slug: note.slug,
-        title: note.title,
-        content: note.content,
-        updated_by_name,
-        created_at: note.created_at,
-        updated_at: note.updated_at,
-    }
-}
-
 pub async fn list_notes(
     State(state): State<Arc<AppState>>,
     Path(session_code): Path<String>,
 ) -> Result<Json<Vec<NoteView>>, StatusCode> {
     let session = resolve_session_pub(&state.db, &session_code).await?;
 
-    let notes: Vec<Note> = sqlx::query_as(
-        "SELECT * FROM notes WHERE session_id = $1 ORDER BY created_at"
+    let rows: Vec<(Uuid, String, String, String, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        "SELECT n.id, n.slug, n.title, n.content, p.display_name, n.created_at, n.updated_at
+         FROM notes n
+         LEFT JOIN participants p ON p.id = n.updated_by
+         WHERE n.session_id = $1
+         ORDER BY n.created_at"
     )
     .bind(session.id)
     .fetch_all(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut views = Vec::with_capacity(notes.len());
-    for note in notes {
-        views.push(note_to_view(&state.db, note).await);
-    }
-
-    Ok(Json(views))
+    Ok(Json(rows.into_iter().map(|(id, slug, title, content, updated_by_name, created_at, updated_at)| {
+        NoteView { id, slug, title, content, updated_by_name, created_at, updated_at }
+    }).collect()))
 }
 
 pub async fn get_note(
@@ -77,17 +58,20 @@ pub async fn get_note(
 ) -> Result<Json<NoteView>, StatusCode> {
     let session = resolve_session_pub(&state.db, &session_code).await?;
 
-    let note: Note = sqlx::query_as(
-        "SELECT * FROM notes WHERE session_id = $1 AND slug = $2"
+    let row: Option<(Uuid, String, String, String, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        "SELECT n.id, n.slug, n.title, n.content, p.display_name, n.created_at, n.updated_at
+         FROM notes n
+         LEFT JOIN participants p ON p.id = n.updated_by
+         WHERE n.session_id = $1 AND n.slug = $2"
     )
     .bind(session.id)
     .bind(&slug)
     .fetch_optional(&state.db)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(note_to_view(&state.db, note).await))
+    let (id, slug, title, content, updated_by_name, created_at, updated_at) = row.ok_or(StatusCode::NOT_FOUND)?;
+    Ok(Json(NoteView { id, slug, title, content, updated_by_name, created_at, updated_at }))
 }
 
 pub async fn upsert_note(
@@ -112,12 +96,12 @@ pub async fn upsert_note(
 
     let title = req.title.unwrap_or_else(|| slug.clone());
 
-    let note: Note = sqlx::query_as(
+    let row: (Uuid, String, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) = sqlx::query_as(
         "INSERT INTO notes (id, session_id, slug, title, content, updated_by, created_at, updated_at)
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
          ON CONFLICT (session_id, slug) DO UPDATE
          SET content = EXCLUDED.content, title = EXCLUDED.title, updated_by = EXCLUDED.updated_by, updated_at = NOW()
-         RETURNING *"
+         RETURNING id, slug, title, content, created_at, updated_at"
     )
     .bind(session.id)
     .bind(&slug)
@@ -131,5 +115,13 @@ pub async fn upsert_note(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(note_to_view(&state.db, note).await))
+    Ok(Json(NoteView {
+        id: row.0,
+        slug: row.1,
+        title: row.2,
+        content: row.3,
+        updated_by_name: Some(participant.display_name),
+        created_at: row.4,
+        updated_at: row.5,
+    }))
 }
