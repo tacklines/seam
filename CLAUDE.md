@@ -141,6 +141,17 @@ Single `claude -p` executions inside persistent Coder workspaces. Workspaces are
 3. `coder ssh <workspace> -- claude -p --agent <perspective> '<prompt>'` is spawned
 4. stdout/stderr streamed to log buffer + WebSocket broadcast
 5. Structured JSON output captured in `result_json`
+6. `session_id` extracted from JSON output → stored as `claude_session_id`
+
+### Session Continuity (--resume)
+
+Persistent agents are chains of resumed invocations — ephemeral processes with full context:
+
+- Each completed invocation stores `claude_session_id` (extracted from `--output-format json` output)
+- A new invocation can pass `resume_session_id` to continue from a prior session
+- Dispatch adds `--resume <session_id>` to the claude command when resuming
+- Frontend: "Continue" button on completed invocations opens dialog pre-filled for resumption
+- Chain indicator (arrow-repeat icon) shown on resumed invocations in the list view
 
 ### Agent Perspectives
 
