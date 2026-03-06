@@ -455,6 +455,7 @@ pub struct WorkspaceView {
     pub task_id: Option<Uuid>,
     pub participant_id: Option<Uuid>,
     pub participant_name: Option<String>,
+    pub session_code: Option<String>,
     pub status: WorkspaceStatus,
     pub coder_workspace_name: Option<String>,
     pub template_name: String,

@@ -37,6 +37,7 @@ export interface WorkspaceView {
   error_message: string | null;
   participant_id: string | null;
   participant_name: string | null;
+  session_code: string | null;
 }
 
 export async function fetchWorkspaces(

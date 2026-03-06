@@ -54,9 +54,9 @@ pub async fn ingest_logs(
     Json(lines): Json<Vec<LogLine>>,
 ) -> Result<StatusCode, StatusCode> {
     validate_agent_auth(&state, &headers).await?;
-    // Look up workspace to find participant_id and session_code
-    let row: Option<(Uuid, Uuid)> = sqlx::query_as(
-        "SELECT w.id, w.task_id FROM workspaces w WHERE w.id = $1"
+    // Look up workspace — participant_id may be NULL before agent joins
+    let row: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+        "SELECT w.id, w.participant_id FROM workspaces w WHERE w.id = $1"
     )
     .bind(workspace_id)
     .fetch_optional(&state.db)
@@ -66,47 +66,49 @@ pub async fn ingest_logs(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let (_ws_id, _task_id) = row.ok_or(StatusCode::NOT_FOUND)?;
+    let (_ws_id, participant_id) = row.ok_or(StatusCode::NOT_FOUND)?;
 
-    // Find participant linked to this workspace via the agent launch flow
-    // Workspaces are linked to a participant via the task's assigned_to or creator
-    let participant_info: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT p.id, s.code
-         FROM workspaces w
-         JOIN tasks t ON t.id = w.task_id
-         JOIN participants p ON p.id = COALESCE(t.assigned_to, t.created_by)
-         JOIN sessions s ON s.id = p.session_id
-         WHERE w.id = $1"
-    )
-    .bind(workspace_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to resolve workspace participant: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let (participant_id, session_code) = participant_info.ok_or(StatusCode::NOT_FOUND)?;
+    // Resolve session code for WebSocket broadcast (only if participant exists)
+    let session_code: Option<String> = if let Some(pid) = participant_id {
+        sqlx::query_scalar(
+            "SELECT s.code FROM participants p JOIN sessions s ON s.id = p.session_id WHERE p.id = $1"
+        )
+        .bind(pid)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to resolve session code: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+    } else {
+        None
+    };
 
     for line in lines {
-        // Buffer for history retrieval
-        state.log_buffer.push(participant_id, line.clone());
+        // Always buffer by workspace_id (available from the start)
+        let mut keys = vec![workspace_id];
+        if let Some(pid) = participant_id {
+            keys.push(pid);
+        }
+        state.log_buffer.push_multi(&keys, line.clone());
 
-        // Broadcast to subscribed WebSocket clients
-        state.connections.broadcast_agent_stream(
-            &session_code,
-            &participant_id.to_string(),
-            &serde_json::json!({
-                "type": "agent_stream",
-                "stream": "output",
-                "participant_id": participant_id,
-                "data": {
-                    "line": line.line,
-                    "fd": line.fd,
-                    "ts": line.ts,
-                }
-            }),
-        ).await;
+        // Broadcast to subscribed WebSocket clients if we have a participant
+        if let (Some(pid), Some(code)) = (participant_id, &session_code) {
+            state.connections.broadcast_agent_stream(
+                code,
+                &pid.to_string(),
+                &serde_json::json!({
+                    "type": "agent_stream",
+                    "stream": "output",
+                    "participant_id": pid,
+                    "data": {
+                        "line": line.line,
+                        "fd": line.fd,
+                        "ts": line.ts,
+                    }
+                }),
+            ).await;
+        }
     }
 
     Ok(StatusCode::NO_CONTENT)
@@ -149,25 +151,23 @@ pub async fn get_logs(
                 .map_err(|_| StatusCode::UNAUTHORIZED)?;
         }
     }
-    // Resolve participant from workspace
-    let participant_id: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT p.id
-         FROM workspaces w
-         JOIN tasks t ON t.id = w.task_id
-         JOIN participants p ON p.id = COALESCE(t.assigned_to, t.created_by)
-         WHERE w.id = $1"
+    // Verify workspace exists
+    let exists: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT id FROM workspaces WHERE id = $1"
     )
     .bind(workspace_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to resolve workspace participant: {e}");
+        tracing::error!("Failed to look up workspace: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let (pid,) = participant_id.ok_or(StatusCode::NOT_FOUND)?;
+    exists.ok_or(StatusCode::NOT_FOUND)?;
+
+    // Retrieve logs keyed by workspace_id (available even before agent joins)
     let limit = query.limit.unwrap_or(100).min(500);
-    let lines = state.log_buffer.recent(pid, limit);
+    let lines = state.log_buffer.recent(workspace_id, limit);
 
     Ok(Json(lines))
 }

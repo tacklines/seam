@@ -437,7 +437,7 @@ export class WorkspaceDetail extends LitElement {
             </div>
           `
         : nothing}
-      ${ws.participant_id
+      ${ws.participant_id || ws.status === "running" || ws.status === "creating"
         ? html`
             <div class="section">
               <div class="section-title">
@@ -445,8 +445,8 @@ export class WorkspaceDetail extends LitElement {
                 ${t("workspaceDetail.logs")}
               </div>
               <agent-activity-panel
-                .sessionCode=${""}
-                .participantId=${ws.participant_id}
+                .sessionCode=${ws.session_code ?? ""}
+                .participantId=${ws.participant_id ?? ""}
                 .workspaceId=${ws.id}
               ></agent-activity-panel>
             </div>

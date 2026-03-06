@@ -243,12 +243,25 @@ export class AgentActivityPanel extends LitElement {
     super.connectedCallback();
     if (this.sessionCode && this.participantId) {
       this._startStreaming();
+    } else if (this.workspaceId) {
+      // Workspace-only mode: load historical logs without live streaming
+      this._loadHistorical();
     }
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._stopStreaming();
+    this._clearRefreshTimer();
+  }
+
+  private _logRefreshTimer: number | null = null;
+
+  private _clearRefreshTimer() {
+    if (this._logRefreshTimer !== null) {
+      clearTimeout(this._logRefreshTimer);
+      this._logRefreshTimer = null;
+    }
   }
 
   updated(changed: Map<string, unknown>) {
@@ -256,6 +269,8 @@ export class AgentActivityPanel extends LitElement {
       this._stopStreaming();
       if (this.sessionCode && this.participantId) {
         this._startStreaming();
+      } else if (this.workspaceId && !this._historicalLoaded) {
+        this._loadHistorical();
       }
     }
   }
@@ -339,6 +354,17 @@ export class AgentActivityPanel extends LitElement {
       } catch {
         // Non-critical
       }
+
+      // If no live WebSocket connection, poll for new logs periodically
+      if (!this._connected) {
+        this._clearRefreshTimer();
+        this._logRefreshTimer = window.setTimeout(() => {
+          this._historicalLoaded = false;
+          this._outputLines = [];
+          this._allEntries = this._allEntries.filter(e => e.kind !== 'output');
+          this._loadHistorical();
+        }, 5000);
+      }
     }
 
     this._historicalLoaded = true;
@@ -370,7 +396,7 @@ export class AgentActivityPanel extends LitElement {
   }
 
   render() {
-    if (!this.participantId) return nothing;
+    if (!this.participantId && !this.workspaceId) return nothing;
 
     return html`
       <div class="panel-container">

@@ -12,12 +12,17 @@ use crate::db;
 use crate::models::*;
 use crate::AppState;
 
-fn workspace_view(w: &Workspace, participant_name: Option<String>) -> WorkspaceView {
+fn workspace_view(
+    w: &Workspace,
+    participant_name: Option<String>,
+    session_code: Option<String>,
+) -> WorkspaceView {
     WorkspaceView {
         id: w.id,
         task_id: w.task_id,
         participant_id: w.participant_id,
         participant_name,
+        session_code,
         status: w.status,
         coder_workspace_name: w.coder_workspace_name.clone(),
         template_name: w.template_name.clone(),
@@ -142,7 +147,7 @@ pub async fn create_workspace(
         provision_workspace(&db, &client, ws_id, &template_name, branch.as_deref(), user_id).await;
     });
 
-    Ok((StatusCode::CREATED, Json(workspace_view(&workspace, None))))
+    Ok((StatusCode::CREATED, Json(workspace_view(&workspace, None, None))))
 }
 
 /// Look up the org_id for a workspace's project.
@@ -349,25 +354,33 @@ pub async fn list_workspaces(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    // Batch-fetch participant names for workspaces that have a participant_id
+    // Batch-fetch participant names and session codes for workspaces that have a participant_id
     let participant_ids: Vec<Uuid> = workspaces.iter().filter_map(|w| w.participant_id).collect();
-    let participant_names: std::collections::HashMap<Uuid, String> = if participant_ids.is_empty() {
+    let participant_info: std::collections::HashMap<Uuid, (String, String)> = if participant_ids.is_empty() {
         std::collections::HashMap::new()
     } else {
-        sqlx::query_as::<_, (Uuid, String)>(
-            "SELECT id, display_name FROM participants WHERE id = ANY($1)",
+        sqlx::query_as::<_, (Uuid, String, String)>(
+            "SELECT p.id, p.display_name, s.code
+             FROM participants p
+             JOIN sessions s ON s.id = p.session_id
+             WHERE p.id = ANY($1)",
         )
         .bind(&participant_ids)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
         .into_iter()
+        .map(|(id, name, code)| (id, (name, code)))
         .collect()
     };
 
     Ok(Json(workspaces.iter().map(|w| {
-        let name = w.participant_id.and_then(|pid| participant_names.get(&pid).cloned());
-        workspace_view(w, name)
+        let info = w.participant_id.and_then(|pid| participant_info.get(&pid).cloned());
+        let (name, code) = match info {
+            Some((n, c)) => (Some(n), Some(c)),
+            None => (None, None),
+        };
+        workspace_view(w, name, code)
     }).collect()))
 }
 
@@ -397,7 +410,27 @@ pub async fn get_workspace(
     })?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    Ok(Json(workspace_view(&workspace, None)))
+    // Resolve participant name and session code
+    let info: Option<(String, String)> = if let Some(pid) = workspace.participant_id {
+        sqlx::query_as::<_, (String, String)>(
+            "SELECT p.display_name, s.code
+             FROM participants p
+             JOIN sessions s ON s.id = p.session_id
+             WHERE p.id = $1",
+        )
+        .bind(pid)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or(None)
+    } else {
+        None
+    };
+    let (name, code) = match info {
+        Some((n, c)) => (Some(n), Some(c)),
+        None => (None, None),
+    };
+
+    Ok(Json(workspace_view(&workspace, name, code)))
 }
 
 /// POST /api/projects/:project_id/workspaces/:workspace_id/stop
@@ -470,7 +503,7 @@ pub async fn stop_workspace(
                 tracing::warn!("Failed to emit domain event: {e}");
             }
 
-            Ok(Json(workspace_view(&updated, None)))
+            Ok(Json(workspace_view(&updated, None, None)))
         }
         Err(e) => {
             tracing::error!("Failed to stop Coder workspace: {e}");

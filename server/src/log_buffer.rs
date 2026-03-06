@@ -10,7 +10,7 @@ pub struct LogLine {
     pub ts: String,
 }
 
-/// In-memory ring buffer for workspace log lines, keyed by participant_id.
+/// In-memory ring buffer for workspace log lines, keyed by participant_id or workspace_id.
 pub struct LogBuffer {
     buffers: DashMap<Uuid, VecDeque<LogLine>>,
     max_lines: usize,
@@ -24,17 +24,24 @@ impl LogBuffer {
         }
     }
 
-    pub fn push(&self, participant_id: Uuid, line: LogLine) {
-        let mut buf = self.buffers.entry(participant_id).or_insert_with(VecDeque::new);
+    pub fn push(&self, key: Uuid, line: LogLine) {
+        let mut buf = self.buffers.entry(key).or_insert_with(VecDeque::new);
         if buf.len() >= self.max_lines {
             buf.pop_front();
         }
         buf.push_back(line);
     }
 
-    pub fn recent(&self, participant_id: Uuid, limit: usize) -> Vec<LogLine> {
+    /// Push a log line under multiple keys (e.g. workspace_id + participant_id).
+    pub fn push_multi(&self, keys: &[Uuid], line: LogLine) {
+        for key in keys {
+            self.push(*key, line.clone());
+        }
+    }
+
+    pub fn recent(&self, key: Uuid, limit: usize) -> Vec<LogLine> {
         self.buffers
-            .get(&participant_id)
+            .get(&key)
             .map(|buf| {
                 let start = buf.len().saturating_sub(limit);
                 buf.iter().skip(start).cloned().collect()
@@ -42,7 +49,7 @@ impl LogBuffer {
             .unwrap_or_default()
     }
 
-    pub fn remove(&self, participant_id: &Uuid) {
-        self.buffers.remove(participant_id);
+    pub fn remove(&self, key: &Uuid) {
+        self.buffers.remove(key);
     }
 }
