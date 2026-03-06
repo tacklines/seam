@@ -124,14 +124,17 @@ fn validate_status_transition(current: RequirementStatus, new: RequirementStatus
     Ok(())
 }
 
-async fn build_list_view(db: &sqlx::PgPool, req: &Requirement) -> RequirementListView {
+async fn build_list_view(db: &sqlx::PgPool, req: &Requirement) -> Result<RequirementListView, StatusCode> {
     let child_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM requirements WHERE parent_id = $1"
     )
     .bind(req.id)
     .fetch_one(db)
     .await
-    .unwrap_or(0);
+    .map_err(|e| {
+        tracing::error!("Failed to count children: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let task_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM requirement_tasks WHERE requirement_id = $1"
@@ -139,9 +142,12 @@ async fn build_list_view(db: &sqlx::PgPool, req: &Requirement) -> RequirementLis
     .bind(req.id)
     .fetch_one(db)
     .await
-    .unwrap_or(0);
+    .map_err(|e| {
+        tracing::error!("Failed to count tasks: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    RequirementListView {
+    Ok(RequirementListView {
         id: req.id,
         title: req.title.clone(),
         status: req.status,
@@ -151,7 +157,7 @@ async fn build_list_view(db: &sqlx::PgPool, req: &Requirement) -> RequirementLis
         task_count,
         created_at: req.created_at,
         updated_at: req.updated_at,
-    }
+    })
 }
 
 // --- Handlers ---
@@ -206,7 +212,7 @@ pub async fn list_requirements(
 
     let mut views = Vec::new();
     for r in &reqs {
-        views.push(build_list_view(&state.db, r).await);
+        views.push(build_list_view(&state.db, r).await?);
     }
     Ok(Json(views))
 }
@@ -249,7 +255,7 @@ pub async fn get_requirement(
 
     let mut child_views = Vec::new();
     for c in &children {
-        child_views.push(build_list_view(&state.db, c).await);
+        child_views.push(build_list_view(&state.db, c).await?);
     }
 
     let linked_task_ids: Vec<(Uuid,)> = sqlx::query_as(
@@ -258,7 +264,10 @@ pub async fn get_requirement(
     .bind(req.id)
     .fetch_all(&state.db)
     .await
-    .unwrap_or_default();
+    .map_err(|e| {
+        tracing::error!("Failed to get linked tasks: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (task_done_count, task_total_count): (i64, i64) = sqlx::query_as(
         "SELECT \
@@ -271,7 +280,10 @@ pub async fn get_requirement(
     .bind(req.id)
     .fetch_one(&state.db)
     .await
-    .unwrap_or((0, 0));
+    .map_err(|e| {
+        tracing::error!("Failed to get task counts: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(RequirementDetailView {
         id: req.id,
@@ -483,7 +495,10 @@ pub async fn update_requirement(
     .bind(req.id)
     .fetch_all(&state.db)
     .await
-    .unwrap_or_default();
+    .map_err(|e| {
+        tracing::error!("Failed to get linked tasks: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (task_done_count, task_total_count): (i64, i64) = sqlx::query_as(
         "SELECT \
@@ -496,7 +511,10 @@ pub async fn update_requirement(
     .bind(req.id)
     .fetch_one(&state.db)
     .await
-    .unwrap_or((0, 0));
+    .map_err(|e| {
+        tracing::error!("Failed to get task counts: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(RequirementDetailView {
         id: req.id,

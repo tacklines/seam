@@ -129,15 +129,18 @@ fn validate_request_status_transition(
     Ok(())
 }
 
-async fn build_list_view(db: &sqlx::PgPool, req: &Request) -> RequestListView {
+async fn build_list_view(db: &sqlx::PgPool, req: &Request) -> Result<RequestListView, StatusCode> {
     let requirement_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM request_requirements WHERE request_id = $1")
             .bind(req.id)
             .fetch_one(db)
             .await
-            .unwrap_or(0);
+            .map_err(|e| {
+                tracing::error!("Failed to count requirements: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
-    RequestListView {
+    Ok(RequestListView {
         id: req.id,
         title: req.title.clone(),
         status: req.status,
@@ -145,7 +148,7 @@ async fn build_list_view(db: &sqlx::PgPool, req: &Request) -> RequestListView {
         requirement_count,
         created_at: req.created_at,
         updated_at: req.updated_at,
-    }
+    })
 }
 
 // --- Handlers ---
@@ -185,7 +188,7 @@ pub async fn list_requests(
 
     let mut views = Vec::new();
     for r in &reqs {
-        views.push(build_list_view(&state.db, r).await);
+        views.push(build_list_view(&state.db, r).await?);
     }
     Ok(Json(views))
 }
@@ -220,7 +223,10 @@ pub async fn get_request(
     .bind(req.id)
     .fetch_all(&state.db)
     .await
-    .unwrap_or_default();
+    .map_err(|e| {
+        tracing::error!("Failed to get linked requirements: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (requirement_satisfied_count, requirement_total_count): (i64, i64) = sqlx::query_as(
         "SELECT \
@@ -233,7 +239,10 @@ pub async fn get_request(
     .bind(req.id)
     .fetch_one(&state.db)
     .await
-    .unwrap_or((0, 0));
+    .map_err(|e| {
+        tracing::error!("Failed to get requirement counts: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(RequestDetailView {
         id: req.id,
@@ -407,7 +416,10 @@ pub async fn update_request(
     .bind(req.id)
     .fetch_all(&state.db)
     .await
-    .unwrap_or_default();
+    .map_err(|e| {
+        tracing::error!("Failed to get linked requirements: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (requirement_satisfied_count, requirement_total_count): (i64, i64) = sqlx::query_as(
         "SELECT \
@@ -420,7 +432,10 @@ pub async fn update_request(
     .bind(req.id)
     .fetch_one(&state.db)
     .await
-    .unwrap_or((0, 0));
+    .map_err(|e| {
+        tracing::error!("Failed to get requirement counts: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(RequestDetailView {
         id: req.id,
