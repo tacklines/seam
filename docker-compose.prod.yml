@@ -43,6 +43,8 @@ services:
       postgres:
         condition: service_healthy
     command: start-from-init --masterkeyFromEnv --tlsMode disabled
+    ports:
+      - "127.0.0.1:8080:8080"
     environment:
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY}
       ZITADEL_DATABASE_POSTGRES_HOST: postgres
@@ -70,6 +72,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:3002:3002"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/seam
       AMQP_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
