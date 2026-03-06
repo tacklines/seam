@@ -323,8 +323,11 @@ FORWARDER
       echo "Tackline installed: $(ls ~/.claude/skills/ 2>/dev/null | wc -l) skills"
     fi
 
-    # --- Phase 6: Launch agent ---
-    if [ -n "${data.coder_parameter.agent_code.value}" ] && [ -n "${data.coder_parameter.seam_url.value}" ]; then
+    # --- Phase 6: Configure MCP (no agent launch) ---
+    # Workspace is an execution environment for ephemeral invocations.
+    # Agent processes are dispatched via `coder ssh` from the Seam server,
+    # not launched from the startup script.
+    if [ -n "${data.coder_parameter.seam_url.value}" ] && [ -n "${data.coder_parameter.seam_token.value}" ]; then
       echo "Configuring Seam MCP connection..."
 
       mkdir -p /workspace/.claude
@@ -340,41 +343,14 @@ FORWARDER
         '}' > /workspace/.claude/settings.local.json
 
       echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
-      echo "Agent type: ${data.coder_parameter.agent_type.value}"
-
-      # Restore original stdout/stderr — agent output goes directly to the log file
-      # which the single forwarder is already tailing.
-      if [ -n "$FORWARDER_PID" ]; then
-        sleep 1
-        exec 1>&3 2>&4 3>&- 4>&-
-      fi
-
-      # Launch Claude Code agent — output goes to the same log file the forwarder tails
-      echo "Launching agent..."
-      cd /workspace
-      claude --dangerously-skip-permissions --verbose \
-        "/agent ${data.coder_parameter.agent_code.value}" \
-        >> "$AGENT_LOG" 2>&1 &
-      AGENT_PID=$!
-      echo "Agent PID: $AGENT_PID"
-
-      echo "Workspace ready. Waiting for agent to finish..."
-
-      # Keep the startup script alive so background processes (forwarder) aren't orphaned.
-      # When claude exits, clean up the forwarder and exit.
-      wait $AGENT_PID 2>/dev/null || true
-      AGENT_EXIT=$?
-      echo "Agent exited with code: $AGENT_EXIT" >> "$AGENT_LOG"
-
-      # Give forwarder time to flush remaining lines, then stop it
-      sleep 3
-      if [ -n "$FORWARDER_PID" ]; then
-        kill "$FORWARDER_PID" 2>/dev/null || true
-        wait "$FORWARDER_PID" 2>/dev/null || true
-      fi
     fi
 
-    echo "Workspace done."
+    # Restore original stdout/stderr if tee was set up
+    if [ -n "$FORWARDER_PID" ]; then
+      exec 1>&3 2>&4 3>&- 4>&-
+    fi
+
+    echo "Workspace ready for invocations."
   EOT
 
   env = {
