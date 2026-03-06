@@ -4,7 +4,10 @@ use tracing::{info, warn, error};
 use uuid::Uuid;
 use serde::Deserialize;
 
-/// Shared config for launch_agent action
+/// Config for launch_agent action (DEPRECATED — use invoke_agent instead).
+/// launch_agent creates 1:1 workspace-participant links and assumes long-lived
+/// interactive sessions. invoke_agent uses ephemeral invocations with --resume
+/// for session continuity.
 #[derive(Debug, Deserialize)]
 pub struct LaunchAgentConfig {
     /// Session code to launch the agent into (required for reactions, optional for scheduled)
@@ -83,11 +86,18 @@ pub async fn dispatch(
     }
 }
 
+/// DEPRECATED: Use dispatch_invoke_agent instead. This function creates
+/// long-lived interactive sessions which conflict with the ephemeral invocation model.
 async fn dispatch_launch_agent(
     pool: &PgPool,
     action_config: &serde_json::Value,
     ctx: &ActionContext,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    warn!(
+        source = %ctx.source,
+        project_id = %ctx.project_id,
+        "launch_agent action is deprecated — migrate to invoke_agent for ephemeral invocations"
+    );
     let config: LaunchAgentConfig = serde_json::from_value(action_config.clone())?;
 
     // Find a session to launch into
