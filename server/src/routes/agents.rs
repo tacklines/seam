@@ -202,6 +202,8 @@ pub async fn launch_agent(
 
     // Spawn async provisioning
     let ws_id = workspace.id;
+    let user_id = user.id;
+    let org_id = project.org_id;
     let db = state.db.clone();
     let coder_url = std::env::var("CODER_URL").unwrap_or_default();
     let coder_token = std::env::var("CODER_TOKEN").unwrap_or_default();
@@ -222,6 +224,8 @@ pub async fn launch_agent(
             &agent_type,
             req.instructions.as_deref(),
             &seam_token,
+            org_id,
+            user_id,
         )
         .await;
     });
@@ -250,6 +254,8 @@ async fn provision_agent_workspace(
     agent_type: &str,
     instructions: Option<&str>,
     seam_token: &str,
+    org_id: Uuid,
+    user_id: Uuid,
 ) {
     // Mark as creating
     let _ = sqlx::query(
@@ -314,6 +320,25 @@ async fn provision_agent_workspace(
             name: "instructions".to_string(),
             value: instr.to_string(),
         });
+    }
+
+    // Inject merged org + user credentials
+    match crate::credentials::credentials_for_workspace(db, org_id, user_id).await {
+        Ok(creds) if !creds.is_empty() => {
+            let creds_map: serde_json::Map<String, serde_json::Value> = creds
+                .into_iter()
+                .map(|(k, v)| (k, serde_json::Value::String(v)))
+                .collect();
+            params.push(coder::RichParameterValue {
+                name: "credentials_json".to_string(),
+                value: serde_json::Value::Object(creds_map).to_string(),
+            });
+            tracing::info!(workspace_id = %workspace_id, "Injected credentials into agent workspace");
+        }
+        Ok(_) => {} // no credentials
+        Err(e) => {
+            tracing::warn!(workspace_id = %workspace_id, "Failed to decrypt credentials (continuing without): {e}");
+        }
     }
 
     let req = coder::CreateWorkspaceRequest {
