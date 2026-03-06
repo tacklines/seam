@@ -281,11 +281,11 @@ FORWARDER
       echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
       echo "Agent type: ${data.coder_parameter.agent_type.value}"
 
-      # Launch Claude Code with the /seam skill
+      # Launch Claude Code agent
       echo "Launching agent..."
       cd /workspace
-      claude --dangerously-skip-permissions \
-        "/seam ${data.coder_parameter.agent_code.value}" \
+      claude --dangerously-skip-permissions --verbose \
+        "/agent ${data.coder_parameter.agent_code.value}" \
         > /tmp/claude-agent.log 2>&1 &
       AGENT_PID=$!
       echo "Agent PID: $AGENT_PID"
