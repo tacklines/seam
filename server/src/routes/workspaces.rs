@@ -129,6 +129,7 @@ pub async fn create_workspace(
 
     // Spawn async task to create the Coder workspace
     let ws_id = workspace.id;
+    let user_id = user.id;
     let db = state.db.clone();
     let coder_url = std::env::var("CODER_URL").unwrap_or_default();
     let coder_token = std::env::var("CODER_TOKEN").unwrap_or_default();
@@ -136,7 +137,7 @@ pub async fn create_workspace(
 
     tokio::spawn(async move {
         let client = coder::CoderClient::new(coder_url, coder_token);
-        provision_workspace(&db, &client, ws_id, &template_name, branch.as_deref()).await;
+        provision_workspace(&db, &client, ws_id, &template_name, branch.as_deref(), user_id).await;
     });
 
     Ok((StatusCode::CREATED, Json(workspace_view(&workspace))))
@@ -163,6 +164,7 @@ async fn provision_workspace(
     workspace_id: Uuid,
     template_name: &str,
     branch: Option<&str>,
+    user_id: Uuid,
 ) {
     // Mark as creating
     let _ = sqlx::query(
@@ -232,9 +234,9 @@ async fn provision_workspace(
         });
     }
 
-    // Inject org credentials as JSON
+    // Inject merged org + user credentials as JSON
     if let Some(org_id) = org_id_for_workspace(db, workspace_id).await {
-        match crate::credentials::decrypt_org_credentials(db, org_id).await {
+        match crate::credentials::credentials_for_workspace(db, org_id, user_id).await {
             Ok(creds) if !creds.is_empty() => {
                 let creds_map: serde_json::Map<String, serde_json::Value> = creds
                     .into_iter()
@@ -244,11 +246,11 @@ async fn provision_workspace(
                     name: "credentials_json".to_string(),
                     value: serde_json::Value::Object(creds_map).to_string(),
                 });
-                tracing::info!(workspace_id = %workspace_id, "Injected org credentials into workspace");
+                tracing::info!(workspace_id = %workspace_id, "Injected credentials into workspace");
             }
             Ok(_) => {} // no credentials
             Err(e) => {
-                tracing::warn!(workspace_id = %workspace_id, "Failed to decrypt org credentials (continuing without): {e}");
+                tracing::warn!(workspace_id = %workspace_id, "Failed to decrypt credentials (continuing without): {e}");
             }
         }
     }

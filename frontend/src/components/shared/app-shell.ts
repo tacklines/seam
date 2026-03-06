@@ -614,10 +614,22 @@ export class AppShell extends LitElement {
                 </sl-button>
               </sl-tooltip>
             ` : nothing}
-            <span class="user-name">${this._authState.user?.name}</span>
-            <sl-button size="small" variant="text" @click=${() => authStore.logout()}>
-              Sign out
-            </sl-button>
+            <sl-dropdown>
+              <sl-button slot="trigger" size="small" variant="text" caret>
+                ${this._authState.user?.name}
+              </sl-button>
+              <sl-menu>
+                <sl-menu-item @click=${() => navigateTo('/settings')}>
+                  <sl-icon slot="prefix" name="gear"></sl-icon>
+                  Settings
+                </sl-menu-item>
+                <sl-divider></sl-divider>
+                <sl-menu-item @click=${() => authStore.logout()}>
+                  <sl-icon slot="prefix" name="box-arrow-right"></sl-icon>
+                  Sign out
+                </sl-menu-item>
+              </sl-menu>
+            </sl-dropdown>
           </div>
         </header>
 

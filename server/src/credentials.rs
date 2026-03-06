@@ -138,6 +138,135 @@ pub async fn decrypt_org_credentials(
     Ok(env_vars)
 }
 
+// --- User-level credential functions ---
+
+/// Ensure a user has a DEK, creating one if needed. Returns the decrypted DEK.
+async fn ensure_user_dek(pool: &PgPool, user_id: Uuid) -> Result<fernet::Fernet, CredentialError> {
+    let master = master_fernet()?;
+
+    let existing: Option<(Vec<u8>,)> = sqlx::query_as(
+        "SELECT encrypted_dek FROM user_credential_keys WHERE user_id = $1"
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some((encrypted_dek,)) = existing {
+        let dek_str = String::from_utf8(encrypted_dek)
+            .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
+        let dek_key = master.decrypt(&dek_str)
+            .map_err(|e| CredentialError::DecryptionFailed(format!("{e:?}")))?;
+        let dek_key_str = String::from_utf8(dek_key)
+            .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
+        return fernet::Fernet::new(&dek_key_str)
+            .ok_or_else(|| CredentialError::DecryptionFailed("invalid DEK".into()));
+    }
+
+    let dek_key = fernet::Fernet::generate_key();
+    let encrypted_dek = master.encrypt(dek_key.as_bytes());
+
+    sqlx::query(
+        "INSERT INTO user_credential_keys (user_id, encrypted_dek, created_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id) DO NOTHING"
+    )
+    .bind(user_id)
+    .bind(encrypted_dek.as_bytes())
+    .execute(pool)
+    .await?;
+
+    fernet::Fernet::new(&dek_key)
+        .ok_or_else(|| CredentialError::EncryptionFailed("generated invalid DEK".into()))
+}
+
+/// Encrypt a credential value for a user
+pub async fn encrypt_user_credential(
+    pool: &PgPool,
+    user_id: Uuid,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, CredentialError> {
+    let dek = ensure_user_dek(pool, user_id).await?;
+    let ciphertext = dek.encrypt(plaintext);
+    Ok(ciphertext.into_bytes())
+}
+
+/// Decrypt a credential value for a user
+pub async fn decrypt_user_credential(
+    pool: &PgPool,
+    user_id: Uuid,
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, CredentialError> {
+    let dek = ensure_user_dek(pool, user_id).await?;
+    let ct_str = String::from_utf8(ciphertext.to_vec())
+        .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
+    dek.decrypt(&ct_str)
+        .map_err(|e| CredentialError::DecryptionFailed(format!("{e:?}")))
+}
+
+/// Decrypt all credentials for a user and return as env var name -> value pairs.
+pub async fn decrypt_user_credentials(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Vec<(String, String)>, CredentialError> {
+    let rows: Vec<(String, Vec<u8>, Option<String>)> = sqlx::query_as(
+        "SELECT credential_type, encrypted_value, env_var_name
+         FROM user_credentials
+         WHERE user_id = $1
+         AND (expires_at IS NULL OR expires_at > NOW())"
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut env_vars = Vec::new();
+    for (cred_type, encrypted_value, custom_env) in rows {
+        if let Some(env_name) = credential_env_var(&cred_type, custom_env.as_deref()) {
+            let plaintext = decrypt_user_credential(pool, user_id, &encrypted_value).await?;
+            let value = String::from_utf8(plaintext)
+                .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
+            env_vars.push((env_name, value));
+        }
+    }
+
+    Ok(env_vars)
+}
+
+/// Merge org + user credentials for workspace launch.
+/// User credentials override org credentials for the same env var name.
+pub async fn credentials_for_workspace(
+    pool: &PgPool,
+    org_id: Uuid,
+    user_id: Uuid,
+) -> Result<Vec<(String, String)>, CredentialError> {
+    let mut env_map = std::collections::HashMap::new();
+
+    // Start with org credentials (lower priority)
+    match decrypt_org_credentials(pool, org_id).await {
+        Ok(creds) => {
+            for (k, v) in creds {
+                env_map.insert(k, v);
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to decrypt org credentials: {e}");
+        }
+    }
+
+    // Override with user credentials (higher priority)
+    match decrypt_user_credentials(pool, user_id).await {
+        Ok(creds) => {
+            for (k, v) in creds {
+                env_map.insert(k, v);
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to decrypt user credentials: {e}");
+        }
+    }
+
+    Ok(env_map.into_iter().collect())
+}
+
 /// Check if the credential master key is configured
 pub fn is_configured() -> bool {
     std::env::var("CREDENTIAL_MASTER_KEY").is_ok()

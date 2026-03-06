@@ -240,6 +240,14 @@ FORWARDER
       npm install -g @anthropic-ai/claude-code
     fi
 
+    # Inject credentials as environment variables (before agent launch)
+    CREDS_JSON='${data.coder_parameter.credentials_json.value}'
+    if [ "$CREDS_JSON" != "{}" ] && [ -n "$CREDS_JSON" ]; then
+      echo "Injecting credentials..."
+      eval "$(echo "$CREDS_JSON" | jq -r 'to_entries[] | "export \(.key)=\(.value | @sh)"')"
+      echo "Injected $(echo "$CREDS_JSON" | jq 'length') credential(s)"
+    fi
+
     # Configure Seam MCP tools if agent_code is provided
     if [ -n "${data.coder_parameter.agent_code.value}" ] && [ -n "${data.coder_parameter.seam_url.value}" ]; then
       echo "Configuring Seam MCP connection..."
@@ -279,15 +287,6 @@ FORWARDER
           "${data.coder_parameter.seam_token.value}" &
         echo "Log forwarder PID: $!"
       fi
-    fi
-
-    # Inject org credentials as environment variables
-    CREDS_JSON='${data.coder_parameter.credentials_json.value}'
-    if [ "$CREDS_JSON" != "{}" ] && [ -n "$CREDS_JSON" ]; then
-      echo "Injecting org credentials..."
-      echo "$CREDS_JSON" | jq -r 'to_entries[] | "export \(.key)=\(.value | @sh)"' >> /etc/profile.d/seam-creds.sh
-      source /etc/profile.d/seam-creds.sh
-      echo "Injected $(echo "$CREDS_JSON" | jq 'length') credential(s)"
     fi
 
     echo "Workspace ready."

@@ -169,6 +169,54 @@ export async function deleteCredential(slug: string, credentialId: string): Prom
   }
 }
 
+// --- User Credentials ---
+
+export interface UserCredentialView {
+  id: string;
+  name: string;
+  credential_type: string;
+  env_var_name: string | null;
+  created_at: string;
+  rotated_at: string | null;
+  expires_at: string | null;
+}
+
+export async function fetchUserCredentials(): Promise<UserCredentialView[]> {
+  const res = await fetch(`${API_BASE}/api/me/credentials`, { headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function createUserCredential(
+  data: { name: string; credential_type: string; value: string; env_var_name?: string; expires_at?: string },
+): Promise<UserCredentialView> {
+  const res = await fetch(`${API_BASE}/api/me/credentials`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function rotateUserCredential(credentialId: string, value: string, expiresAt?: string): Promise<UserCredentialView> {
+  const res = await fetch(`${API_BASE}/api/me/credentials/${credentialId}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify({ value, expires_at: expiresAt }),
+  });
+  return handleResponse(res);
+}
+
+export async function deleteUserCredential(credentialId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/me/credentials/${credentialId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+}
+
 // --- Org state (simple reactive store) ---
 
 let _currentOrg: OrgView | null = null;

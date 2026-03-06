@@ -52,6 +52,12 @@ export function initRouter(outlet: HTMLElement): Router {
         }
       },
     },
+    // User settings
+    {
+      path: '/settings',
+      component: 'user-settings',
+      action: async () => { await import('./components/user/user-settings.js'); },
+    },
     // Org routes
     {
       path: '/orgs',

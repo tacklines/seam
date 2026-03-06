@@ -106,6 +106,9 @@ async fn main() {
         // Org Credentials
         .route("/api/orgs/{slug}/credentials", get(routes::credentials::list_credentials).post(routes::credentials::create_credential))
         .route("/api/orgs/{slug}/credentials/{credential_id}", patch(routes::credentials::rotate_credential).delete(routes::credentials::delete_credential))
+        // User Credentials
+        .route("/api/me/credentials", get(routes::user_credentials::list_user_credentials).post(routes::user_credentials::create_user_credential))
+        .route("/api/me/credentials/{credential_id}", patch(routes::user_credentials::rotate_user_credential).delete(routes::user_credentials::delete_user_credential))
         // Projects
         .route("/api/projects", get(routes::projects::list_projects))
         .route("/api/projects", post(routes::projects::create_project))
