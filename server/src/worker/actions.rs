@@ -19,6 +19,21 @@ pub struct LaunchAgentConfig {
     pub instructions: Option<String>,
 }
 
+/// Config for invoke_agent action (ephemeral invocation)
+#[derive(Debug, Deserialize)]
+pub struct InvokeAgentConfig {
+    /// Agent perspective: "coder", "reviewer", "planner"
+    pub agent_perspective: Option<String>,
+    /// Prompt template (supports {{key}} interpolation from event payload)
+    pub prompt: String,
+    /// Optional system prompt append
+    pub system_prompt_append: Option<String>,
+    /// Optional branch to work on
+    pub branch: Option<String>,
+    /// Optional task ID to associate with
+    pub task_id: Option<String>,
+}
+
 /// Shared config for webhook action
 #[derive(Debug, Deserialize)]
 pub struct WebhookConfig {
@@ -58,6 +73,7 @@ pub async fn dispatch(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match action_type {
         "launch_agent" => dispatch_launch_agent(pool, action_config, ctx).await,
+        "invoke_agent" => dispatch_invoke_agent(action_config, ctx).await,
         "webhook" => dispatch_webhook(action_config, ctx).await,
         "mcp_tool" => dispatch_mcp_tool(action_config, ctx).await,
         other => {
@@ -188,6 +204,74 @@ fn interpolate_template(template: &str, payload: Option<&serde_json::Value>) -> 
         }
     }
     result
+}
+
+async fn dispatch_invoke_agent(
+    action_config: &serde_json::Value,
+    ctx: &ActionContext,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config: InvokeAgentConfig = serde_json::from_value(action_config.clone())?;
+
+    let perspective = config.agent_perspective.unwrap_or_else(|| "coder".to_string());
+    let prompt = interpolate_template(&config.prompt, ctx.event_payload.as_ref());
+    let system_prompt_append = config
+        .system_prompt_append
+        .as_deref()
+        .map(|s| interpolate_template(s, ctx.event_payload.as_ref()));
+
+    let seam_url = std::env::var("SEAM_URL")
+        .unwrap_or_else(|_| "http://localhost:3002".to_string());
+    let api_token = std::env::var("WORKER_API_TOKEN").ok();
+
+    let mut body = serde_json::json!({
+        "agent_perspective": perspective,
+        "prompt": prompt,
+        "triggered_by": "reaction",
+    });
+    if let Some(spa) = &system_prompt_append {
+        body["system_prompt_append"] = serde_json::Value::String(spa.clone());
+    }
+    if let Some(branch) = &config.branch {
+        body["branch"] = serde_json::Value::String(branch.clone());
+    }
+    if let Some(task_id) = &config.task_id {
+        let rendered = interpolate_template(task_id, ctx.event_payload.as_ref());
+        body["task_id"] = serde_json::Value::String(rendered);
+    }
+
+    let client = Client::new();
+    let mut req = client
+        .post(format!("{}/api/projects/{}/invocations", seam_url, ctx.project_id))
+        .json(&body);
+
+    if let Some(token) = &api_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+
+    let resp = req.send().await?;
+
+    if resp.status().is_success() {
+        let result: serde_json::Value = resp.json().await?;
+        info!(
+            project_id = %ctx.project_id,
+            perspective = %perspective,
+            invocation_id = %result["id"],
+            source = %ctx.source,
+            "Created invocation via reaction"
+        );
+    } else {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        error!(
+            status = %status,
+            body = %body,
+            source = %ctx.source,
+            "Failed to create invocation"
+        );
+        return Err(format!("Invocation creation failed: {} {}", status, body).into());
+    }
+
+    Ok(())
 }
 
 async fn dispatch_webhook(
