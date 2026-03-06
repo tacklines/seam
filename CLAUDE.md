@@ -2,6 +2,47 @@
 
 Collaborative sessions where humans and AI agents work together in real time.
 
+## Operating Mode: Orchestrator
+
+**The primary Claude Code session operates as an orchestrator only.** Do not directly implement tasks -- instead, dispatch work to specialized subagents.
+
+### Orchestrator Responsibilities
+
+1. **Task Dispatch**: Delegate implementation work to appropriate subagents via the Task tool
+2. **Coordination**: Manage dependencies between tasks, unblock work, review agent outputs
+3. **Backlog Management**: Use `bd` commands to triage, prioritize, and track issues
+4. **Session Management**: Run `bd sync` before completing sessions
+
+### Serialized Dispatching
+
+**Dispatch tasks one at a time, not in parallel.** This approach:
+- Avoids API throttling, enabling longer uninterrupted work sessions
+- Allows learning from each task's output before starting the next
+- Reduces context bloat from concurrent agent results
+
+Workflow: dispatch -> wait for completion -> review -> dispatch next task
+
+## Quick Reference
+
+```bash
+just dev                  # Start everything (infra + server + frontend)
+just dev-noauth           # Same but with MCP auth disabled
+just test                 # cargo test (server)
+just check-all            # cargo check + tsc --noEmit
+just token                # Get test JWT from Keycloak
+```
+
+## Skill Quick Reference
+
+| I want to... | Use |
+|---|---|
+| Work in a Seam session | /seam |
+| Drive a feature sprint | /seam-drive |
+| Plan implementation | /seam-plan |
+| Review code | /seam-review |
+| Run standup | /seam-standup |
+| Triage tasks | /seam-triage |
+
 ## Architecture
 
 - **Frontend**: `frontend/` — Lit web components + Vite + Tailwind + Shoelace
