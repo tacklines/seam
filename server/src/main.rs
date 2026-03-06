@@ -174,6 +174,11 @@ async fn main() {
         // Project agents
         .route("/api/projects/{project_id}/agents", get(routes::agents::list_project_agents))
         .route("/api/projects/{project_id}/agents/{agent_id}", get(routes::agents::get_project_agent))
+        // Automations
+        .route("/api/projects/{project_id}/reactions", get(routes::automations::list_reactions).post(routes::automations::create_reaction))
+        .route("/api/projects/{project_id}/reactions/{reaction_id}", patch(routes::automations::update_reaction).delete(routes::automations::delete_reaction))
+        .route("/api/projects/{project_id}/scheduled-jobs", get(routes::automations::list_scheduled_jobs).post(routes::automations::create_scheduled_job))
+        .route("/api/projects/{project_id}/scheduled-jobs/{job_id}", patch(routes::automations::update_scheduled_job).delete(routes::automations::delete_scheduled_job))
         // WebSocket
         .route("/ws", get(ws::handler::ws_upgrade))
         // OAuth discovery for MCP clients
