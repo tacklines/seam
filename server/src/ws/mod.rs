@@ -125,6 +125,12 @@ impl ConnectionManager {
         }
     }
 
+    /// Track an MCP agent as online (no-op stub; presence managed via NOTIFY).
+    pub fn set_mcp_agent_online(&self, _session_code: &str, _participant_id: &str) {}
+
+    /// Track an MCP agent as offline (no-op stub; presence managed via NOTIFY).
+    pub fn set_mcp_agent_offline(&self, _session_code: &str, _participant_id: &str) {}
+
     pub async fn send_to_participant(&self, session_code: &str, participant_id: &str, msg: &serde_json::Value) {
         let text = serde_json::to_string(msg).unwrap_or_default();
         if let Some(conns) = self.sessions.get(session_code) {

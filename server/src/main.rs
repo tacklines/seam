@@ -4,6 +4,7 @@ mod coder;
 mod credentials;
 mod db;
 mod events;
+mod indexer;
 pub mod knowledge;
 mod mcp_auth;
 mod mcp_handler;
@@ -83,6 +84,9 @@ async fn main() {
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
+
+    // Start the knowledge indexing consumer (background task)
+    let _indexer_handle = indexer::start_indexer(state.db.clone()).await;
 
     // Spawn PG LISTEN task for real-time notifications from DB triggers
     {
