@@ -1887,6 +1887,11 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<AddDependencyParams>,
     ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let blocker_id = match Uuid::parse_str(&params.blocker_id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocker_id")])),
@@ -1898,6 +1903,21 @@ impl SeamMcp {
 
         if blocker_id == blocked_id {
             return Ok(CallToolResult::error(vec![Content::text("A task cannot block itself")]));
+        }
+
+        // Verify both tasks belong to this project
+        let task_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM tasks WHERE id IN ($1, $2) AND project_id = $3"
+        )
+        .bind(blocker_id)
+        .bind(blocked_id)
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .unwrap_or(0);
+
+        if task_count != 2 {
+            return Ok(CallToolResult::error(vec![Content::text("One or both tasks not found in this project")]));
         }
 
         // Check for circular dependency: walk upstream from the proposed blocker
@@ -1956,6 +1976,11 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<RemoveDependencyParams>,
     ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let blocker_id = match Uuid::parse_str(&params.blocker_id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocker_id")])),
@@ -1965,9 +1990,15 @@ impl SeamMcp {
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocked_id")])),
         };
 
-        match sqlx::query("DELETE FROM task_dependencies WHERE blocker_id = $1 AND blocked_id = $2")
+        // Only delete if both tasks belong to this project
+        match sqlx::query(
+            "DELETE FROM task_dependencies WHERE blocker_id = $1 AND blocked_id = $2
+             AND EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND project_id = $3)
+             AND EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND project_id = $3)"
+        )
             .bind(blocker_id)
             .bind(blocked_id)
+            .bind(project_id)
             .execute(&self.db)
             .await
         {
@@ -2341,6 +2372,11 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<LinkRequirementTaskParams>,
     ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let req_id = match Uuid::parse_str(&params.requirement_id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement_id")])),
@@ -2349,6 +2385,19 @@ impl SeamMcp {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task_id")])),
         };
+
+        // Verify both entities belong to this project
+        let req_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1 AND project_id = $2)"
+        ).bind(req_id).bind(project_id).fetch_one(&self.db).await.unwrap_or(false);
+
+        let task_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1 AND project_id = $2)"
+        ).bind(task_id).bind(project_id).fetch_one(&self.db).await.unwrap_or(false);
+
+        if !req_exists || !task_exists {
+            return Ok(CallToolResult::error(vec![Content::text("Requirement or task not found in this project")]));
+        }
 
         match sqlx::query(
             "INSERT INTO requirement_tasks (requirement_id, task_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
@@ -2368,6 +2417,11 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<UnlinkRequirementTaskParams>,
     ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let req_id = match Uuid::parse_str(&params.requirement_id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement_id")])),
@@ -2377,11 +2431,15 @@ impl SeamMcp {
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task_id")])),
         };
 
+        // Only delete if both entities belong to this project
         match sqlx::query(
-            "DELETE FROM requirement_tasks WHERE requirement_id = $1 AND task_id = $2"
+            "DELETE FROM requirement_tasks WHERE requirement_id = $1 AND task_id = $2
+             AND EXISTS (SELECT 1 FROM requirements WHERE id = $1 AND project_id = $3)
+             AND EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND project_id = $3)"
         )
         .bind(req_id)
         .bind(task_id)
+        .bind(project_id)
         .execute(&self.db)
         .await
         {
@@ -2729,6 +2787,11 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<LinkRequestRequirementParams>,
     ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let request_id = match Uuid::parse_str(&params.request_id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request_id")])),
@@ -2741,6 +2804,19 @@ impl SeamMcp {
                 )]))
             }
         };
+
+        // Verify both entities belong to this project
+        let req_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM requests WHERE id = $1 AND project_id = $2)"
+        ).bind(request_id).bind(project_id).fetch_one(&self.db).await.unwrap_or(false);
+
+        let requirement_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1 AND project_id = $2)"
+        ).bind(requirement_id).bind(project_id).fetch_one(&self.db).await.unwrap_or(false);
+
+        if !req_exists || !requirement_exists {
+            return Ok(CallToolResult::error(vec![Content::text("Request or requirement not found in this project")]));
+        }
 
         match sqlx::query(
             "INSERT INTO request_requirements (request_id, requirement_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
@@ -2764,6 +2840,11 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<UnlinkRequestRequirementParams>,
     ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let request_id = match Uuid::parse_str(&params.request_id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request_id")])),
@@ -2777,11 +2858,15 @@ impl SeamMcp {
             }
         };
 
+        // Only delete if both entities belong to this project
         match sqlx::query(
-            "DELETE FROM request_requirements WHERE request_id = $1 AND requirement_id = $2",
+            "DELETE FROM request_requirements WHERE request_id = $1 AND requirement_id = $2
+             AND EXISTS (SELECT 1 FROM requests WHERE id = $1 AND project_id = $3)
+             AND EXISTS (SELECT 1 FROM requirements WHERE id = $2 AND project_id = $3)",
         )
         .bind(request_id)
         .bind(requirement_id)
+        .bind(project_id)
         .execute(&self.db)
         .await
         {
