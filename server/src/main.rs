@@ -3,6 +3,7 @@ mod auth;
 mod coder;
 mod credentials;
 mod db;
+mod embeddings;
 mod events;
 mod indexer;
 pub mod knowledge;
@@ -56,6 +57,9 @@ async fn main() {
         .run(&db)
         .await
         .expect("Failed to run migrations");
+
+    // Start the background embedding worker (no-op if OLLAMA_URL is not set)
+    embeddings::start_embedding_worker(db.clone());
 
     let keycloak_url = std::env::var("KEYCLOAK_URL")
         .unwrap_or_else(|_| "http://localhost:8081".to_string());
