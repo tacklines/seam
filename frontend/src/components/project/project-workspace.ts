@@ -43,6 +43,9 @@ import "../agents/agent-list.js";
 import "../agents/agent-detail.js";
 import "../workspaces/workspace-list.js";
 import "../workspaces/workspace-detail.js";
+import "../invocations/invocation-list.js";
+import "../invocations/invocation-detail.js";
+import "../invocations/invoke-dialog.js";
 import "../tasks/task-board.js";
 import "../automations/automation-panel.js";
 // Lazy-loaded when graph tab is shown (Three.js is ~800KB)
@@ -535,6 +538,7 @@ export class ProjectWorkspace extends LitElement {
   @state() private _selectedRequestId: string | null = null;
   @state() private _selectedAgentId: string | null = null;
   @state() private _selectedWorkspaceId = "";
+  @state() private _selectedInvocationId = "";
   @state() private _loading = true;
   @state() private _error = "";
   @state() private _showNewSession = false;
@@ -800,6 +804,9 @@ export class ProjectWorkspace extends LitElement {
                   : nothing}
                 ${this._activeTab === "plans" ? this._renderPlans() : nothing}
                 ${this._activeTab === "agents" ? this._renderAgents() : nothing}
+                ${this._activeTab === "invocations"
+                  ? this._renderInvocationsTab()
+                  : nothing}
                 ${this._activeTab === "workspaces"
                   ? this._renderWorkspacesTab()
                   : nothing}
@@ -1249,6 +1256,7 @@ export class ProjectWorkspace extends LitElement {
         ${tab("requests", t("workspace.tab.requests"), "chat-square-text")}
         ${tab("plans", t("workspace.tab.plans"), "file-earmark-text")}
         ${tab("agents", t("workspace.tab.agents"), "robot")}
+        ${tab("invocations", t("workspace.tab.invocations"), "play-circle")}
         ${tab("workspaces", t("workspace.tab.workspaces"), "terminal")}
         ${tab("graph", t("workspace.tab.graph"), "diagram-3")}
         ${tab(
@@ -1364,6 +1372,38 @@ export class ProjectWorkspace extends LitElement {
               ></agent-list>
             `}
       </div>
+    `;
+  }
+
+  private _renderInvocationsTab() {
+    if (this._selectedInvocationId) {
+      return html`
+        <invocation-detail
+          invocation-id=${this._selectedInvocationId}
+          @back=${() => {
+            this._selectedInvocationId = "";
+          }}
+        ></invocation-detail>
+      `;
+    }
+
+    return html`
+      <invocation-list
+        project-id=${this.projectId}
+        @invocation-select=${(e: CustomEvent) => {
+          this._selectedInvocationId = e.detail.id;
+        }}
+        @invoke-request=${() => {
+          const dialog = this.shadowRoot?.querySelector("invoke-dialog");
+          if (dialog) (dialog as any).show();
+        }}
+      ></invocation-list>
+      <invoke-dialog
+        project-id=${this.projectId}
+        @invocation-created=${(e: CustomEvent) => {
+          this._selectedInvocationId = e.detail.invocation.id;
+        }}
+      ></invoke-dialog>
     `;
   }
 

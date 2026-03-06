@@ -287,6 +287,7 @@ export const messagesEn: Record<string, string> = {
   "workspace.tab.agents": "Agents",
   "workspace.tab.workspaces": "Workspaces",
   "workspace.tab.graph": "Graph",
+  "workspace.tab.invocations": "Invocations",
   "workspace.tab.automations": "Automations",
   "workspace.tab.settings": "Settings",
   "workspace.sessions": "Sessions",
