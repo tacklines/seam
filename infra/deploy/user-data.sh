@@ -38,16 +38,7 @@ mkdir -p /etc/caddy
 # ============================================================
 cat > /etc/caddy/Caddyfile <<CADDYFILE
 seam.${domain_name} {
-	tls {
-		issuer acme {
-			dir https://acme.zerossl.com/v2/DV90
-			email ${acme_email}
-		}
-		issuer acme {
-			dir https://acme-v02.api.letsencrypt.org/directory
-			email ${acme_email}
-		}
-	}
+	tls ${acme_email}
 	encode gzip
 
 	# API, MCP, and WebSocket — proxy to seam-server
@@ -73,16 +64,7 @@ seam.${domain_name} {
 }
 
 auth.seam.${domain_name} {
-	tls {
-		issuer acme {
-			dir https://acme.zerossl.com/v2/DV90
-			email ${acme_email}
-		}
-		issuer acme {
-			dir https://acme-v02.api.letsencrypt.org/directory
-			email ${acme_email}
-		}
-	}
+	tls ${acme_email}
 	reverse_proxy localhost:8080
 }
 CADDYFILE
