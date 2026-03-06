@@ -62,6 +62,9 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
       ZITADEL_DEFAULTINSTANCE_LOGINVERSION: 1
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: "/ui/login/login?authRequest="
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: "/ui/login/logout?post_logout_redirect="
+      ZITADEL_SAML_DEFAULTLOGINURLV2: "/ui/login/login?samlRequest="
     networks:
       - internal
 
