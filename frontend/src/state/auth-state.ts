@@ -149,11 +149,14 @@ class AuthStore {
     try {
       this.state = { ...this.state, isLoading: true };
       this.notify({ type: 'auth-loading' });
-      const user = await this.userManager.signinRedirectCallback();
-      // Replace URL before setUser — setUser triggers router init which reads the current URL
+      // Capture callback URL and replace BEFORE processing — signinRedirectCallback
+      // fires userLoaded event internally, which triggers router init. The router must
+      // not see /auth/callback in the URL or it throws "Page not found".
+      const callbackUrl = window.location.href;
       const returnPath = sessionStorage.getItem('seam_return_path') || '/';
       sessionStorage.removeItem('seam_return_path');
       window.history.replaceState({}, '', returnPath);
+      const user = await this.userManager.signinRedirectCallback(callbackUrl);
       this.setUser(user);
     } catch (err) {
       // Stale OIDC state (e.g. authority changed) — clear and restart
