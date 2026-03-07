@@ -248,17 +248,18 @@ export class AuthRegistrationPage extends LitElement {
         return;
       }
 
-      // Step 2: Submit password using the updated flow action and csrf token
+      // Step 2: Submit password + all hidden fields from the updated flow
       const step2Flow = step1Data as KratosFlow;
-      const step2Csrf = step2Flow.ui.nodes.find(
-        (n) => n.attributes.name === "csrf_token",
-      );
-
-      const step2Body = {
+      const step2Body: Record<string, string> = {
         method: "password",
         password: password,
-        csrf_token: step2Csrf?.attributes.value ?? csrfToken,
       };
+      // Include all hidden fields (csrf_token, traits.email, traits.name, etc.)
+      for (const node of step2Flow.ui.nodes) {
+        if (node.attributes.type === "hidden" && node.attributes.value != null) {
+          step2Body[node.attributes.name] = node.attributes.value;
+        }
+      }
 
       const step2Res = await fetch(step2Flow.ui.action, {
         method: "POST",
