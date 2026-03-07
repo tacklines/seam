@@ -328,6 +328,37 @@ export class InvocationDetail extends LitElement {
               </div>
             `
           : nothing}
+        ${inv.model_used
+          ? html`
+              <div class="meta-item">
+                <span class="meta-label">Model:</span> ${inv.model_used}
+              </div>
+            `
+          : nothing}
+        ${inv.input_tokens !== null || inv.output_tokens !== null
+          ? html`
+              <div class="meta-item">
+                <span class="meta-label">Tokens:</span>
+                ${inv.input_tokens !== null
+                  ? `${inv.input_tokens.toLocaleString()} in`
+                  : ""}
+                ${inv.input_tokens !== null && inv.output_tokens !== null
+                  ? " / "
+                  : ""}
+                ${inv.output_tokens !== null
+                  ? `${inv.output_tokens.toLocaleString()} out`
+                  : ""}
+              </div>
+            `
+          : nothing}
+        ${inv.cost_usd !== null
+          ? html`
+              <div class="meta-item">
+                <span class="meta-label">Cost:</span>
+                $${inv.cost_usd.toFixed(6)}
+              </div>
+            `
+          : nothing}
       </div>
 
       <div class="prompt-section">

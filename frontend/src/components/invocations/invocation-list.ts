@@ -244,6 +244,18 @@ export class InvocationList extends LitElement {
                             </span>
                           `
                         : nothing}
+                      ${inv.cost_usd !== null
+                        ? html`
+                            <span
+                              title="Estimated cost: $${inv.cost_usd.toFixed(6)}"
+                              style="color: var(--text-tertiary, #8b8fa3)"
+                            >
+                              $${inv.cost_usd < 0.01
+                                ? inv.cost_usd.toFixed(6)
+                                : inv.cost_usd.toFixed(4)}
+                            </span>
+                          `
+                        : nothing}
                     </div>
                   </div>
                 `,

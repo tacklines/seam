@@ -517,6 +517,12 @@ pub struct Invocation {
     pub claude_session_id: Option<String>,
     pub resume_session_id: Option<String>,
 
+    // Cost tracking (populated on completion from claude --output-format json)
+    pub model_used: Option<String>,
+    pub input_tokens: Option<i32>,
+    pub output_tokens: Option<i32>,
+    pub cost_usd: Option<f64>,
+
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

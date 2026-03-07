@@ -41,6 +41,23 @@ export interface InvocationView {
   model_hint: string | null;
   budget_tier: string | null;
   provider: string | null;
+  // Cost tracking (populated on completion)
+  model_used: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: number | null;
+}
+
+export interface CostByModel {
+  model: string;
+  cost_usd: number;
+  count: number;
+}
+
+export interface ProjectCostSummary {
+  total_cost_usd: number;
+  invocation_count: number;
+  by_model: CostByModel[];
 }
 
 export interface InvocationDetailView extends InvocationView {
@@ -108,5 +125,15 @@ export async function createInvocation(
     headers: authHeaders(),
     body: JSON.stringify(req),
   });
+  return handleResponse(res);
+}
+
+export async function fetchProjectCostSummary(
+  projectId: string,
+): Promise<ProjectCostSummary> {
+  const res = await fetch(
+    `${API_BASE}/api/projects/${projectId}/cost-summary`,
+    { headers: authHeaders() },
+  );
   return handleResponse(res);
 }

@@ -220,6 +220,7 @@ async fn main() {
         // Invocations (ephemeral claude -p calls)
         .route("/api/projects/{project_id}/invocations", get(routes::invocations::list_invocations).post(routes::invocations::create_invocation))
         .route("/api/invocations/{invocation_id}", get(routes::invocations::get_invocation))
+        .route("/api/projects/{project_id}/cost-summary", get(routes::invocations::get_project_cost_summary))
         // Integrations
         .route("/api/integrations/coder/status", get(routes::integrations::coder_status))
         // Domain Events

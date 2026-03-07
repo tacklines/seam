@@ -66,6 +66,25 @@ pub struct InvocationView {
     pub model_hint: Option<String>,
     pub budget_tier: Option<String>,
     pub provider: Option<String>,
+    // Cost tracking (populated on completion)
+    pub model_used: Option<String>,
+    pub input_tokens: Option<i32>,
+    pub output_tokens: Option<i32>,
+    pub cost_usd: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CostByModel {
+    pub model: String,
+    pub cost_usd: f64,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectCostSummary {
+    pub total_cost_usd: f64,
+    pub invocation_count: i64,
+    pub by_model: Vec<CostByModel>,
 }
 
 #[derive(Debug, Serialize)]
@@ -100,6 +119,10 @@ fn to_view(inv: Invocation) -> InvocationView {
         model_hint: inv.model_hint,
         budget_tier: inv.budget_tier,
         provider: inv.provider,
+        model_used: inv.model_used,
+        input_tokens: inv.input_tokens,
+        output_tokens: inv.output_tokens,
+        cost_usd: inv.cost_usd,
     }
 }
 
@@ -343,5 +366,65 @@ pub async fn get_invocation(
         invocation: to_view(inv),
         result_json,
         output,
+    }))
+}
+
+/// GET /api/projects/:project_id/cost-summary
+pub async fn get_project_cost_summary(
+    State(state): State<Arc<AppState>>,
+    Path(project_id): Path<Uuid>,
+    AuthUser(claims): AuthUser,
+) -> Result<Json<ProjectCostSummary>, StatusCode> {
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    verify_project_member(&state.db, project_id, user.id).await?;
+
+    // Aggregate totals
+    let totals: (Option<f64>, i64) = sqlx::query_as(
+        "SELECT COALESCE(SUM(cost_usd), 0.0), COUNT(*)
+         FROM invocations
+         WHERE project_id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to aggregate invocation costs: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let (total_cost_usd, invocation_count) = totals;
+
+    // Break down by model (only invocations where model_used is set)
+    let by_model_rows: Vec<(String, Option<f64>, i64)> = sqlx::query_as(
+        "SELECT model_used, COALESCE(SUM(cost_usd), 0.0), COUNT(*)
+         FROM invocations
+         WHERE project_id = $1 AND model_used IS NOT NULL
+         GROUP BY model_used
+         ORDER BY SUM(cost_usd) DESC NULLS LAST",
+    )
+    .bind(project_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to aggregate invocation costs by model: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let by_model = by_model_rows
+        .into_iter()
+        .map(|(model, cost, count)| CostByModel {
+            model,
+            cost_usd: cost.unwrap_or(0.0),
+            count,
+        })
+        .collect();
+
+    Ok(Json(ProjectCostSummary {
+        total_cost_usd: total_cost_usd.unwrap_or(0.0),
+        invocation_count,
+        by_model,
     }))
 }

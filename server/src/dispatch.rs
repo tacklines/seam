@@ -748,6 +748,34 @@ pub async fn dispatch_invocation(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    // Extract cost tracking fields from Claude JSON output.
+    // claude --output-format json emits: { model, usage: { input_tokens, output_tokens }, cost_usd }
+    let model_used: Option<String> = result_json
+        .as_ref()
+        .and_then(|v| v.get("model"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let input_tokens: Option<i32> = result_json
+        .as_ref()
+        .and_then(|v| v.get("usage"))
+        .and_then(|u| u.get("input_tokens"))
+        .and_then(|v| v.as_i64())
+        .map(|n| n as i32);
+    let output_tokens: Option<i32> = result_json
+        .as_ref()
+        .and_then(|v| v.get("usage"))
+        .and_then(|u| u.get("output_tokens"))
+        .and_then(|v| v.as_i64())
+        .map(|n| n as i32);
+    // cost_usd may appear at the top level as cost_usd or total_cost
+    let cost_usd: Option<f64> = result_json
+        .as_ref()
+        .and_then(|v| {
+            v.get("cost_usd")
+                .or_else(|| v.get("total_cost"))
+        })
+        .and_then(|v| v.as_f64());
+
     // 10. Update invocation to completed or failed
     let final_status = if exit_status.success() {
         "completed"
@@ -767,6 +795,10 @@ pub async fn dispatch_invocation(
              result_json = $4,
              error_message = $5,
              claude_session_id = $6,
+             model_used = $7,
+             input_tokens = $8,
+             output_tokens = $9,
+             cost_usd = $10,
              completed_at = NOW(),
              updated_at = NOW()
          WHERE id = $1",
@@ -777,6 +809,10 @@ pub async fn dispatch_invocation(
     .bind(&result_json)
     .bind(&error_message)
     .bind(&claude_session_id)
+    .bind(&model_used)
+    .bind(input_tokens)
+    .bind(output_tokens)
+    .bind(cost_usd)
     .execute(db)
     .await?;
 
