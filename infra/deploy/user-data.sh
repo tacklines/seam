@@ -34,47 +34,13 @@ useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /us
 mkdir -p /etc/caddy
 
 # ============================================================
-# 3. Write Caddyfile
+# 3. Caddyfile placeholder (replaced from repo in step 9)
 # ============================================================
-cat > /etc/caddy/Caddyfile <<CADDYFILE
-seam.${domain_name} {
-	tls ${acme_email}
-	encode gzip
-
-	# Kratos browser self-service flows
-	handle /kratos/* {
-		uri strip_prefix /kratos
-		reverse_proxy localhost:4433
-	}
-
-	# API, MCP, and WebSocket — proxy to seam-server
-	handle /api/* {
-		reverse_proxy localhost:3002
-	}
-	handle /mcp {
-		reverse_proxy localhost:3002
-	}
-	handle /ws {
-		reverse_proxy localhost:3002
-	}
-	handle /.well-known/* {
-		reverse_proxy localhost:3002
-	}
-	handle /oauth2/* {
-		reverse_proxy localhost:3002
-	}
-
-	# Frontend — static files with SPA fallback
-	handle {
-		root * /opt/seam/static
-		try_files {path} /index.html
-		file_server
-	}
-}
-
-auth.seam.${domain_name} {
-	tls ${acme_email}
-	reverse_proxy localhost:4444
+# The canonical Caddyfile lives in the repo at infra/caddy/Caddyfile.
+# Write a minimal config so Caddy can start; step 9 overwrites it.
+cat > /etc/caddy/Caddyfile <<'CADDYFILE'
+:80 {
+	respond "Provisioning..." 503
 }
 CADDYFILE
 
@@ -228,6 +194,9 @@ DOCKERCFG
 # ============================================================
 git clone https://github.com/tacklines/seam.git /opt/seam/repo
 cp /opt/seam/.env /opt/seam/repo/.env
+
+# Install canonical Caddyfile from repo and reload
+bash /opt/seam/repo/infra/deploy/update-caddy.sh /opt/seam/repo
 
 # ============================================================
 # 10. Pull images, extract frontend, and start

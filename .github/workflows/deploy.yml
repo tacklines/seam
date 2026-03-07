@@ -107,7 +107,8 @@ jobs:
               'cd /opt/seam/repo && git pull --ff-only',
               'sed -i \"s|^SEAM_IMAGE=.*|SEAM_IMAGE=${ECR_URL}:latest|\" /opt/seam/.env',
               'cp /opt/seam/.env .env',
-              '/usr/local/bin/docker-compose -f docker-compose.prod.yml up -d --no-deps seam-server seam-worker'
+              '/usr/local/bin/docker-compose -f docker-compose.prod.yml up -d --no-deps seam-server seam-worker',
+              'cd /opt/seam/repo && bash infra/deploy/update-caddy.sh'
             ]" \
             --query "Command.CommandId" \
             --output text)

@@ -1,0 +1,39 @@
+seam.tacklines.com {
+	tls ops@tacklines.com
+	encode gzip
+
+	# Kratos browser self-service flows
+	handle /kratos/* {
+		uri strip_prefix /kratos
+		reverse_proxy localhost:4433
+	}
+
+	# API, MCP, and WebSocket — proxy to seam-server
+	handle /api/* {
+		reverse_proxy localhost:3002
+	}
+	handle /mcp {
+		reverse_proxy localhost:3002
+	}
+	handle /ws {
+		reverse_proxy localhost:3002
+	}
+	handle /.well-known/* {
+		reverse_proxy localhost:3002
+	}
+	handle /oauth2/* {
+		reverse_proxy localhost:3002
+	}
+
+	# Frontend — static files with SPA fallback
+	handle {
+		root * /opt/seam/static
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+auth.seam.tacklines.com {
+	tls ops@tacklines.com
+	reverse_proxy localhost:4444
+}
