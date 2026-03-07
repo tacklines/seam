@@ -36,7 +36,7 @@ mod model_discovery;
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub jwks: auth::JwksCache,
-    pub connections: ws::ConnectionManager,
+    pub connections: Arc<ws::ConnectionManager>,
     pub coder: Option<coder::CoderClient>,
     pub issuer_url: String,
     pub log_buffer: log_buffer::LogBuffer,
@@ -116,7 +116,7 @@ async fn main() {
     let state = Arc::new(AppState {
         db,
         jwks: auth::JwksCache::new(&jwks_url),
-        connections: ws::ConnectionManager::new(),
+        connections: Arc::new(ws::ConnectionManager::new()),
         log_buffer: log_buffer::LogBuffer::new(500),
         coder,
         issuer_url: issuer_url.clone(),
@@ -514,11 +514,13 @@ async fn main() {
 
     let mcp_db = state.db.clone();
     let mcp_code_index = code_index.clone();
+    let mcp_connections = state.connections.clone();
     let mcp_service = StreamableHttpService::new(
         move || {
-            Ok(mcp_handler::SeamMcp::with_code_index(
+            Ok(mcp_handler::SeamMcp::with_connections(
                 mcp_db.clone(),
                 mcp_code_index.clone(),
+                mcp_connections.clone(),
             ))
         },
         Arc::new(LocalSessionManager::default()),

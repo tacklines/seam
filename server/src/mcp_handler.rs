@@ -400,19 +400,22 @@ pub struct SeamMcp {
     pub(crate) db: PgPool,
     pub(crate) state: Mutex<SessionState>,
     pub(crate) code_index: Option<std::sync::Arc<crate::code_search::CodeIndex>>,
+    pub(crate) connections: Option<std::sync::Arc<crate::ws::ConnectionManager>>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl SeamMcp {
-    pub fn with_code_index(
+    pub fn with_connections(
         db: PgPool,
         code_index: Option<std::sync::Arc<crate::code_search::CodeIndex>>,
+        connections: std::sync::Arc<crate::ws::ConnectionManager>,
     ) -> Self {
         Self {
             db,
             state: Mutex::new(SessionState::default()),
             code_index,
+            connections: Some(connections),
             tool_router: Self::tool_router(),
         }
     }
@@ -1210,6 +1213,21 @@ impl SeamMcp {
                             serde_json::json!({ "ticket_id": ticket_id, "preview": &params.content[..params.content.len().min(100)] }),
                         ).await;
                     }
+                }
+
+                // Emit comment.added domain event (matching routes/tasks.rs)
+                let comment_event = crate::events::DomainEvent::new(
+                    "comment.added",
+                    "task",
+                    task_id,
+                    Some(participant_id),
+                    serde_json::json!({
+                        "comment_id": comment_id,
+                        "preview": &params.content[..params.content.len().min(100)],
+                    }),
+                );
+                if let Err(e) = crate::events::emit(&self.db, &comment_event).await {
+                    tracing::warn!("Failed to emit domain event: {e}");
                 }
 
                 let comment = serde_json::json!({
@@ -4301,6 +4319,40 @@ impl SeamMcp {
         .execute(&self.db)
         .await
         .map_err(|e| format!("Failed to create participant: {e}"))?;
+
+        // Broadcast participant_joined via WebSocket (matching routes/agent.rs and routes/sessions.rs)
+        if let Some(ref connections) = self.connections {
+            connections
+                .broadcast_to_session(
+                    &session.code,
+                    &serde_json::json!({
+                        "type": "participant_joined",
+                        "participant": {
+                            "id": pid,
+                            "display_name": &name,
+                            "participant_type": "agent",
+                            "sponsor_id": sponsor.id,
+                            "joined_at": Utc::now(),
+                        }
+                    }),
+                )
+                .await;
+        }
+
+        // Emit session.participant_joined domain event (matching routes/sessions.rs)
+        let event = crate::events::DomainEvent::new(
+            "session.participant_joined",
+            "session",
+            session.id,
+            Some(agent_code.user_id),
+            serde_json::json!({
+                "participant_id": pid,
+                "display_name": &name,
+            }),
+        );
+        if let Err(e) = crate::events::emit(&self.db, &event).await {
+            tracing::warn!("Failed to emit domain event: {e}");
+        }
 
         let participants: Vec<Participant> = sqlx::query_as(
             "SELECT * FROM participants WHERE session_id = $1 AND disconnected_at IS NULL ORDER BY joined_at",
