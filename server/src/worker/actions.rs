@@ -3,6 +3,7 @@ use sqlx::PgPool;
 use tracing::{info, warn, error};
 use uuid::Uuid;
 use serde::Deserialize;
+use std::time::Duration;
 
 /// Config for invoke_agent action (ephemeral invocation)
 #[derive(Debug, Deserialize)]
@@ -30,6 +31,40 @@ pub struct WebhookConfig {
     pub include_payload: Option<bool>,
 }
 
+/// Config for lightweight inference action (direct LLM call without a workspace)
+#[derive(Debug, Deserialize)]
+pub struct InferenceConfig {
+    /// System prompt for the model
+    pub system_prompt: String,
+    /// User prompt template (supports {{key}} interpolation from event payload)
+    pub prompt: String,
+    /// Provider: "anthropic", "openrouter", "ollama" (defaults to INFERENCE_DEFAULT_PROVIDER env var or "anthropic")
+    pub provider: Option<String>,
+    /// Model ID (e.g., "claude-haiku-4-5-20251001", "qwen/qwen3.5-coder-32b-instruct")
+    pub model: Option<String>,
+    /// Max tokens for response (default 1024)
+    pub max_tokens: Option<u32>,
+    /// Where to write the result
+    pub result_target: ResultTarget,
+}
+
+/// Where the inference result should be written
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ResultTarget {
+    /// Update a field on the triggering aggregate
+    UpdateField {
+        /// SQL table name (e.g., "tasks", "sessions")
+        table: String,
+        /// Column name to update (e.g., "ai_triage", "summary")
+        column: String,
+        /// Whether to parse response as JSON before storing (default false)
+        parse_json: Option<bool>,
+    },
+    /// Just log the result (for testing/monitoring)
+    LogOnly,
+}
+
 /// Shared config for mcp_tool action
 #[derive(Debug, Deserialize)]
 pub struct McpToolConfig {
@@ -51,7 +86,7 @@ pub struct ActionContext {
 
 /// Dispatch an action by type. Returns Ok(()) on success.
 pub async fn dispatch(
-    _pool: &PgPool,
+    pool: &PgPool,
     action_type: &str,
     action_config: &serde_json::Value,
     ctx: &ActionContext,
@@ -60,6 +95,7 @@ pub async fn dispatch(
         "invoke_agent" => dispatch_invoke_agent(action_config, ctx).await,
         "webhook" => dispatch_webhook(action_config, ctx).await,
         "mcp_tool" => dispatch_mcp_tool(action_config, ctx).await,
+        "inference" => dispatch_inference(pool, action_config, ctx).await,
         other => {
             warn!(action_type = other, source = %ctx.source, "Unknown action type");
             Ok(())
@@ -378,6 +414,243 @@ async fn dispatch_mcp_tool(
     }
 
     Ok(())
+}
+
+async fn dispatch_inference(
+    pool: &PgPool,
+    action_config: &serde_json::Value,
+    ctx: &ActionContext,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config: InferenceConfig = serde_json::from_value(action_config.clone())?;
+
+    let prompt = interpolate_template(&config.prompt, ctx.event_payload.as_ref());
+    let system_prompt = interpolate_template(&config.system_prompt, ctx.event_payload.as_ref());
+
+    // Resolve provider (config > env var > default)
+    let provider = config.provider.unwrap_or_else(|| {
+        std::env::var("INFERENCE_DEFAULT_PROVIDER").unwrap_or_else(|_| "anthropic".to_string())
+    });
+
+    // Resolve model (config > env var > provider-specific default)
+    let model = config.model.unwrap_or_else(|| {
+        std::env::var("INFERENCE_DEFAULT_MODEL").unwrap_or_else(|_| {
+            match provider.as_str() {
+                "openrouter" => "qwen/qwen3.5-coder-32b-instruct".to_string(),
+                "ollama" => "qwen3:8b".to_string(),
+                _ => "claude-haiku-4-5-20251001".to_string(),
+            }
+        })
+    });
+
+    let max_tokens = config.max_tokens.unwrap_or(1024);
+
+    info!(
+        provider = %provider,
+        model = %model,
+        source = %ctx.source,
+        "Dispatching inference action"
+    );
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()?;
+
+    let response_text = match provider.as_str() {
+        "anthropic" => {
+            let api_key = match std::env::var("ANTHROPIC_API_KEY") {
+                Ok(k) => k,
+                Err(_) => {
+                    warn!(source = %ctx.source, "ANTHROPIC_API_KEY not set; skipping inference action");
+                    return Ok(());
+                }
+            };
+
+            let body = serde_json::json!({
+                "model": model,
+                "max_tokens": max_tokens,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": prompt}]
+            });
+
+            let resp = client
+                .post("https://api.anthropic.com/v1/messages")
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Anthropic API error: {} {}", status, body).into());
+            }
+
+            let resp_json: serde_json::Value = resp.json().await?;
+            resp_json
+                .pointer("/content/0/text")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .ok_or_else(|| "Unexpected Anthropic response shape".to_string())?
+        }
+
+        "openrouter" => {
+            let api_key = match std::env::var("OPENROUTER_API_KEY") {
+                Ok(k) => k,
+                Err(_) => {
+                    warn!(source = %ctx.source, "OPENROUTER_API_KEY not set; skipping inference action");
+                    return Ok(());
+                }
+            };
+
+            let body = serde_json::json!({
+                "model": model,
+                "max_tokens": max_tokens,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ]
+            });
+
+            let resp = client
+                .post("https://openrouter.ai/api/v1/chat/completions")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("OpenRouter API error: {} {}", status, body).into());
+            }
+
+            let resp_json: serde_json::Value = resp.json().await?;
+            resp_json
+                .pointer("/choices/0/message/content")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .ok_or_else(|| "Unexpected OpenRouter response shape".to_string())?
+        }
+
+        "ollama" => {
+            let ollama_url = std::env::var("OLLAMA_URL")
+                .unwrap_or_else(|_| "http://localhost:11434".to_string());
+
+            let body = serde_json::json!({
+                "model": model,
+                "stream": false,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ]
+            });
+
+            let resp = client
+                .post(format!("{}/api/chat", ollama_url))
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Ollama API error: {} {}", status, body).into());
+            }
+
+            let resp_json: serde_json::Value = resp.json().await?;
+            resp_json
+                .pointer("/message/content")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .ok_or_else(|| "Unexpected Ollama response shape".to_string())?
+        }
+
+        other => {
+            warn!(provider = %other, source = %ctx.source, "Unknown inference provider; skipping");
+            return Ok(());
+        }
+    };
+
+    info!(
+        provider = %provider,
+        model = %model,
+        source = %ctx.source,
+        response_len = response_text.len(),
+        "Inference action completed"
+    );
+
+    // Apply result target
+    match &config.result_target {
+        ResultTarget::UpdateField { table, column, parse_json } => {
+            // Validate table and column names to prevent SQL injection
+            // (these come from trusted operator config, but guard defensively)
+            let table = sanitize_identifier(table)?;
+            let column = sanitize_identifier(column)?;
+
+            let aggregate_id = ctx.event_payload
+                .as_ref()
+                .and_then(|p| p.get("id"))
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<Uuid>().ok())
+                .ok_or_else(|| "Could not determine aggregate id from event payload".to_string())?;
+
+            if parse_json.unwrap_or(false) {
+                let parsed: serde_json::Value = serde_json::from_str(&response_text)
+                    .map_err(|e| format!("Failed to parse inference response as JSON: {}", e))?;
+                let sql = format!(
+                    "UPDATE {} SET {} = $1, updated_at = NOW() WHERE id = $2",
+                    table, column
+                );
+                sqlx::query(&sql)
+                    .bind(parsed)
+                    .bind(aggregate_id)
+                    .execute(pool)
+                    .await?;
+            } else {
+                let sql = format!(
+                    "UPDATE {} SET {} = $1, updated_at = NOW() WHERE id = $2",
+                    table, column
+                );
+                sqlx::query(&sql)
+                    .bind(&response_text)
+                    .bind(aggregate_id)
+                    .execute(pool)
+                    .await?;
+            }
+
+            info!(
+                table = %table,
+                column = %column,
+                aggregate_id = %aggregate_id,
+                source = %ctx.source,
+                "Inference result written to database"
+            );
+        }
+
+        ResultTarget::LogOnly => {
+            info!(
+                source = %ctx.source,
+                response = %response_text,
+                "Inference result (log-only)"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate a SQL identifier (table or column name) to prevent injection.
+/// Allows only alphanumeric characters and underscores.
+fn sanitize_identifier(name: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    if name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !name.is_empty() {
+        Ok(name.to_string())
+    } else {
+        Err(format!("Invalid SQL identifier: {:?}", name).into())
+    }
 }
 
 #[cfg(test)]

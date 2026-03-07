@@ -84,6 +84,7 @@ pub struct Session {
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
+    pub summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -202,6 +203,8 @@ pub struct Task {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
+    pub ai_triage: Option<serde_json::Value>,
+    pub completion_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -211,6 +214,7 @@ pub struct TaskComment {
     pub author_id: Uuid,
     pub content: String,
     pub created_at: DateTime<Utc>,
+    pub intent: Option<String>,
 }
 
 // --- Activity Events ---
