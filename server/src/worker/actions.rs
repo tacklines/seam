@@ -3,7 +3,11 @@ use sqlx::PgPool;
 use tracing::{info, warn, error};
 use uuid::Uuid;
 use serde::Deserialize;
+use std::sync::LazyLock;
 use std::time::Duration;
+
+static TEMPLATE_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\{\{(\w+(?:\.\w+)*)\}\}").unwrap());
 
 /// Config for invoke_agent action (ephemeral invocation)
 #[derive(Debug, Deserialize)]
@@ -111,9 +115,7 @@ fn interpolate_template(template: &str, payload: Option<&serde_json::Value>) -> 
         return template.to_string();
     };
     let mut result = template.to_string();
-    // Find all {{...}} patterns
-    let re = regex::Regex::new(r"\{\{(\w+(?:\.\w+)*)\}\}").unwrap();
-    for cap in re.captures_iter(template) {
+    for cap in TEMPLATE_RE.captures_iter(template) {
         let full_match = &cap[0];
         let key_path = &cap[1];
         let mut current = payload;

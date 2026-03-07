@@ -194,7 +194,10 @@ fn matches_filter(payload: &serde_json::Value, filter: &serde_json::Value) -> bo
                                 false
                             }
                         }
-                        _ => true, // unknown operators pass (permissive)
+                        unknown => {
+                            tracing::warn!(operator = %unknown, "Unknown filter operator; treating as match");
+                            true
+                        }
                     }
                 })
             }

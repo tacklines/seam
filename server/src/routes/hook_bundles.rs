@@ -85,19 +85,8 @@ static SESSION_AWARENESS: BundleDef = BundleDef {
                 "result_target": {"type": "update_field", "table": "task_comments", "column": "intent"}
             }"#,
         },
-        ReactionDef {
-            name: "AI: Session summary on close",
-            event_type: "session.closed",
-            aggregate_type: "session",
-            action_type: "inference",
-            action_config: r#"{
-                "system_prompt": "You are a meeting notes assistant. Summarize what happened in this session based on the available context. Keep it to 3-5 bullet points.",
-                "prompt": "Session closed. Project: {{project_id}}",
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 512,
-                "result_target": {"type": "update_field", "table": "sessions", "column": "summary"}
-            }"#,
-        },
+        // Note: session.closed hook removed — no session.closed event is emitted yet.
+        // Re-add when session lifecycle events are implemented.
     ],
 };
 
@@ -115,7 +104,7 @@ static REQUEST_PIPELINE: BundleDef = BundleDef {
                 "prompt": "New request: {{title}}\n\n{{body}}",
                 "model": "claude-haiku-4-5-20251001",
                 "max_tokens": 256,
-                "result_target": {"type": "update_field", "table": "requests", "column": "impact_analysis", "parse_json": true}
+                "result_target": {"type": "update_field", "table": "requests", "column": "duplicate_analysis", "parse_json": true}
             }"#,
         },
         ReactionDef {
@@ -134,59 +123,13 @@ static REQUEST_PIPELINE: BundleDef = BundleDef {
     ],
 };
 
+// Note: project_health bundle removed — scheduled inference jobs cannot query the DB,
+// so prompts like "check for stale tasks" produce hallucinated reports. Re-add when
+// inference actions support data injection (e.g., MCP tool calls or SQL query context).
 static PROJECT_HEALTH: BundleDef = BundleDef {
     name: "project_health",
     reactions: &[],
-    scheduled_jobs: &[
-        ScheduledJobDef {
-            name: "AI: Weekly project health report",
-            cron_expr: "0 18 * * FRI",
-            action_type: "inference",
-            action_config: r#"{
-                "system_prompt": "You are a project health analyst. Generate a concise weekly health report covering: task velocity (created vs closed this week), open blockers, stale tasks, and overall project momentum. Format as markdown with sections.",
-                "prompt": "Generate a weekly project health report.",
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 1024,
-                "result_target": {"type": "log_only"}
-            }"#,
-        },
-        ScheduledJobDef {
-            name: "AI: Daily stale task detection",
-            cron_expr: "0 9 * * MON-FRI",
-            action_type: "inference",
-            action_config: r#"{
-                "system_prompt": "You are a project manager assistant. Identify tasks that may be stale: in_progress with no recent updates, blocked tasks with no resolution activity, high-priority tasks not yet started. Return a brief summary.",
-                "prompt": "Check for stale tasks in the project.",
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 512,
-                "result_target": {"type": "log_only"}
-            }"#,
-        },
-        ScheduledJobDef {
-            name: "AI: Weekly requirement coverage analysis",
-            cron_expr: "0 10 * * MON",
-            action_type: "inference",
-            action_config: r#"{
-                "system_prompt": "You are a requirements analyst. Analyze requirement coverage: which active requirements have linked tasks, which have gaps, which are fully covered. Return a brief coverage report.",
-                "prompt": "Analyze requirement coverage for the project.",
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 512,
-                "result_target": {"type": "log_only"}
-            }"#,
-        },
-        ScheduledJobDef {
-            name: "AI: Sprint readiness scoring",
-            cron_expr: "0 10 * * FRI",
-            action_type: "inference",
-            action_config: r#"{
-                "system_prompt": "You are a sprint planning assistant. Score backlog tasks by readiness: do they have clear descriptions, are dependencies met, are estimates provided? Return a brief readiness assessment.",
-                "prompt": "Score backlog task readiness for sprint planning.",
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 512,
-                "result_target": {"type": "log_only"}
-            }"#,
-        },
-    ],
+    scheduled_jobs: &[],
 };
 
 static ALL_BUNDLES: &[&BundleDef] = &[
@@ -222,26 +165,7 @@ pub struct BundleStatus {
     pub missing_items: Vec<String>,
 }
 
-// ---------------------------------------------------------------------------
-// Auth helper (mirrors automations.rs)
-// ---------------------------------------------------------------------------
-
-async fn verify_project_membership(
-    db: &sqlx::PgPool,
-    project_id: Uuid,
-    user_id: Uuid,
-) -> Result<(), StatusCode> {
-    let _member: (Uuid,) = sqlx::query_as(
-        "SELECT project_id FROM project_members WHERE project_id = $1 AND user_id = $2",
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_optional(db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::FORBIDDEN)?;
-    Ok(())
-}
+use super::automations::verify_project_membership;
 
 // ---------------------------------------------------------------------------
 // POST /api/projects/:project_id/hook-bundles/:bundle_name

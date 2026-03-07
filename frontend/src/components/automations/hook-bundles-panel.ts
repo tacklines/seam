@@ -40,7 +40,7 @@ const BUNDLE_META: Record<
   project_health: {
     label: "Project Health",
     description:
-      "Weekly health reports, daily stale task detection, requirement coverage, and sprint readiness scoring.",
+      "Coming soon — scheduled health reports and stale task detection. Requires data-aware inference.",
     icon: "heart-pulse",
   },
 };

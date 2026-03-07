@@ -104,7 +104,7 @@ pub fn compute_next_run(cron_expr: &str) -> Result<DateTime<Utc>, String> {
         .ok_or_else(|| "No upcoming schedule time".to_string())
 }
 
-async fn verify_project_membership(
+pub(crate) async fn verify_project_membership(
     db: &sqlx::PgPool,
     project_id: Uuid,
     user_id: Uuid,
