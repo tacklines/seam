@@ -395,12 +395,7 @@ export class AuthLoginPage extends LitElement {
             `
           : nothing}
 
-        <div class="footer">
-          ${t("auth.login.noAccount")}
-          <a @click=${() => navigateTo("/auth/register")}
-            >${t("auth.login.register")}</a
-          >
-        </div>
+        <div class="footer"></div>
       </div>
     `;
   }

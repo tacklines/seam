@@ -16,9 +16,8 @@ export function initRouter(outlet: HTMLElement): Router {
     },
     {
       path: "/auth/register",
-      component: "auth-registration-page",
-      action: async () => {
-        await import("./components/auth/registration-page.js");
+      action: async (_context, commands) => {
+        return commands.redirect("/auth/login");
       },
     },
     {
