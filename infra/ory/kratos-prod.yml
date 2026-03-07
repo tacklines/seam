@@ -37,14 +37,7 @@ selfservice:
       config:
         issuer: Seam
     webauthn:
-      enabled: true
-      config:
-        rp:
-          display_name: Seam
-          id: seam.tacklines.com
-          origins:
-            - https://seam.tacklines.com
-        passwordless: false
+      enabled: false
     passkey:
       enabled: false
 

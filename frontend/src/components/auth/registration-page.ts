@@ -26,6 +26,7 @@ interface KratosUiNode {
 
 interface KratosFlow {
   id: string;
+  state?: string;
   ui: {
     action: string;
     method: string;
@@ -162,13 +163,27 @@ export class AuthRegistrationPage extends LitElement {
     }
   }
 
+  private _getSubmitMethod(): string {
+    if (!this._flow) return "password";
+    // Find available submit buttons to determine which step we're on
+    const submitNodes = this._flow.ui.nodes.filter(
+      (n) => n.attributes.type === "submit" && n.attributes.name === "method",
+    );
+    // If there's a password submit, use it; otherwise use profile (first step)
+    const hasPassword = submitNodes.some(
+      (n) => n.attributes.value === "password",
+    );
+    return hasPassword ? "password" : "profile";
+  }
+
   private async _handleSubmit(e: Event) {
     e.preventDefault();
     if (!this._flow || this._submitting) return;
 
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
-    const body: Record<string, string> = { method: "password" };
+    const method = this._getSubmitMethod();
+    const body: Record<string, string> = { method };
     for (const [key, value] of formData.entries()) {
       body[key] = value as string;
     }
@@ -193,11 +208,15 @@ export class AuthRegistrationPage extends LitElement {
         // Registration successful — check for pending login challenge
         await this._handlePostRegistration(data.session as KratosSession);
       } else if (data.ui) {
-        // Validation errors — re-render with updated flow
+        // Flow continues (two-step) or validation errors — re-render
         this._flow = data as KratosFlow;
+        this._error = null;
         const msgs = data.ui?.messages;
         if (msgs?.length) {
-          this._error = msgs.map((m: { text: string }) => m.text).join(" ");
+          const errors = msgs.filter((m: { type: string }) => m.type === "error");
+          if (errors.length) {
+            this._error = errors.map((m: { text: string }) => m.text).join(" ");
+          }
         }
       } else {
         this._error = t("auth.register.errorGeneric");
@@ -307,7 +326,10 @@ export class AuthRegistrationPage extends LitElement {
                 <div class="form-fields">
                   ${this._flow.ui.nodes
                     .filter(
-                      (n) => n.group === "default" || n.group === "password",
+                      (n) =>
+                        n.group === "default" ||
+                        n.group === "password" ||
+                        n.group === "profile",
                     )
                     .map((n) => this._renderNode(n))}
                 </div>

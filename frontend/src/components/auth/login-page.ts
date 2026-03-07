@@ -137,6 +137,7 @@ export class AuthLoginPage extends LitElement {
     this._loginChallenge = challenge;
 
     if (challenge) {
+      sessionStorage.setItem("seam_login_challenge", challenge);
       await this._handleHydraChallenge(challenge);
     } else {
       await this._fetchKratosFlow();
