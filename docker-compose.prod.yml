@@ -127,6 +127,7 @@ services:
       CODER_TOKEN: ${CODER_TOKEN}
       MCP_AUTH_DISABLED: ${MCP_AUTH_DISABLED:-false}
       SEAM_URL: http://seam-server:3002
+      PUBLIC_URL: https://seam.tacklines.com
     networks:
       - internal
 

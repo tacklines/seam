@@ -60,6 +60,9 @@ seam.${domain_name} {
 	handle /.well-known/* {
 		reverse_proxy localhost:3002
 	}
+	handle /oauth2/* {
+		reverse_proxy localhost:3002
+	}
 
 	# Frontend — static files with SPA fallback
 	handle {

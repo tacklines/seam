@@ -41,9 +41,11 @@ pub struct AppState {
     pub issuer_url: String,
     pub log_buffer: log_buffer::LogBuffer,
     pub code_index: Option<std::sync::Arc<code_search::CodeIndex>>,
-    /// Public base URL (from SEAM_URL env or derived from listen address).
-    /// Used for RFC 9728 OAuth Protected Resource Metadata.
+    /// Internal base URL (from SEAM_URL env). Used for worker-to-server calls.
     pub resource_url: String,
+    /// External base URL (from PUBLIC_URL env, falls back to SEAM_URL).
+    /// Used for OAuth discovery docs that clients must reach externally.
+    pub public_url: String,
     pub model_cache: model_discovery::ModelCache,
 }
 
@@ -77,6 +79,7 @@ async fn main() {
     let port = std::env::var("PORT").unwrap_or_else(|_| "3002".to_string());
     let resource_url =
         std::env::var("SEAM_URL").unwrap_or_else(|_| format!("http://localhost:{port}"));
+    let public_url = std::env::var("PUBLIC_URL").unwrap_or_else(|_| resource_url.clone());
 
     // OIDC configuration — defaults point at Ory Hydra for local dev.
     // Production sets ISSUER_URL and JWKS_URL explicitly.
@@ -119,6 +122,7 @@ async fn main() {
         issuer_url: issuer_url.clone(),
         code_index: code_index.clone(),
         resource_url: resource_url.clone(),
+        public_url: public_url.clone(),
         model_cache: model_discovery::ModelCache::new(),
     });
 
@@ -494,6 +498,8 @@ async fn main() {
             "/.well-known/oauth-authorization-server",
             get(well_known_authorization_server),
         )
+        // OAuth dynamic client registration proxy (sanitizes requests for Hydra)
+        .route("/oauth2/register", post(oauth2_register_proxy))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state.clone());
@@ -537,7 +543,7 @@ async fn main() {
 /// RFC 9728: OAuth Protected Resource Metadata
 /// Tells MCP clients where to authenticate and what scopes are needed.
 async fn well_known_protected_resource(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let resource = format!("{}/mcp", state.resource_url.trim_end_matches('/'));
+    let resource = format!("{}/mcp", state.public_url.trim_end_matches('/'));
     Json(serde_json::json!({
         "resource": resource,
         "authorization_servers": [&state.issuer_url],
@@ -556,14 +562,11 @@ async fn well_known_authorization_server(State(state): State<Arc<AppState>>) -> 
     match reqwest::get(&url).await {
         Ok(resp) => match resp.json::<serde_json::Value>().await {
             Ok(mut body) => {
-                // Inject registration_endpoint if Hydra left it null/absent
-                if body
-                    .get("registration_endpoint")
-                    .is_none_or(|v| v.is_null())
-                {
-                    body["registration_endpoint"] =
-                        serde_json::json!(format!("{}/oauth2/register", state.issuer_url));
-                }
+                // Point registration_endpoint at our proxy which sanitizes
+                // requests before forwarding to Hydra (fixes client_uri / contacts validation)
+                let public_base = state.public_url.trim_end_matches('/');
+                body["registration_endpoint"] =
+                    serde_json::json!(format!("{public_base}/oauth2/register"));
                 (axum::http::StatusCode::OK, Json(body)).into_response()
             }
             Err(_) => (
@@ -575,6 +578,54 @@ async fn well_known_authorization_server(State(state): State<Arc<AppState>>) -> 
         Err(_) => (
             axum::http::StatusCode::BAD_GATEWAY,
             Json(serde_json::json!({"error": "OIDC provider unavailable"})),
+        )
+            .into_response(),
+    }
+}
+
+/// Proxy for OAuth 2.0 Dynamic Client Registration.
+///
+/// Claude Code (and other MCP clients) send DCR requests that may omit or
+/// malform fields Hydra v2.3 strictly validates (`client_uri`, `contacts`).
+/// We sanitize the request before forwarding to Hydra.
+async fn oauth2_register_proxy(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Json(mut body): axum::extract::Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Fix client_uri: must be a valid URL or Hydra rejects it
+    let needs_fix = match body.get("client_uri") {
+        None | Some(serde_json::Value::Null) => true,
+        Some(v) => v
+            .as_str()
+            .is_some_and(|s| s.is_empty() || !s.starts_with("http")),
+    };
+    if needs_fix {
+        body["client_uri"] = serde_json::json!(state.public_url.trim_end_matches('/'));
+    }
+
+    // Fix contacts: must be an array, not null
+    if body.get("contacts").is_none_or(|v| v.is_null()) {
+        body["contacts"] = serde_json::json!([]);
+    }
+
+    let url = format!("{}/oauth2/register", state.issuer_url);
+    let client = reqwest::Client::new();
+    match client.post(&url).json(&body).send().await {
+        Ok(resp) => {
+            let status = axum::http::StatusCode::from_u16(resp.status().as_u16())
+                .unwrap_or(axum::http::StatusCode::BAD_GATEWAY);
+            match resp.json::<serde_json::Value>().await {
+                Ok(resp_body) => (status, Json(resp_body)).into_response(),
+                Err(_) => (
+                    axum::http::StatusCode::BAD_GATEWAY,
+                    Json(serde_json::json!({"error": "Failed to parse registration response"})),
+                )
+                    .into_response(),
+            }
+        }
+        Err(_) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({"error": "OAuth provider unavailable"})),
         )
             .into_response(),
     }
