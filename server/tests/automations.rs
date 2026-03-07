@@ -43,7 +43,7 @@ async fn test_create_event_reaction() {
     .bind("Auto-assign on create")
     .bind("task_created").bind("task")
     .bind(serde_json::json!({"priority": 1}))
-    .bind("launch_agent")
+    .bind("invoke_agent")
     .bind(serde_json::json!({"skill": "triage"}))
     .execute(&db).await.unwrap();
 
@@ -102,7 +102,7 @@ async fn test_event_reaction_project_scoping() {
     )
     .bind(Uuid::new_v4()).bind(project_b)
     .bind("Reaction B").bind("task_updated").bind("task")
-    .bind("launch_agent").bind(serde_json::json!({}))
+    .bind("invoke_agent").bind(serde_json::json!({}))
     .execute(&db).await.unwrap();
 
     let count_a: i64 = sqlx::query_scalar(
@@ -183,7 +183,7 @@ async fn test_create_scheduled_job() {
     )
     .bind(job_id).bind(project_id)
     .bind("Hourly Triage").bind("0 * * * *")
-    .bind("launch_agent").bind(serde_json::json!({"skill": "triage"}))
+    .bind("invoke_agent").bind(serde_json::json!({"skill": "triage"}))
     .execute(&db).await.unwrap();
 
     let (name, cron, enabled): (String, String, bool) = sqlx::query_as(
@@ -232,7 +232,7 @@ async fn test_scheduled_job_project_scoping() {
     )
     .bind(Uuid::new_v4()).bind(project_a)
     .bind("Job A").bind("0 * * * *")
-    .bind("launch_agent").bind(serde_json::json!({}))
+    .bind("invoke_agent").bind(serde_json::json!({}))
     .execute(&db).await.unwrap();
 
     let count_a: i64 = sqlx::query_scalar(
