@@ -1,5 +1,6 @@
 pub mod activity;
 pub mod auth_bridge;
+pub mod hook_bundles;
 pub mod me;
 pub mod agent;
 pub mod code_index;

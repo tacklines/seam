@@ -580,6 +580,8 @@ pub struct Request {
     pub body: String,
     pub status: RequestStatus,
     pub analysis: Option<String>,
+    pub duplicate_of: Option<Uuid>,
+    pub impact_analysis: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

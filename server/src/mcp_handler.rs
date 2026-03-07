@@ -2667,6 +2667,17 @@ impl SeamMcp {
             text.push_str(&format!("\n## Analysis\n\n{}\n", analysis));
         }
 
+        if let Some(ref duplicate_of) = req.duplicate_of {
+            text.push_str(&format!("\n## Duplicate Of\n\n{}\n", duplicate_of));
+        }
+
+        if let Some(ref impact_analysis) = req.impact_analysis {
+            text.push_str(&format!(
+                "\n## Impact Analysis\n\n```json\n{}\n```\n",
+                serde_json::to_string_pretty(impact_analysis).unwrap_or_default()
+            ));
+        }
+
         if !linked_req_ids.is_empty() {
             text.push_str("\n## Linked Requirements\n\n");
             for (rid,) in &linked_req_ids {

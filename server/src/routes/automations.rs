@@ -86,7 +86,7 @@ pub struct UpdateScheduledJobRequest {
 
 // --- Helpers ---
 
-fn compute_next_run(cron_expr: &str) -> Result<DateTime<Utc>, String> {
+pub fn compute_next_run(cron_expr: &str) -> Result<DateTime<Utc>, String> {
     use cron::Schedule;
     use std::str::FromStr;
 

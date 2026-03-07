@@ -237,6 +237,9 @@ async fn main() {
         .route("/api/projects/{project_id}/reactions/{reaction_id}", patch(routes::automations::update_reaction).delete(routes::automations::delete_reaction))
         .route("/api/projects/{project_id}/scheduled-jobs", get(routes::automations::list_scheduled_jobs).post(routes::automations::create_scheduled_job))
         .route("/api/projects/{project_id}/scheduled-jobs/{job_id}", patch(routes::automations::update_scheduled_job).delete(routes::automations::delete_scheduled_job))
+        // Hook Bundles
+        .route("/api/projects/{project_id}/hook-bundles", get(routes::hook_bundles::list_bundles))
+        .route("/api/projects/{project_id}/hook-bundles/{bundle_name}", post(routes::hook_bundles::install_bundle))
         // Auth bridge (Hydra/Kratos — unauthenticated, part of login flow)
         .route("/api/auth/login", get(routes::auth_bridge::get_login_request))
         .route("/api/auth/login/accept", axum::routing::put(routes::auth_bridge::accept_login))
