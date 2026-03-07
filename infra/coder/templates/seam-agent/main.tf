@@ -46,52 +46,12 @@ data "coder_parameter" "seam_url" {
   default      = ""
 }
 
-data "coder_parameter" "agent_code" {
-  name         = "agent_code"
-  display_name = "Agent Join Code"
-  description  = "Code for the agent to join a Seam session."
-  type         = "string"
-  mutable      = false
-  default      = ""
-}
-
-data "coder_parameter" "agent_type" {
-  name         = "agent_type"
-  display_name = "Agent Type"
-  description  = "Type of agent: coder, planner, reviewer."
-  type         = "string"
-  mutable      = false
-  default      = "coder"
-
-  option {
-    name  = "Coder"
-    value = "coder"
-  }
-  option {
-    name  = "Planner"
-    value = "planner"
-  }
-  option {
-    name  = "Reviewer"
-    value = "reviewer"
-  }
-}
-
 data "coder_parameter" "seam_token" {
   name         = "seam_token"
   display_name = "Seam Token"
   description  = "Agent authentication token for Seam MCP."
   type         = "string"
   mutable      = false
-  default      = ""
-}
-
-data "coder_parameter" "instructions" {
-  name         = "instructions"
-  display_name = "Custom Instructions"
-  description  = "Optional instructions for the agent."
-  type         = "string"
-  mutable      = true
   default      = ""
 }
 
