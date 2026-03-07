@@ -1,7 +1,7 @@
 ---
 name: rust-implementer
 description: Use when implementing backend features in the Rust/Axum server. Handles routes, database queries, migrations, MCP tool handlers, domain events, auth, and WebSocket changes.
-tools: Read, Write, Edit, Glob, Grep, Bash(cargo build:*), Bash(cargo check:*), Bash(cargo test:*), Bash(cargo clippy:*), Bash(cargo fmt:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(sqlx:*), Bash(bd:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(cargo build:*), Bash(cargo check:*), Bash(cargo test:*), Bash(cargo clippy:*), Bash(cargo fmt:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(sqlx:*)
 model: sonnet
 permissionMode: default
 ---

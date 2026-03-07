@@ -1,7 +1,7 @@
 ---
 name: frontend-implementer
 description: Use when implementing frontend features with Lit web components, Shoelace UI, Tailwind CSS, and Vaadin Router. Handles components, state management, API integration, and routing.
-tools: Read, Write, Edit, Glob, Grep, Bash(npx tsc:*), Bash(npx prettier:*), Bash(npm run:*), Bash(npm install:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(bd:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(npx tsc:*), Bash(npx prettier:*), Bash(npm run:*), Bash(npm install:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*)
 model: sonnet
 permissionMode: default
 ---

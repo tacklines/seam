@@ -20,19 +20,19 @@ Quick reference for which agent to dispatch for each task type in the Seam monor
 
 ## Capabilities Matrix
 
-| Agent | Reads | Writes | Tests | Beads |
-|-------|-------|--------|-------|-------|
-| code-reviewer | Y | N | Y (check only) | Y |
-| debugger | Y | N | Y (run only) | Y |
-| rust-implementer | Y | Y | Y | Y |
-| frontend-implementer | Y | Y | Y (tsc only) | Y |
-| agent-developer | Y | Y | Y (ruff only) | Y |
-| migration-author | Y | Y | Y | Y |
-| mcp-tool-developer | Y | Y | Y | Y |
-| event-auditor | Y | N | N | Y |
-| vertical-slice-planner | Y | N | N | Y |
-| deploy-operator | Y | N | N | Y |
-| infra-engineer | Y | Y | N | Y |
+| Agent | Reads | Writes | Tests |
+|-------|-------|--------|-------|
+| code-reviewer | Y | N | Y (check only) |
+| debugger | Y | N | Y (run only) |
+| rust-implementer | Y | Y | Y |
+| frontend-implementer | Y | Y | Y (tsc only) |
+| agent-developer | Y | Y | Y (ruff only) |
+| migration-author | Y | Y | Y |
+| mcp-tool-developer | Y | Y | Y |
+| event-auditor | Y | N | N |
+| vertical-slice-planner | Y | N | N |
+| deploy-operator | Y | N | N |
+| infra-engineer | Y | Y | N |
 
 ## Common Workflows
 
@@ -40,11 +40,11 @@ Quick reference for which agent to dispatch for each task type in the Seam monor
 1. `vertical-slice-planner` -- decompose into ordered tasks
 2. `migration-author` -- schema changes (if needed)
 3. `rust-implementer` -- server routes, auth, domain events
-4. `mcp-tool-developer` -- agent-facing tools (if needed)
-5. `frontend-implementer` -- UI components and state
-6. `agent-developer` -- skills or workflow updates (if needed)
-7. `code-reviewer` -- final review
-8. `event-auditor` -- verify event coverage
+4. In parallel (independent of each other, all depend on step 3):
+   - `mcp-tool-developer` -- agent-facing tools (if needed)
+   - `frontend-implementer` -- UI components and state
+   - `agent-developer` -- skills or workflow updates (if needed)
+5. In parallel: `code-reviewer` + `event-auditor` -- review and verify event coverage
 
 ### Bug Fix
 1. `debugger` -- diagnose root cause
@@ -53,17 +53,14 @@ Quick reference for which agent to dispatch for each task type in the Seam monor
 
 ### Schema Change
 1. `migration-author` -- migration + model + route + MCP propagation
-2. `frontend-implementer` -- UI for new fields (if needed)
-3. `code-reviewer` -- review
+2. In parallel: `frontend-implementer` (UI for new fields, if needed) + `code-reviewer` (review)
 
 ### New MCP Tool
 1. `mcp-tool-developer` -- tool definition + handler
-2. `agent-developer` -- skill integration (if needed)
-3. `code-reviewer` -- review
+2. In parallel: `agent-developer` (skill integration, if needed) + `code-reviewer` (review)
 
 ### Audit
-1. `event-auditor` -- domain event coverage
-2. `code-reviewer` -- general quality
+In parallel: `event-auditor` (domain event coverage) + `code-reviewer` (general quality)
 
 ### Deployment
 1. `code-reviewer` -- review changes before shipping

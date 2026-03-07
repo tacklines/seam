@@ -1,7 +1,7 @@
 ---
 name: agent-developer
 description: Use when implementing or modifying the Python agent system — LangGraph agents, MCP clients, skills, workflow primitives, model routing, or CLI commands.
-tools: Read, Write, Edit, Glob, Grep, Bash(uv sync:*), Bash(uv run pytest:*), Bash(uv run python:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(bd:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(uv sync:*), Bash(uv run pytest:*), Bash(uv run python:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*)
 model: sonnet
 permissionMode: default
 ---

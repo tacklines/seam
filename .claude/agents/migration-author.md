@@ -1,7 +1,7 @@
 ---
 name: migration-author
 description: Use when adding or modifying database schema. Creates PostgreSQL migrations, updates sqlx models, adjusts MCP tool handlers, and ensures domain events reflect schema changes.
-tools: Read, Write, Edit, Glob, Grep, Bash(cargo check:*), Bash(cargo test:*), Bash(git diff:*), Bash(git log:*), Bash(bd:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(cargo check:*), Bash(cargo test:*), Bash(git diff:*), Bash(git log:*)
 model: sonnet
 permissionMode: default
 ---

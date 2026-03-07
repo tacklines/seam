@@ -10,17 +10,13 @@ Collaborative sessions where humans and AI agents work together in real time.
 
 1. **Task Dispatch**: Delegate implementation work to appropriate subagents via the Task tool
 2. **Coordination**: Manage dependencies between tasks, unblock work, review agent outputs
-3. **Backlog Management**: Use `bd` commands to triage, prioritize, and track issues
-4. **Session Management**: Run `bd sync` before completing sessions
+3. **Task Tracking**: Use your preferred task tracking approach to triage, prioritize, and track tasks
 
-### Serialized Dispatching
+### Parallel Worktree Dispatching
 
-**Dispatch tasks one at a time, not in parallel.** This approach:
-- Avoids API throttling, enabling longer uninterrupted work sessions
-- Allows learning from each task's output before starting the next
-- Reduces context bloat from concurrent agent results
+**Dispatch independent tasks in parallel using worktree isolation.** For tasks with no dependencies between them, use `isolation: "worktree"` + `run_in_background: true` to run them concurrently. This maximizes throughput by letting independent work proceed simultaneously.
 
-Workflow: dispatch -> wait for completion -> review -> dispatch next task
+Serial dispatch (dispatch -> wait -> review -> dispatch next) is reserved for tasks with true sequential dependencies, where one task's output is required as input to the next.
 
 ## Quick Reference
 

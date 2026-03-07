@@ -19,7 +19,6 @@
       "Bash(uv run ruff:*)",
       "Bash(uv run mypy:*)",
       "Bash(just:*)",
-      "Bash(bd:*)",
       "Bash(docker compose:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
@@ -36,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bd prime 2>/dev/null || echo 'Beads context: Run bd ready to see available work'"
+            "command": "echo 'Session started. Check your task tracker for available work.'"
           }
         ]
       }
@@ -44,10 +43,6 @@
     "PreCompact": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "bd sync 2>/dev/null || true"
-          },
           {
             "type": "command",
             "command": "mkdir -p memory/sessions && echo '# Pre-Compaction State\n\nAuto-persisted: '$(date -Iseconds) > memory/sessions/pre-compact.md"

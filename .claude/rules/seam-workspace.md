@@ -1,19 +1,18 @@
 # Seam Workspace: Task Management via MCP
 
-When `SEAM_TOKEN` is set (running as a Seam agent), all task management goes through Seam MCP tools. Do NOT use `bd` or `tk` CLI commands.
+When `SEAM_TOKEN` is set (running as a Seam agent), all task management goes through Seam MCP tools.
 
-## Command Mapping
+## Task Management
 
-| Instead of | Use MCP tool |
+| Action | MCP tool |
 |---|---|
-| `bd create` | `create_task` |
-| `bd list` | `list_tasks` |
-| `bd show <id>` | `get_task` |
-| `bd update <id>` | `update_task` |
-| `bd close <id>` | `close_task` |
-| `bd ready` / `bd stats` / `bd blocked` | `list_tasks` with status filters + `task_summary` |
-| `bd dep add` | `add_dependency` |
-| `bd sync` | Not needed (server persists automatically) |
+| Create a task | `create_task` |
+| List tasks | `list_tasks` |
+| View task details | `get_task` |
+| Update a task | `update_task` |
+| Close a task | `close_task` |
+| Find available work | `list_tasks` with status filters + `task_summary` |
+| Add dependency | `add_dependency` |
 
 ## Communication
 
@@ -27,4 +26,4 @@ When `SEAM_TOKEN` is set (running as a Seam agent), all task management goes thr
 ## When This Applies
 
 - `SEAM_TOKEN` is set: use MCP tools above (this rule)
-- `SEAM_TOKEN` is NOT set (local dev): use normal `bd`/`tk` workflow
+- `SEAM_TOKEN` is NOT set (local dev): use your preferred task tracking approach

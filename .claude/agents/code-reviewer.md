@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Use when reviewing code changes before merge or after implementation. Checks for correctness, security, pattern compliance, and cross-stack consistency in this multi-stack monorepo (Rust server, Lit frontend, Python agents).
-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(cargo check:*), Bash(cargo clippy:*), Bash(npx tsc:*), Bash(uv run ruff:*), Bash(bd:*)
+tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(cargo check:*), Bash(cargo clippy:*), Bash(npx tsc:*), Bash(uv run ruff:*)
 model: sonnet
 permissionMode: plan
 ---
@@ -88,7 +88,7 @@ Review code changes in the Seam monorepo for correctness, security, pattern comp
 
 ## Knowledge Transfer
 
-**Before starting:** Ask the orchestrator what was implemented and why. If beads available, run `bd show <id>`.
+**Before starting:** Ask the orchestrator what was implemented and why. Review the relevant task details if available.
 
 **After completing:** Report:
 - Any pattern violations found

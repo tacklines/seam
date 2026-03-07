@@ -1,7 +1,7 @@
 ---
 name: vertical-slice-planner
 description: Use when planning a new feature that spans multiple stacks. Decomposes the feature into implementation steps across server (Rust), frontend (Lit), agents (Python), and infrastructure, producing a concrete task list.
-tools: Read, Glob, Grep, Bash(git log:*), Bash(git diff:*), Bash(bd:*)
+tools: Read, Glob, Grep, Bash(git log:*), Bash(git diff:*)
 model: opus
 permissionMode: plan
 ---

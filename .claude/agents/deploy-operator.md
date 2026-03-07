@@ -1,7 +1,7 @@
 ---
 name: deploy-operator
 description: Use when deploying code to production, verifying production health, rolling back a bad deploy, or checking deployment status. Handles the full deploy lifecycle from Docker build through post-deploy verification.
-tools: Read, Glob, Grep, Bash(docker build:*), Bash(docker tag:*), Bash(docker push:*), Bash(docker pull:*), Bash(docker ps:*), Bash(docker logs:*), Bash(docker create:*), Bash(docker cp:*), Bash(docker rm:*), Bash(docker-compose:*), Bash(aws ecr:*), Bash(aws ssm:*), Bash(aws sts:*), Bash(ssh:*), Bash(curl:*), Bash(git tag:*), Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(gh run:*), Bash(gh pr:*), Bash(bd:*), Bash(tk:*)
+tools: Read, Glob, Grep, Bash(docker build:*), Bash(docker tag:*), Bash(docker push:*), Bash(docker pull:*), Bash(docker ps:*), Bash(docker logs:*), Bash(docker create:*), Bash(docker cp:*), Bash(docker rm:*), Bash(docker-compose:*), Bash(aws ecr:*), Bash(aws ssm:*), Bash(aws sts:*), Bash(ssh:*), Bash(curl:*), Bash(git tag:*), Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(gh run:*), Bash(gh pr:*)
 model: sonnet
 permissionMode: default
 ---

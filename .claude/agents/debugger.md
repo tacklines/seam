@@ -1,7 +1,7 @@
 ---
 name: debugger
 description: Use when diagnosing bugs, unexpected behavior, or test failures. Traces issues across the three stacks (Rust server, Lit frontend, Python agents) and through WebSocket/MCP/HTTP boundaries.
-tools: Read, Glob, Grep, Bash(cargo test:*), Bash(cargo check:*), Bash(cargo clippy:*), Bash(npx tsc:*), Bash(uv run pytest:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(bd:*)
+tools: Read, Glob, Grep, Bash(cargo test:*), Bash(cargo check:*), Bash(cargo clippy:*), Bash(npx tsc:*), Bash(uv run pytest:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*)
 model: sonnet
 permissionMode: plan
 ---

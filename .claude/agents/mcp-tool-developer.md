@@ -1,7 +1,7 @@
 ---
 name: mcp-tool-developer
 description: Use when adding or modifying MCP tools exposed to agents. Handles the full chain from tool schema definition through handler implementation to agent-side consumption.
-tools: Read, Write, Edit, Glob, Grep, Bash(cargo check:*), Bash(cargo test:*), Bash(cargo clippy:*), Bash(uv run ruff:*), Bash(git diff:*), Bash(git log:*), Bash(bd:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(cargo check:*), Bash(cargo test:*), Bash(cargo clippy:*), Bash(uv run ruff:*), Bash(git diff:*), Bash(git log:*)
 model: sonnet
 permissionMode: default
 ---

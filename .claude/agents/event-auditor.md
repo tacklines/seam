@@ -1,7 +1,7 @@
 ---
 name: event-auditor
 description: Use when auditing domain event coverage, verifying event emission for state changes, or investigating event-related issues. Checks the append-only event ledger pattern across routes and MCP tools.
-tools: Read, Glob, Grep, Bash(cargo check:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(bd:*)
+tools: Read, Glob, Grep, Bash(cargo check:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*)
 model: haiku
 permissionMode: plan
 ---

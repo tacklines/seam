@@ -1,7 +1,7 @@
 ---
 name: infra-engineer
 description: Use when modifying Terraform infrastructure, managing AWS resources, updating EC2 bootstrap scripts, rotating secrets, or troubleshooting deployment infrastructure. Not for application code changes.
-tools: Read, Write, Edit, Glob, Grep, Bash(terraform:*), Bash(aws:*), Bash(ssh:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(bd:*), Bash(tk:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(terraform:*), Bash(aws:*), Bash(ssh:*), Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*)
 model: sonnet
 permissionMode: default
 ---
