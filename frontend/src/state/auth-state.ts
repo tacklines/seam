@@ -152,7 +152,7 @@ class AuthStore {
       const user = await this.userManager.signinRedirectCallback();
       this.setUser(user);
       // After OIDC callback, redirect to the originally requested path or default to /projects
-      const returnPath = sessionStorage.getItem('seam_return_path') || '/projects';
+      const returnPath = sessionStorage.getItem('seam_return_path') || '/';
       sessionStorage.removeItem('seam_return_path');
       window.history.replaceState({}, '', returnPath);
     } catch (err) {
