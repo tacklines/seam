@@ -18,6 +18,40 @@ pub struct Claims {
     pub exp: u64,
     pub iat: u64,
     pub iss: String,
+    /// Hydra puts custom session claims under `ext`
+    pub ext: Option<ExtClaims>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtClaims {
+    pub email: Option<String>,
+    pub name: Option<String>,
+    pub preferred_username: Option<String>,
+}
+
+impl Claims {
+    /// Get email from top-level or ext claims
+    pub fn resolved_email(&self) -> Option<&str> {
+        self.email
+            .as_deref()
+            .or_else(|| self.ext.as_ref().and_then(|e| e.email.as_deref()))
+    }
+
+    /// Get name from top-level or ext claims
+    pub fn resolved_name(&self) -> Option<&str> {
+        self.name
+            .as_deref()
+            .or_else(|| self.ext.as_ref().and_then(|e| e.name.as_deref()))
+    }
+
+    /// Get preferred_username from top-level or ext claims
+    pub fn resolved_username(&self) -> Option<&str> {
+        self.preferred_username.as_deref().or_else(|| {
+            self.ext
+                .as_ref()
+                .and_then(|e| e.preferred_username.as_deref())
+        })
+    }
 }
 
 #[derive(Clone)]

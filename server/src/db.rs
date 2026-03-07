@@ -7,10 +7,10 @@ use crate::models::User;
 /// Upsert a user from JWT claims. Returns the internal user record.
 pub async fn upsert_user(pool: &PgPool, claims: &Claims) -> Result<User, sqlx::Error> {
     let username = claims
-        .preferred_username
-        .clone()
-        .unwrap_or_else(|| claims.sub.clone());
-    let display = claims.name.clone().unwrap_or_else(|| username.clone());
+        .resolved_username()
+        .unwrap_or(&claims.sub)
+        .to_string();
+    let display = claims.resolved_name().unwrap_or(&username).to_string();
 
     sqlx::query_as::<_, User>(
         "INSERT INTO users (id, external_id, username, display_name, email, created_at)
@@ -24,7 +24,7 @@ pub async fn upsert_user(pool: &PgPool, claims: &Claims) -> Result<User, sqlx::E
     .bind(&claims.sub)
     .bind(&username)
     .bind(&display)
-    .bind(&claims.email)
+    .bind(claims.resolved_email())
     .fetch_one(pool)
     .await
 }

@@ -145,10 +145,10 @@ where
                 Ok(claims) => McpIdentity {
                     subject: claims.sub.clone(),
                     display_name: claims
-                        .preferred_username
-                        .clone()
-                        .or(claims.name.clone())
-                        .unwrap_or_else(|| claims.sub.clone()),
+                        .resolved_username()
+                        .or_else(|| claims.resolved_name())
+                        .unwrap_or(&claims.sub)
+                        .to_string(),
                     user_id: None,
                     auth_method: AuthMethod::Jwt,
                 },

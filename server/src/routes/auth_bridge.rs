@@ -13,6 +13,10 @@ fn hydra_admin_url() -> String {
     std::env::var("HYDRA_ADMIN_URL").unwrap_or_else(|_| "http://hydra:4445".to_string())
 }
 
+fn kratos_admin_url() -> String {
+    std::env::var("KRATOS_ADMIN_URL").unwrap_or_else(|_| "http://kratos:4434".to_string())
+}
+
 /// Shared error helper: turn a reqwest error or unexpected status into a 502.
 async fn hydra_error(status: reqwest::StatusCode, body: String) -> (StatusCode, Json<Value>) {
     tracing::warn!(hydra_status = %status, body = %body, "Hydra Admin API error");
@@ -235,18 +239,86 @@ pub async fn get_consent_request(Query(params): Query<ConsentChallengeQuery>) ->
 /// Accepts the Hydra consent challenge.
 /// Body: `{ "grant_scope": [...], "grant_access_token_audience": [...], "remember": bool, "remember_for": seconds }`
 /// Returns: `{ "redirect_to": "..." }`
+///
+/// Enriches the consent with user profile claims (name, email) from Kratos
+/// so they appear in the JWT access token and ID token.
 pub async fn accept_consent(
     Query(params): Query<ConsentChallengeQuery>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let base = hydra_admin_url();
+    let client = reqwest::Client::new();
+
+    // 1. Fetch the consent request to get the subject (Kratos identity ID)
+    let consent_url = format!(
+        "{}/admin/oauth2/auth/requests/consent?consent_challenge={}",
+        base, params.consent_challenge
+    );
+    let subject = match client.get(&consent_url).send().await {
+        Ok(r) if r.status().is_success() => {
+            let consent_data: Value = r.json().await.unwrap_or_default();
+            consent_data
+                .get("subject")
+                .and_then(Value::as_str)
+                .map(String::from)
+        }
+        _ => None,
+    };
+
+    // 2. Fetch Kratos identity traits for the subject
+    let mut session_claims = serde_json::json!({});
+    if let Some(ref sub) = subject {
+        let kratos_admin = kratos_admin_url();
+        let identity_url = format!("{}/admin/identities/{}", kratos_admin, sub);
+        match client.get(&identity_url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(identity) = resp.json::<Value>().await {
+                    let traits = identity.get("traits").cloned().unwrap_or_default();
+                    let email = traits.get("email").and_then(Value::as_str);
+                    let name = traits.get("name").and_then(Value::as_str);
+
+                    let mut claims = serde_json::Map::new();
+                    if let Some(email) = email {
+                        claims.insert("email".into(), Value::String(email.to_string()));
+                        claims.insert(
+                            "preferred_username".into(),
+                            Value::String(email.to_string()),
+                        );
+                    }
+                    if let Some(name) = name {
+                        claims.insert("name".into(), Value::String(name.to_string()));
+                    }
+                    session_claims = Value::Object(claims);
+                }
+            }
+            Ok(resp) => {
+                tracing::warn!(
+                    status = %resp.status(),
+                    "Failed to fetch Kratos identity for {sub}"
+                );
+            }
+            Err(e) => {
+                tracing::warn!("Kratos admin unreachable: {e}");
+            }
+        }
+    }
+
+    // 3. Merge session claims into the consent accept body
+    let mut enriched = body.clone();
+    if let Value::Object(ref mut map) = enriched {
+        let mut session = serde_json::Map::new();
+        session.insert("access_token".into(), session_claims.clone());
+        session.insert("id_token".into(), session_claims);
+        map.insert("session".into(), Value::Object(session));
+    }
+
+    // 4. Accept consent with enriched body
     let url = format!(
         "{}/admin/oauth2/auth/requests/consent/accept?consent_challenge={}",
-        hydra_admin_url(),
-        params.consent_challenge
+        base, params.consent_challenge
     );
 
-    let client = reqwest::Client::new();
-    let resp = match client.put(&url).json(&body).send().await {
+    let resp = match client.put(&url).json(&enriched).send().await {
         Ok(r) => r,
         Err(e) => {
             tracing::error!("Failed to reach Hydra Admin API (accept consent): {e}");
