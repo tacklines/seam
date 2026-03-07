@@ -1,5 +1,5 @@
-// Defaults are for local dev with Keycloak. Production sets VITE_* at build time.
-const AUTH_AUTHORITY = (import.meta as any).env?.VITE_AUTH_AUTHORITY ?? 'http://localhost:8081/realms/seam';
+// Defaults are for local dev with Ory Hydra. Production sets VITE_* at build time.
+const AUTH_AUTHORITY = (import.meta as any).env?.VITE_AUTH_AUTHORITY ?? 'http://localhost:4444';
 const APP_URL = (import.meta as any).env?.VITE_APP_URL ?? 'http://localhost:5173';
 const CLIENT_ID = (import.meta as any).env?.VITE_CLIENT_ID ?? 'web-app';
 
