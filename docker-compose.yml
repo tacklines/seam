@@ -1,15 +1,4 @@
 services:
-  keycloak:
-    image: quay.io/keycloak/keycloak:latest
-    command: start-dev --import-realm
-    environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-    ports:
-      - "${KEYCLOAK_PORT:-8080}:8080"
-    volumes:
-      - ./infra/keycloak:/opt/keycloak/data/import
-
   postgres:
     image: pgvector/pgvector:pg17
     environment:
@@ -26,6 +15,51 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  hydra-migrate:
+    image: oryd/hydra:v2.3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: migrate sql --yes postgres://seam:seam@postgres:5432/hydra?sslmode=disable
+    restart: on-failure
+
+  hydra:
+    image: oryd/hydra:v2.3
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${HYDRA_PUBLIC_PORT:-4444}:4444"
+      - "${HYDRA_ADMIN_PORT:-4445}:4445"
+    command: serve all --dev --config /etc/config/hydra/hydra.yml
+    volumes:
+      - ./infra/ory/hydra.yml:/etc/config/hydra/hydra.yml:ro
+    environment:
+      DSN: postgres://seam:seam@postgres:5432/hydra?sslmode=disable
+
+  kratos-migrate:
+    image: oryd/kratos:v1.3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: migrate sql --yes postgres://seam:seam@postgres:5432/kratos?sslmode=disable
+    restart: on-failure
+
+  kratos:
+    image: oryd/kratos:v1.3
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${KRATOS_PUBLIC_PORT:-4433}:4433"
+      - "${KRATOS_ADMIN_PORT:-4434}:4434"
+    command: serve all --dev --config /etc/config/kratos/kratos.yml --watch-courier
+    volumes:
+      - ./infra/ory/kratos.yml:/etc/config/kratos/kratos.yml:ro
+      - ./infra/ory/identity.schema.json:/etc/config/kratos/identity.schema.json:ro
+    environment:
+      DSN: postgres://seam:seam@postgres:5432/kratos?sslmode=disable
 
   rabbitmq:
     image: rabbitmq:3-management
