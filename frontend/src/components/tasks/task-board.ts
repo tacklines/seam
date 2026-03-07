@@ -4,13 +4,9 @@ import { store } from "../../state/app-state.js";
 import {
   fetchTasks,
   fetchProjectTasks,
-  createTask,
   updateTask,
   deleteTask,
-  addTasksToSession,
-  removeTaskFromSession,
 } from "../../state/task-api.js";
-import { createSession } from "../../state/session-api.js";
 import { navigateTo } from "../../router.js";
 import { t } from "../../lib/i18n.js";
 import { getParticipantName } from "../../lib/participant-utils.js";
@@ -18,39 +14,45 @@ import {
   type TaskView,
   type TaskType,
   type TaskStatus,
-  type TaskPriority,
-  type TaskComplexity,
   TASK_TYPE_LABELS,
   TASK_TYPE_ICONS,
   TASK_TYPE_COLORS,
   STATUS_LABELS,
   STATUS_VARIANTS,
-  PRIORITY_LABELS,
   PRIORITY_ICONS,
   PRIORITY_COLORS,
-  COMPLEXITY_LABELS,
 } from "../../state/task-types.js";
 import type { SessionParticipant } from "../../state/app-state.js";
+import {
+  filterTasks,
+  sortTasks,
+  completedCount,
+  childrenOf,
+  childProgress,
+  type TaskFilterState,
+} from "../../lib/task-filters.js";
 
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
 import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
-import "@shoelace-style/shoelace/dist/components/select/select.js";
-import "@shoelace-style/shoelace/dist/components/option/option.js";
-import "@shoelace-style/shoelace/dist/components/dialog/dialog.js";
-import "@shoelace-style/shoelace/dist/components/input/input.js";
-import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
-import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
-import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
 import "@shoelace-style/shoelace/dist/components/menu/menu.js";
 import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 import "@shoelace-style/shoelace/dist/components/tag/tag.js";
 
 import "./task-detail.js";
+import "./task-create-dialog.js";
+import "./task-sprint-panel.js";
+import "./task-board-toolbar.js";
+import "./task-shortcuts-dialog.js";
+
+import type { FilterChangedDetail } from "./task-board-toolbar.js";
+import type { SprintCreatedDetail } from "./task-sprint-panel.js";
+import type { TaskCreatedDetail } from "./task-create-dialog.js";
 
 @customElement("task-board")
 export class TaskBoard extends LitElement {
@@ -60,54 +62,6 @@ export class TaskBoard extends LitElement {
       flex: 1;
       padding: 1.5rem;
       overflow-y: auto;
-    }
-
-    .board-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1.25rem;
-    }
-
-    .board-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin: 0;
-    }
-
-    .board-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .view-toggle {
-      display: flex;
-      align-items: center;
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-
-    .view-toggle sl-icon-button {
-      border-radius: 0;
-    }
-
-    .view-toggle sl-icon-button.active {
-      background: var(--surface-active);
-      color: var(--sl-color-primary-500);
-    }
-
-    .filters {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-    }
-
-    .filters sl-select {
-      min-width: 120px;
     }
 
     /* ── List view ── */
@@ -473,77 +427,11 @@ export class TaskBoard extends LitElement {
       padding: 3rem;
     }
 
-    /* ── Create dialog ── */
-    .create-form {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .create-form sl-input,
-    .create-form sl-textarea,
-    .create-form sl-select {
-      width: 100%;
-    }
-
     /* ── Status quick-change menu ── */
     .status-menu-item {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-    }
-
-    /* ── Shortcuts overlay ── */
-    .shortcuts-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.6);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .shortcuts-card {
-      background: var(--surface-2);
-      border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      padding: 1.5rem;
-      max-width: 340px;
-      width: 90%;
-      box-shadow: var(--shadow-lg);
-    }
-
-    .shortcuts-card h3 {
-      margin: 0 0 1rem;
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .shortcut-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.35rem 0;
-    }
-
-    .shortcut-row span {
-      color: var(--text-secondary);
-      font-size: 0.85rem;
-    }
-
-    .shortcut-key {
-      display: inline-block;
-      padding: 0.15rem 0.45rem;
-      background: var(--surface-card);
-      border: 1px solid var(--border-medium);
-      border-radius: 4px;
-      font-family: var(--sl-font-mono);
-      font-size: 0.75rem;
-      color: var(--text-primary);
-      min-width: 1.5rem;
-      text-align: center;
     }
 
     /* ── Toast ── */
@@ -572,79 +460,6 @@ export class TaskBoard extends LitElement {
         transform: translateY(0);
       }
     }
-
-    /* ── Sprint planning panel ── */
-    .sprint-panel {
-      margin-bottom: 1rem;
-      border: 1px solid var(--sl-color-neutral-300);
-      border-radius: 8px;
-      background: var(--sl-color-neutral-50);
-      overflow: hidden;
-    }
-
-    .sprint-panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.75rem 1rem;
-      gap: 0.75rem;
-    }
-
-    .sprint-panel-header sl-input,
-    .sprint-panel-header sl-select {
-      flex: 1;
-      max-width: 280px;
-    }
-
-    .sprint-drop-zone {
-      min-height: 80px;
-      padding: 0.75rem;
-      border-top: 1px dashed var(--sl-color-neutral-300);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: flex-start;
-      transition: background 0.15s;
-    }
-
-    .sprint-drop-zone.drag-over {
-      background: var(--sl-color-primary-100, rgba(99, 102, 241, 0.1));
-    }
-
-    .sprint-drop-zone-empty {
-      width: 100%;
-      text-align: center;
-      color: var(--sl-color-neutral-500);
-      font-size: 0.85rem;
-      padding: 1rem;
-    }
-
-    .sprint-task-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.35rem 0.6rem;
-      background: var(--sl-color-neutral-0);
-      border: 1px solid var(--sl-color-neutral-200);
-      border-radius: 6px;
-      font-size: 0.8rem;
-      cursor: pointer;
-    }
-
-    .sprint-task-chip:hover {
-      border-color: var(--sl-color-primary-400);
-    }
-
-    .sprint-task-chip .remove-btn {
-      cursor: pointer;
-      opacity: 0.5;
-      font-size: 0.7rem;
-    }
-
-    .sprint-task-chip .remove-btn:hover {
-      opacity: 1;
-      color: var(--sl-color-danger-600);
-    }
   `;
 
   @property({ type: String, attribute: "session-code" })
@@ -662,42 +477,41 @@ export class TaskBoard extends LitElement {
   @property({ type: Array })
   sessions: Array<{ code: string; name: string | null; id: string }> = [];
 
+  // ── Core task state ──
   @state() private _tasks: TaskView[] = [];
-  @state() private _sprintPanelOpen = false;
-  @state() private _sprintSessionCode = "";
-  @state() private _sprintSessionName = "";
-  @state() private _sprintCreating = false;
   @state() private _loading = true;
   @state() private _error = "";
+
+  // ── View state ──
   @state() private _viewMode: "list" | "board" = "board";
-  @state() private _filterType: TaskType | "" = "";
-  @state() private _filterStatus: TaskStatus | "" = "";
-  @state() private _showAllProject = false;
-  @state() private _searchQuery = "";
-  @state() private _sortBy: "created" | "updated" | "title" | "type" =
-    "created";
-  @state() private _filterAssignee = "";
-  @state() private _hideCompleted = true;
-  @state() private _collapseSubtasks = true; // kanban: hide subtasks, show progress on parents
-  @state() private _collapsedGroups: Set<string> = new Set(); // list: collapsed parent IDs
-  private _dragTaskId: string | null = null;
-  @state() private _showCreateDialog = false;
-  @state() private _showShortcuts = false;
+  @state() private _collapseSubtasks = true;
+  @state() private _collapsedGroups: Set<string> = new Set();
   @state() private _selectedTaskId: string | null = null;
   @state() private _selectedIds: Set<string> = new Set();
   @state() private _batchLoading = false;
-
-  // Create form state
-  @state() private _createType: TaskType = "task";
-  @state() private _createTitle = "";
-  @state() private _createDescription = "";
-  @state() private _createParentId = "";
-  @state() private _createAssignee = "";
-  @state() private _createPriority: TaskPriority = "medium";
-  @state() private _createComplexity: TaskComplexity = "medium";
-  @state() private _createStatus: TaskStatus | "" = "";
-  @state() private _createLoading = false;
   @state() private _toastMessage = "";
+  @state() private _showShortcuts = false;
+
+  // ── Filter state ──
+  @state() private _filterType: TaskType | "" = "";
+  @state() private _filterStatus: TaskStatus | "" = "";
+  @state() private _searchQuery = "";
+  @state() private _sortBy: TaskFilterState["sortBy"] = "created";
+  @state() private _filterAssignee = "";
+  @state() private _hideCompleted = true;
+  @state() private _showAllProject = false;
+
+  // ── Create dialog state ──
+  @state() private _showCreateDialog = false;
+  @state() private _createInitialType: TaskType = "task";
+  @state() private _createInitialParentId = "";
+  @state() private _createInitialStatus: TaskStatus | "" = "";
+
+  // ── Sprint panel state ──
+  @state() private _sprintPanelOpen = false;
+
+  // ── Drag state (passed down to sprint panel) ──
+  private _dragTaskId: string | null = null;
 
   private _storeUnsub: (() => void) | null = null;
   private _keyHandler = (e: KeyboardEvent) => {
@@ -716,7 +530,7 @@ export class TaskBoard extends LitElement {
     });
 
     if (e.key === "Escape") {
-      if (isInput) return; // let inputs handle their own Escape
+      if (isInput) return;
       if (this._showShortcuts) {
         this._showShortcuts = false;
       } else if (this._selectedIds.size > 0) {
@@ -735,9 +549,11 @@ export class TaskBoard extends LitElement {
     } else if (e.key === "/" && !this._selectedTaskId) {
       e.preventDefault();
       const input = this.shadowRoot?.querySelector(
+        "task-board-toolbar",
+      ) as HTMLElement | null;
+      input?.shadowRoot?.querySelector(
         ".filters sl-input",
       ) as HTMLElement | null;
-      input?.focus();
     } else if (e.key === "?" && !this._selectedTaskId) {
       e.preventDefault();
       this._showShortcuts = !this._showShortcuts;
@@ -751,7 +567,7 @@ export class TaskBoard extends LitElement {
     this._loadTasks().then(() => this._restoreTaskFromUrl());
     this._storeUnsub = store.subscribe((event) => {
       if (event.type === "tasks-changed") {
-        this._loadTasks();
+        void this._loadTasks();
       }
     });
     document.addEventListener("keydown", this._keyHandler);
@@ -766,7 +582,6 @@ export class TaskBoard extends LitElement {
     window.removeEventListener("popstate", this._boundPopstateHandler);
   }
 
-  /** True when viewing project tasks outside a session (read-only mode). */
   private get _isProjectMode(): boolean {
     return !this.sessionCode && !!this.projectId;
   }
@@ -776,7 +591,7 @@ export class TaskBoard extends LitElement {
       (changed.has("sessionCode") && this.sessionCode) ||
       (changed.has("projectId") && this.projectId && !this.sessionCode)
     ) {
-      this._loadTasks();
+      void this._loadTasks();
     }
   }
 
@@ -822,9 +637,8 @@ export class TaskBoard extends LitElement {
         this._selectedTaskId = task.id;
       }
     } else if (this._selectedTaskId) {
-      // URL no longer has a task — user pressed back
       this._selectedTaskId = null;
-      this._loadTasks();
+      void this._loadTasks();
     }
   }
 
@@ -851,83 +665,29 @@ export class TaskBoard extends LitElement {
       path = `/projects/${this.projectId}/tasks`;
     }
     if (path) history.pushState(null, "", path);
-    this._loadTasks();
+    void this._loadTasks();
   }
 
   private get _filteredTasks(): TaskView[] {
-    let tasks = this._tasks;
-    // Hide completed unless toggled or explicitly filtering for a completed status
-    if (this._hideCompleted && !this._filterStatus) {
-      tasks = tasks.filter(
-        (tk) => tk.status !== "done" && tk.status !== "closed",
-      );
-    }
-    if (this._searchQuery.trim()) {
-      const q = this._searchQuery.toLowerCase();
-      tasks = tasks.filter(
-        (tk) =>
-          tk.title.toLowerCase().includes(q) ||
-          tk.ticket_id.toLowerCase().includes(q) ||
-          tk.description?.toLowerCase().includes(q),
-      );
-    }
-    if (this._filterAssignee) {
-      tasks = tasks.filter((tk) => tk.assigned_to === this._filterAssignee);
-    }
-    // Sort
-    const sorted = [...tasks];
-    switch (this._sortBy) {
-      case "updated":
-        sorted.sort(
-          (a, b) =>
-            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-        );
-        break;
-      case "title":
-        sorted.sort((a, b) => a.title.localeCompare(b.title));
-        break;
-      case "type":
-        sorted.sort((a, b) => a.task_type.localeCompare(b.task_type));
-        break;
-      case "created":
-      default:
-        // Default from API is created_at ASC, show newest first
-        sorted.sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-        break;
-    }
-    return sorted;
+    const filtered = filterTasks(this._tasks, {
+      hideCompleted: this._hideCompleted,
+      filterStatus: this._filterStatus,
+      searchQuery: this._searchQuery,
+      filterAssignee: this._filterAssignee,
+    });
+    return sortTasks(filtered, this._sortBy);
   }
 
-  /** Count of hidden completed tasks (for the toggle label). */
   private get _completedCount(): number {
-    return this._tasks.filter(
-      (tk) => tk.status === "done" || tk.status === "closed",
-    ).length;
-  }
-
-  /** Get child tasks for a parent (from full task list, not filtered). */
-  private _childrenOf(parentId: string): TaskView[] {
-    return this._tasks.filter((tk) => tk.parent_id === parentId);
-  }
-
-  /** Progress for a parent: [done+closed, total children]. */
-  private _childProgress(parentId: string): [number, number] {
-    const children = this._childrenOf(parentId);
-    const complete = children.filter(
-      (tk) => tk.status === "done" || tk.status === "closed",
-    ).length;
-    return [complete, children.length];
+    return completedCount(this._tasks);
   }
 
   private _isTaskInSprint(task: TaskView): boolean {
-    if (!this._sprintSessionCode || !this._sprintPanelOpen) return false;
-    const session = this.sessions.find(
-      (s) => s.code === this._sprintSessionCode,
-    );
-    return !!session && task.session_ids?.includes(session.id);
+    if (!this._sprintPanelOpen) return false;
+    const sprintPanel = this.shadowRoot?.querySelector(
+      "task-sprint-panel",
+    ) as any;
+    return sprintPanel ? sprintPanel.isTaskInSprint(task) : false;
   }
 
   private _showToast(message: string) {
@@ -1021,60 +781,53 @@ export class TaskBoard extends LitElement {
     }
   }
 
-  private async _handleCreate() {
-    if (!this._createTitle.trim()) return;
-    this._createLoading = true;
-    try {
-      const task = await createTask(this.sessionCode, {
-        task_type: this._createType,
-        title: this._createTitle.trim(),
-        description: this._createDescription.trim() || undefined,
-        parent_id: this._createParentId || undefined,
-        assigned_to: this._createAssignee || undefined,
-        priority:
-          this._createPriority !== "medium" ? this._createPriority : undefined,
-        complexity:
-          this._createComplexity !== "medium"
-            ? this._createComplexity
-            : undefined,
-      });
-      // If a non-default status was requested (e.g. from kanban column "+"), update it
-      if (this._createStatus && this._createStatus !== "open") {
-        await updateTask(this.sessionCode, task.id, {
-          status: this._createStatus,
-        });
-      }
-      this._showCreateDialog = false;
-      this._createTitle = "";
-      this._createDescription = "";
-      this._createParentId = "";
-      this._createAssignee = "";
-      this._createPriority = "medium";
-      this._createComplexity = "medium";
-      this._createStatus = "";
-      this._showToast(t("taskBoard.toast.taskCreated"));
-      await this._loadTasks();
-    } catch (err) {
-      this._error =
-        err instanceof Error ? err.message : t("taskBoard.errorCreate");
-    } finally {
-      this._createLoading = false;
-    }
-  }
-
   private _openCreateDialog(parentId?: string, type?: TaskType) {
-    this._createType = type ?? "task";
-    this._createParentId = parentId ?? "";
-    this._createTitle = "";
-    this._createDescription = "";
-    this._createAssignee = "";
-    this._createStatus = "";
+    this._createInitialType = type ?? "task";
+    this._createInitialParentId = parentId ?? "";
+    this._createInitialStatus = "";
     this._showCreateDialog = true;
   }
 
   private _openCreateDialogWithStatus(status: TaskStatus) {
     this._openCreateDialog();
-    this._createStatus = status;
+    this._createInitialStatus = status;
+  }
+
+  private _toggleGroup(parentId: string) {
+    const next = new Set(this._collapsedGroups);
+    if (next.has(parentId)) {
+      next.delete(parentId);
+    } else {
+      next.add(parentId);
+    }
+    this._collapsedGroups = next;
+  }
+
+  private _handleFilterChanged(e: CustomEvent<FilterChangedDetail>) {
+    const d = e.detail;
+    let needsReload = false;
+
+    if (d.searchQuery !== undefined) this._searchQuery = d.searchQuery;
+    if (d.filterAssignee !== undefined) this._filterAssignee = d.filterAssignee;
+    if (d.hideCompleted !== undefined) this._hideCompleted = d.hideCompleted;
+
+    if (d.filterType !== undefined && d.filterType !== this._filterType) {
+      this._filterType = d.filterType;
+      needsReload = true;
+    }
+    if (d.filterStatus !== undefined && d.filterStatus !== this._filterStatus) {
+      this._filterStatus = d.filterStatus;
+      needsReload = true;
+    }
+    if (
+      d.showAllProject !== undefined &&
+      d.showAllProject !== this._showAllProject
+    ) {
+      this._showAllProject = d.showAllProject;
+      needsReload = true;
+    }
+
+    if (needsReload) void this._loadTasks();
   }
 
   render() {
@@ -1104,246 +857,62 @@ export class TaskBoard extends LitElement {
     }
 
     return html`
-      <div class="board-header">
-        <h2 class="board-title">
-          ${this.sessionName || t("taskBoard.title")}
-          ${this._filteredTasks.length > 0
-            ? html`<sl-badge
-                variant="neutral"
-                pill
-                style="margin-left: 0.5rem; vertical-align: middle;"
-                >${this._filteredTasks.length}</sl-badge
-              >`
-            : nothing}
-        </h2>
-        <div class="board-actions">
-          <div class="view-toggle">
-            <sl-tooltip content=${t("taskBoard.listView")}>
-              <sl-icon-button
-                name="list-ul"
-                class=${this._viewMode === "list" ? "active" : ""}
-                @click=${() => {
-                  this._viewMode = "list";
-                }}
-              ></sl-icon-button>
-            </sl-tooltip>
-            <sl-tooltip content=${t("taskBoard.boardView")}>
-              <sl-icon-button
-                name="kanban"
-                class=${this._viewMode === "board" ? "active" : ""}
-                @click=${() => {
-                  this._viewMode = "board";
-                }}
-              ></sl-icon-button>
-            </sl-tooltip>
-          </div>
-          <sl-tooltip content=${t("taskBoard.refresh")}>
-            <sl-icon-button
-              name="arrow-clockwise"
-              @click=${() => this._loadTasks()}
-            ></sl-icon-button>
-          </sl-tooltip>
-          ${this._isProjectMode
-            ? html`
-                <sl-button
-                  variant=${this._sprintPanelOpen ? "primary" : "default"}
-                  size="small"
-                  @click=${() => {
-                    this._sprintPanelOpen = !this._sprintPanelOpen;
-                  }}
-                >
-                  <sl-icon slot="prefix" name="calendar-week"></sl-icon>
-                  ${t("taskBoard.planSprint")}
-                </sl-button>
-              `
-            : html`
-                <sl-button
-                  variant="primary"
-                  size="small"
-                  @click=${() => this._openCreateDialog()}
-                >
-                  <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-                  ${t("taskBoard.newTask")}
-                </sl-button>
-              `}
-        </div>
-      </div>
+      <task-board-toolbar
+        view-mode=${this._viewMode}
+        search-query=${this._searchQuery}
+        filter-type=${this._filterType}
+        filter-status=${this._filterStatus}
+        filter-assignee=${this._filterAssignee}
+        sort-by=${this._sortBy}
+        ?hide-completed=${this._hideCompleted}
+        ?show-all-project=${this._showAllProject}
+        completed-count=${this._completedCount}
+        .participants=${this.participants}
+        ?is-project-mode=${this._isProjectMode}
+        ?sprint-panel-open=${this._sprintPanelOpen}
+        filtered-count=${this._filteredTasks.length}
+        session-name=${this.sessionName}
+        @filter-changed=${(e: CustomEvent<FilterChangedDetail>) =>
+          this._handleFilterChanged(e)}
+        @view-mode-changed=${(e: CustomEvent) => {
+          this._viewMode = e.detail.viewMode;
+        }}
+        @sort-changed=${(e: CustomEvent) => {
+          this._sortBy = e.detail.sortBy;
+        }}
+        @open-create=${() => this._openCreateDialog()}
+        @sprint-toggle=${() => {
+          this._sprintPanelOpen = !this._sprintPanelOpen;
+        }}
+        @refresh=${() => void this._loadTasks()}
+      ></task-board-toolbar>
 
-      <div class="filters">
-        <sl-input
-          placeholder=${t("taskBoard.searchPlaceholder")}
-          size="small"
-          clearable
-          value=${this._searchQuery}
-          @sl-input=${(e: Event) => {
-            this._searchQuery = (e.target as HTMLInputElement).value;
-          }}
-          @sl-clear=${() => {
-            this._searchQuery = "";
-          }}
-          style="max-width: 220px;"
-        >
-          <sl-icon slot="prefix" name="search"></sl-icon>
-        </sl-input>
-        <sl-select
-          placeholder=${t("taskBoard.filterAllTypes")}
-          size="small"
-          clearable
-          value=${this._filterType}
-          @sl-change=${(e: Event) => {
-            this._filterType = (e.target as HTMLSelectElement).value as
-              | TaskType
-              | "";
-            this._loadTasks();
-          }}
-        >
-          ${(["epic", "story", "task", "subtask", "bug"] as TaskType[]).map(
-            (tt) => html`
-              <sl-option value=${tt}>
-                <sl-icon
-                  slot="prefix"
-                  name=${TASK_TYPE_ICONS[tt]}
-                  style="color: ${TASK_TYPE_COLORS[tt]}"
-                ></sl-icon>
-                ${TASK_TYPE_LABELS[tt]}
-              </sl-option>
-            `,
-          )}
-        </sl-select>
-
-        ${this._viewMode === "list"
-          ? html`
-              <sl-select
-                placeholder=${t("taskBoard.filterAllStatuses")}
-                size="small"
-                clearable
-                value=${this._filterStatus}
-                @sl-change=${(e: Event) => {
-                  this._filterStatus = (e.target as HTMLSelectElement).value as
-                    | TaskStatus
-                    | "";
-                  this._loadTasks();
-                }}
-              >
-                ${(
-                  ["open", "in_progress", "done", "closed"] as TaskStatus[]
-                ).map(
-                  (s) => html`
-                    <sl-option value=${s}>${STATUS_LABELS[s]}</sl-option>
-                  `,
-                )}
-              </sl-select>
-            `
-          : nothing}
-        ${this.participants.length > 0
-          ? html`
-              <sl-select
-                placeholder=${t("taskBoard.filterAllAssignees")}
-                size="small"
-                clearable
-                value=${this._filterAssignee}
-                @sl-change=${(e: Event) => {
-                  this._filterAssignee = (e.target as HTMLSelectElement).value;
-                }}
-              >
-                ${this.participants.map(
-                  (p) => html`
-                    <sl-option value=${p.id}>
-                      <sl-icon
-                        slot="prefix"
-                        name=${p.participant_type === "agent"
-                          ? "robot"
-                          : "person-fill"}
-                      ></sl-icon>
-                      ${p.display_name}
-                    </sl-option>
-                  `,
-                )}
-              </sl-select>
-            `
-          : nothing}
-
-        <sl-select
-          size="small"
-          value=${this._sortBy}
-          style="min-width: 130px;"
-          @sl-change=${(e: Event) => {
-            this._sortBy = (e.target as HTMLSelectElement).value as any;
-          }}
-        >
-          <sl-icon
-            slot="prefix"
-            name="sort-down"
-            style="font-size: 0.85rem;"
-          ></sl-icon>
-          <sl-option value="created">${t("taskBoard.sortNewest")}</sl-option>
-          <sl-option value="updated"
-            >${t("taskBoard.sortRecentlyUpdated")}</sl-option
-          >
-          <sl-option value="title">${t("taskBoard.sortTitleAZ")}</sl-option>
-          <sl-option value="type">${t("taskBoard.sortType")}</sl-option>
-        </sl-select>
-
-        ${!this._isProjectMode
-          ? html`
-              <sl-tooltip
-                content=${this._showAllProject
-                  ? t("taskBoard.scopeAllTooltip")
-                  : t("taskBoard.scopeSessionTooltip")}
-              >
-                <sl-button
-                  size="small"
-                  variant=${this._showAllProject ? "primary" : "default"}
-                  @click=${() => {
-                    this._showAllProject = !this._showAllProject;
-                    this._loadTasks();
-                  }}
-                  style="white-space: nowrap;"
-                >
-                  <sl-icon
-                    slot="prefix"
-                    name=${this._showAllProject ? "collection" : "collection"}
-                  ></sl-icon>
-                  ${this._showAllProject
-                    ? t("taskBoard.scopeAll")
-                    : t("taskBoard.scopeSession")}
-                </sl-button>
-              </sl-tooltip>
-            `
-          : nothing}
-        ${this._completedCount > 0
-          ? html`
-              <sl-tooltip
-                content=${this._hideCompleted
-                  ? t("taskBoard.showCompleted", {
-                      count: this._completedCount,
-                    })
-                  : t("taskBoard.hideCompleted")}
-              >
-                <sl-button
-                  size="small"
-                  variant=${this._hideCompleted ? "default" : "primary"}
-                  @click=${() => {
-                    this._hideCompleted = !this._hideCompleted;
-                  }}
-                  style="white-space: nowrap;"
-                >
-                  <sl-icon
-                    slot="prefix"
-                    name=${this._hideCompleted ? "eye" : "eye-slash"}
-                  ></sl-icon>
-                  ${this._hideCompleted
-                    ? t("taskBoard.completedDone", {
-                        count: this._completedCount,
-                      })
-                    : t("taskBoard.hideDone")}
-                </sl-button>
-              </sl-tooltip>
-            `
-          : nothing}
-      </div>
-
-      ${this._renderSprintPanel()}
+      ${this._isProjectMode && this._sprintPanelOpen
+        ? html`
+            <task-sprint-panel
+              .tasks=${this._tasks}
+              .sessions=${this.sessions}
+              project-id=${this.projectId}
+              drag-task-id=${this._dragTaskId ?? ""}
+              @sprint-created=${(e: CustomEvent<SprintCreatedDetail>) => {
+                this.sessions = [...this.sessions, e.detail.session];
+              }}
+              @task-sprint-changed=${() => void this._loadTasks()}
+              @sprint-error=${(e: CustomEvent) => {
+                this._error = e.detail.message;
+              }}
+              @sprint-toast=${(e: CustomEvent) => {
+                this._showToast(e.detail.message);
+              }}
+              @drag-consumed=${() => {
+                this._dragTaskId = null;
+              }}
+              @select-task=${(e: CustomEvent) => {
+                this._selectTask(e.detail);
+              }}
+            ></task-sprint-panel>
+          `
+        : nothing}
       ${this._error
         ? html`
             <sl-alert
@@ -1371,7 +940,35 @@ export class TaskBoard extends LitElement {
           : this._viewMode === "board"
             ? this._renderKanban()
             : this._renderTaskList()}
-      ${this._renderCreateDialog()} ${this._renderShortcuts()}
+
+      <task-create-dialog
+        session-code=${this.sessionCode}
+        project-id=${this.projectId}
+        .participants=${this.participants}
+        .tasks=${this._tasks}
+        ?open=${this._showCreateDialog}
+        initial-type=${this._createInitialType}
+        initial-parent-id=${this._createInitialParentId}
+        initial-status=${this._createInitialStatus}
+        @task-created=${(e: CustomEvent<TaskCreatedDetail>) => {
+          void this._loadTasks();
+          this._showToast(t("taskBoard.toast.taskCreated"));
+        }}
+        @close=${() => {
+          this._showCreateDialog = false;
+        }}
+        @create-error=${(e: CustomEvent) => {
+          this._error = e.detail.message;
+        }}
+      ></task-create-dialog>
+
+      <task-shortcuts-dialog
+        ?open=${this._showShortcuts}
+        @close=${() => {
+          this._showShortcuts = false;
+        }}
+      ></task-shortcuts-dialog>
+
       ${this._toastMessage
         ? html`<div class="toast">${this._toastMessage}</div>`
         : nothing}
@@ -1456,32 +1053,32 @@ export class TaskBoard extends LitElement {
         <div class="batch-actions">
           <sl-button
             size="small"
-            @click=${() => this._batchSetStatus("in_progress")}
+            @click=${() => void this._batchSetStatus("in_progress")}
             ?loading=${this._batchLoading}
             >${t("taskBoard.batch.start")}</sl-button
           >
           <sl-button
             size="small"
-            @click=${() => this._batchSetStatus("done")}
+            @click=${() => void this._batchSetStatus("done")}
             ?loading=${this._batchLoading}
             >${t("taskBoard.batch.done")}</sl-button
           >
           <sl-button
             size="small"
-            @click=${() => this._batchSetStatus("closed")}
+            @click=${() => void this._batchSetStatus("closed")}
             ?loading=${this._batchLoading}
             >${t("taskBoard.batch.close")}</sl-button
           >
           <sl-button
             size="small"
-            @click=${() => this._batchSetStatus("open")}
+            @click=${() => void this._batchSetStatus("open")}
             ?loading=${this._batchLoading}
             >${t("taskBoard.batch.reopen")}</sl-button
           >
           <sl-button
             size="small"
             variant="danger"
-            @click=${() => this._batchDelete()}
+            @click=${() => void this._batchDelete()}
             ?loading=${this._batchLoading}
             >${t("taskBoard.batch.delete")}</sl-button
           >
@@ -1490,27 +1087,17 @@ export class TaskBoard extends LitElement {
     `;
   }
 
-  private _toggleGroup(parentId: string) {
-    const next = new Set(this._collapsedGroups);
-    if (next.has(parentId)) {
-      next.delete(parentId);
-    } else {
-      next.add(parentId);
-    }
-    this._collapsedGroups = next;
-  }
-
   private _renderTaskList() {
     const tasks = this._filteredTasks;
     const topLevel = tasks.filter((tk) => !tk.parent_id);
-    const childrenOf = (id: string) =>
+    const childrenOfTask = (id: string) =>
       tasks.filter((tk) => tk.parent_id === id);
 
     return html`
       ${this._renderBatchBar()}
       <div class="task-list">
         ${topLevel.map((task) => {
-          const children = childrenOf(task.id);
+          const children = childrenOfTask(task.id);
           const isCollapsed = this._collapsedGroups.has(task.id);
           const hasChildren = children.length > 0;
           return html`
@@ -1537,7 +1124,9 @@ export class TaskBoard extends LitElement {
       ? getParticipantName(task.assigned_to, this.participants)
       : "";
     const isSelected = this._selectedIds.has(task.id);
-    const [done, total] = hasChildren ? this._childProgress(task.id) : [0, 0];
+    const [done, total] = hasChildren
+      ? childProgress(this._tasks, task.id)
+      : [0, 0];
 
     return html`
       <div
@@ -1651,7 +1240,7 @@ export class TaskBoard extends LitElement {
                 ? html`
                     <sl-menu-item
                       @click=${() =>
-                        this._handleStatusChange(task, "in_progress")}
+                        void this._handleStatusChange(task, "in_progress")}
                     >
                       ${t("taskBoard.action.startWork")}
                     </sl-menu-item>
@@ -1660,7 +1249,8 @@ export class TaskBoard extends LitElement {
               ${task.status !== "done"
                 ? html`
                     <sl-menu-item
-                      @click=${() => this._handleStatusChange(task, "done")}
+                      @click=${() =>
+                        void this._handleStatusChange(task, "done")}
                     >
                       ${t("taskBoard.action.markDone")}
                     </sl-menu-item>
@@ -1669,7 +1259,8 @@ export class TaskBoard extends LitElement {
               ${task.status !== "closed"
                 ? html`
                     <sl-menu-item
-                      @click=${() => this._handleStatusChange(task, "closed")}
+                      @click=${() =>
+                        void this._handleStatusChange(task, "closed")}
                     >
                       ${t("taskBoard.action.close")}
                     </sl-menu-item>
@@ -1678,7 +1269,8 @@ export class TaskBoard extends LitElement {
               ${task.status !== "open"
                 ? html`
                     <sl-menu-item
-                      @click=${() => this._handleStatusChange(task, "open")}
+                      @click=${() =>
+                        void this._handleStatusChange(task, "open")}
                     >
                       ${t("taskBoard.action.reopen")}
                     </sl-menu-item>
@@ -1697,7 +1289,7 @@ export class TaskBoard extends LitElement {
               <sl-divider></sl-divider>
               <sl-menu-item
                 type="checkbox"
-                @click=${() => this._handleDelete(task.id)}
+                @click=${() => void this._handleDelete(task.id)}
               >
                 ${t("taskBoard.action.delete")}
               </sl-menu-item>
@@ -1709,12 +1301,10 @@ export class TaskBoard extends LitElement {
   }
 
   private _renderKanban() {
-    // When hiding completed, only show open + in_progress columns
     const statuses: TaskStatus[] = this._hideCompleted
       ? ["open", "in_progress"]
       : ["open", "in_progress", "done", "closed"];
     const tasks = this._filteredTasks;
-    // In kanban, hide subtasks that have a parent — they show as progress on the parent card
     const kanbanTasks = this._collapseSubtasks
       ? tasks.filter((tk) => !tk.parent_id)
       : tasks;
@@ -1782,7 +1372,7 @@ export class TaskBoard extends LitElement {
     if (!this._dragTaskId) return;
     const task = this._tasks.find((tk) => tk.id === this._dragTaskId);
     if (task && task.status !== newStatus) {
-      this._handleStatusChange(task, newStatus);
+      void this._handleStatusChange(task, newStatus);
     }
     this._dragTaskId = null;
   }
@@ -1793,7 +1383,7 @@ export class TaskBoard extends LitElement {
       ? getParticipantName(task.assigned_to, this.participants)
       : "";
     const [done, total] =
-      task.child_count > 0 ? this._childProgress(task.id) : [0, 0];
+      task.child_count > 0 ? childProgress(this._tasks, task.id) : [0, 0];
     const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
 
     return html`
@@ -1871,417 +1461,6 @@ export class TaskBoard extends LitElement {
                 </span>
               `
             : nothing}
-        </div>
-      </div>
-    `;
-  }
-
-  private _renderSprintPanel() {
-    if (!this._isProjectMode || !this._sprintPanelOpen) return nothing;
-
-    const selectedSession = this.sessions.find(
-      (s) => s.code === this._sprintSessionCode,
-    );
-    const sprintSessionId = selectedSession?.id ?? "";
-    const sprintTasks = sprintSessionId
-      ? this._tasks.filter((tk) => tk.session_ids?.includes(sprintSessionId))
-      : [];
-
-    return html`
-      <div class="sprint-panel">
-        <div class="sprint-panel-header">
-          ${this.sessions.length > 0
-            ? html`
-                <sl-select
-                  placeholder=${t("taskBoard.sprint.selectSession")}
-                  size="small"
-                  clearable
-                  value=${this._sprintSessionCode}
-                  @sl-change=${(e: Event) => {
-                    this._sprintSessionCode = (
-                      e.target as HTMLSelectElement
-                    ).value;
-                  }}
-                >
-                  ${this.sessions.map(
-                    (s) => html`
-                      <sl-option value=${s.code}>${s.name || s.code}</sl-option>
-                    `,
-                  )}
-                </sl-select>
-              `
-            : nothing}
-
-          <sl-input
-            placeholder=${t("taskBoard.sprint.newName")}
-            size="small"
-            value=${this._sprintSessionName}
-            @sl-input=${(e: Event) => {
-              this._sprintSessionName = (e.target as HTMLInputElement).value;
-            }}
-            @keydown=${(e: KeyboardEvent) => {
-              if (e.key === "Enter") void this._createSprint();
-            }}
-          ></sl-input>
-          <sl-button
-            size="small"
-            variant="default"
-            ?loading=${this._sprintCreating}
-            ?disabled=${!this._sprintSessionName.trim()}
-            @click=${() => void this._createSprint()}
-          >
-            ${t("taskBoard.sprint.createSprint")}
-          </sl-button>
-
-          <span style="flex: 1;"></span>
-
-          ${sprintTasks.length > 0
-            ? html`
-                <sl-badge variant="primary" pill
-                  >${t("taskBoard.sprint.taskCount", {
-                    count: sprintTasks.length,
-                    suffix: sprintTasks.length !== 1 ? "s" : "",
-                  })}</sl-badge
-                >
-              `
-            : nothing}
-          ${this._sprintSessionCode
-            ? html`
-                <sl-button
-                  size="small"
-                  variant="primary"
-                  @click=${() => {
-                    navigateTo("/sessions/" + this._sprintSessionCode);
-                  }}
-                >
-                  <sl-icon slot="prefix" name="play-fill"></sl-icon>
-                  ${t("taskBoard.sprint.startSprint")}
-                </sl-button>
-              `
-            : nothing}
-        </div>
-
-        <div
-          class="sprint-drop-zone"
-          @dragover=${(e: DragEvent) => {
-            if (!this._sprintSessionCode) return;
-            e.preventDefault();
-            (e.currentTarget as HTMLElement).classList.add("drag-over");
-          }}
-          @dragleave=${(e: DragEvent) => {
-            (e.currentTarget as HTMLElement).classList.remove("drag-over");
-          }}
-          @drop=${(e: DragEvent) => {
-            e.preventDefault();
-            (e.currentTarget as HTMLElement).classList.remove("drag-over");
-            void this._handleSprintDrop();
-          }}
-        >
-          ${!this._sprintSessionCode
-            ? html`
-                <div class="sprint-drop-zone-empty">
-                  ${t("taskBoard.sprint.selectFirst")}
-                </div>
-              `
-            : sprintTasks.length === 0
-              ? html`
-                  <div class="sprint-drop-zone-empty">
-                    ${t("taskBoard.sprint.dragHint")}
-                  </div>
-                `
-              : sprintTasks.map(
-                  (task) => html`
-                    <div
-                      class="sprint-task-chip"
-                      @click=${() => {
-                        this._selectTask(task.id);
-                      }}
-                    >
-                      <sl-icon
-                        name=${TASK_TYPE_ICONS[task.task_type]}
-                        style="color: ${TASK_TYPE_COLORS[
-                          task.task_type
-                        ]}; font-size: 0.75rem;"
-                      ></sl-icon>
-                      <span>${task.ticket_id}</span>
-                      <span
-                        style="max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-                        >${task.title}</span
-                      >
-                      <span
-                        class="remove-btn"
-                        @click=${(e: Event) => {
-                          e.stopPropagation();
-                          void this._removeFromSprint(task.id);
-                        }}
-                      >
-                        <sl-icon name="x-lg"></sl-icon>
-                      </span>
-                    </div>
-                  `,
-                )}
-        </div>
-      </div>
-    `;
-  }
-
-  private async _handleSprintDrop() {
-    if (!this._dragTaskId || !this._sprintSessionCode) return;
-    try {
-      await addTasksToSession(this._sprintSessionCode, [this._dragTaskId]);
-      this._showToast(t("taskBoard.toast.addedToSprint"));
-      await this._loadTasks();
-    } catch (err) {
-      this._error =
-        err instanceof Error ? err.message : t("taskBoard.sprint.errorAdd");
-    }
-    this._dragTaskId = null;
-  }
-
-  private async _removeFromSprint(taskId: string) {
-    if (!this._sprintSessionCode) return;
-    try {
-      await removeTaskFromSession(this._sprintSessionCode, taskId);
-      this._showToast(t("taskBoard.toast.removedFromSprint"));
-      await this._loadTasks();
-    } catch (err) {
-      this._error =
-        err instanceof Error ? err.message : t("taskBoard.sprint.errorRemove");
-    }
-  }
-
-  private async _createSprint() {
-    this._sprintCreating = true;
-    try {
-      const data = await createSession({
-        project_id: this.projectId,
-        name: this._sprintSessionName.trim(),
-      });
-      this.sessions = [
-        ...this.sessions,
-        {
-          code: data.session.code,
-          name: data.session.name,
-          id: data.session.id,
-        },
-      ];
-      this._sprintSessionCode = data.session.code;
-      this._sprintSessionName = "";
-      this._showToast(t("taskBoard.toast.sprintCreated"));
-    } catch (err) {
-      this._error =
-        err instanceof Error ? err.message : t("taskBoard.errorSprint");
-    } finally {
-      this._sprintCreating = false;
-    }
-  }
-
-  private _renderCreateDialog() {
-    // Compute available parent tasks (epics, stories, and tasks can have children)
-    const parentCandidates = this._tasks.filter(
-      (tk) =>
-        tk.task_type === "epic" ||
-        tk.task_type === "story" ||
-        tk.task_type === "task",
-    );
-
-    return html`
-      <sl-dialog
-        label=${t("taskBoard.create.title")}
-        ?open=${this._showCreateDialog}
-        @sl-request-close=${() => {
-          this._showCreateDialog = false;
-        }}
-        @sl-after-show=${() => {
-          const input = this.shadowRoot?.querySelector(
-            ".create-form sl-input",
-          ) as HTMLElement | null;
-          input?.focus();
-        }}
-      >
-        <div class="create-form">
-          <sl-select
-            label=${t("taskBoard.create.typeLabel")}
-            value=${this._createType}
-            @sl-change=${(e: Event) => {
-              this._createType = (e.target as HTMLSelectElement)
-                .value as TaskType;
-            }}
-          >
-            ${(["epic", "story", "task", "subtask", "bug"] as TaskType[]).map(
-              (tt) => html`
-                <sl-option value=${tt}>
-                  <sl-icon
-                    slot="prefix"
-                    name=${TASK_TYPE_ICONS[tt]}
-                    style="color: ${TASK_TYPE_COLORS[tt]}"
-                  ></sl-icon>
-                  ${TASK_TYPE_LABELS[tt]}
-                </sl-option>
-              `,
-            )}
-          </sl-select>
-
-          <sl-input
-            label=${t("taskBoard.create.titleLabel")}
-            placeholder=${t("taskBoard.create.titlePlaceholder")}
-            value=${this._createTitle}
-            @sl-input=${(e: Event) => {
-              this._createTitle = (e.target as HTMLInputElement).value;
-            }}
-            @keydown=${(e: KeyboardEvent) => {
-              if (e.key === "Enter") this._handleCreate();
-            }}
-          ></sl-input>
-
-          <sl-textarea
-            label=${t("taskBoard.create.descLabel")}
-            placeholder=${t("taskBoard.create.descPlaceholder")}
-            value=${this._createDescription}
-            @sl-input=${(e: Event) => {
-              this._createDescription = (e.target as HTMLTextAreaElement).value;
-            }}
-            rows="3"
-          ></sl-textarea>
-
-          ${this.participants.length > 0
-            ? html`
-                <sl-select
-                  label=${t("taskBoard.create.assigneeLabel")}
-                  placeholder=${t("taskBoard.create.unassigned")}
-                  clearable
-                  value=${this._createAssignee}
-                  @sl-change=${(e: Event) => {
-                    this._createAssignee = (
-                      e.target as HTMLSelectElement
-                    ).value;
-                  }}
-                >
-                  ${this.participants.map(
-                    (p) => html`
-                      <sl-option value=${p.id}>
-                        <sl-icon
-                          slot="prefix"
-                          name=${p.participant_type === "agent"
-                            ? "robot"
-                            : "person-fill"}
-                        ></sl-icon>
-                        ${p.display_name}
-                      </sl-option>
-                    `,
-                  )}
-                </sl-select>
-              `
-            : nothing}
-
-          <div style="display: flex; gap: 0.75rem;">
-            <sl-select
-              label=${t("taskBoard.create.priorityLabel")}
-              value=${this._createPriority}
-              @sl-change=${(e: Event) => {
-                this._createPriority = (e.target as HTMLSelectElement)
-                  .value as TaskPriority;
-              }}
-              style="flex: 1;"
-            >
-              ${(["critical", "high", "medium", "low"] as const).map(
-                (p) => html`
-                  <sl-option value=${p}>
-                    <sl-icon
-                      slot="prefix"
-                      name=${PRIORITY_ICONS[p]}
-                      style="color: ${PRIORITY_COLORS[p]}"
-                    ></sl-icon>
-                    ${PRIORITY_LABELS[p]}
-                  </sl-option>
-                `,
-              )}
-            </sl-select>
-
-            <sl-select
-              label=${t("taskBoard.create.complexityLabel")}
-              value=${this._createComplexity}
-              @sl-change=${(e: Event) => {
-                this._createComplexity = (e.target as HTMLSelectElement)
-                  .value as TaskComplexity;
-              }}
-              style="flex: 1;"
-            >
-              ${(["trivial", "small", "medium", "large", "xl"] as const).map(
-                (c) => html`
-                  <sl-option value=${c}>${COMPLEXITY_LABELS[c]}</sl-option>
-                `,
-              )}
-            </sl-select>
-          </div>
-
-          ${parentCandidates.length > 0
-            ? html`
-                <sl-select
-                  label=${t("taskBoard.create.parentLabel")}
-                  placeholder=${t("taskBoard.create.parentNone")}
-                  clearable
-                  value=${this._createParentId}
-                  @sl-change=${(e: Event) => {
-                    this._createParentId = (
-                      e.target as HTMLSelectElement
-                    ).value;
-                  }}
-                >
-                  ${parentCandidates.map(
-                    (pc) => html`
-                      <sl-option value=${pc.id}>
-                        <sl-icon
-                          slot="prefix"
-                          name=${TASK_TYPE_ICONS[pc.task_type]}
-                        ></sl-icon>
-                        ${pc.title}
-                      </sl-option>
-                    `,
-                  )}
-                </sl-select>
-              `
-            : nothing}
-        </div>
-
-        <sl-button
-          slot="footer"
-          variant="primary"
-          ?loading=${this._createLoading}
-          @click=${() => this._handleCreate()}
-          >${t("taskBoard.create.submit")}</sl-button
-        >
-      </sl-dialog>
-    `;
-  }
-
-  private _renderShortcuts() {
-    if (!this._showShortcuts) return nothing;
-    return html`
-      <div
-        class="shortcuts-overlay"
-        @click=${() => {
-          this._showShortcuts = false;
-        }}
-      >
-        <div class="shortcuts-card" @click=${(e: Event) => e.stopPropagation()}>
-          <h3>${t("taskBoard.shortcuts.title")}</h3>
-          <div class="shortcut-row">
-            <span>${t("taskBoard.shortcuts.newTask")}</span
-            ><span class="shortcut-key">N</span>
-          </div>
-          <div class="shortcut-row">
-            <span>${t("taskBoard.shortcuts.search")}</span
-            ><span class="shortcut-key">/</span>
-          </div>
-          <div class="shortcut-row">
-            <span>${t("taskBoard.shortcuts.escape")}</span
-            ><span class="shortcut-key">Esc</span>
-          </div>
-          <div class="shortcut-row">
-            <span>${t("taskBoard.shortcuts.help")}</span
-            ><span class="shortcut-key">?</span>
-          </div>
         </div>
       </div>
     `;
