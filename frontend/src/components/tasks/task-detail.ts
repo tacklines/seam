@@ -1,39 +1,49 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, state, property } from 'lit/decorators.js';
-import '../shared/markdown-content.js';
-import { fetchTask, fetchProjectTask, fetchTasks, updateTask, deleteTask, addComment, addDependency, removeDependency, fetchActivity, type ActivityEvent } from '../../state/task-api.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, state, property } from "lit/decorators.js";
+import "./task-description.js";
+import "./task-comment-thread.js";
+import "./task-metadata-panel.js";
+import "./task-dependencies.js";
 import {
-  type TaskDetailView, type TaskStatus, type TaskType, type TaskPriority, type TaskComplexity,
-  TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
-  STATUS_LABELS, STATUS_VARIANTS,
-  PRIORITY_LABELS, PRIORITY_ICONS, PRIORITY_COLORS,
-  COMPLEXITY_LABELS,
-} from '../../state/task-types.js';
-import { store, type SessionParticipant } from '../../state/app-state.js';
-import { t } from '../../lib/i18n.js';
-import { formatDate, relativeTime } from '../../lib/date-utils.js';
-import { getParticipantName } from '../../lib/participant-utils.js';
+  fetchTask,
+  fetchProjectTask,
+  fetchTasks,
+  updateTask,
+  deleteTask,
+  addComment,
+  addDependency,
+  removeDependency,
+  fetchActivity,
+  type ActivityEvent,
+} from "../../state/task-api.js";
+import {
+  type TaskDetailView,
+  TASK_TYPE_ICONS,
+  TASK_TYPE_COLORS,
+  STATUS_LABELS,
+  STATUS_VARIANTS,
+} from "../../state/task-types.js";
+import { store, type SessionParticipant } from "../../state/app-state.js";
+import { t } from "../../lib/i18n.js";
 
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/input/input.js';
-import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
-import '@shoelace-style/shoelace/dist/components/select/select.js';
-import '@shoelace-style/shoelace/dist/components/option/option.js';
-import '@shoelace-style/shoelace/dist/components/divider/divider.js';
-import '@shoelace-style/shoelace/dist/components/alert/alert.js';
-import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
-import '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
-import '@shoelace-style/shoelace/dist/components/menu/menu.js';
-import '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js';
+import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
+import "@shoelace-style/shoelace/dist/components/input/input.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
 
-@customElement('task-detail')
+@customElement("task-detail")
 export class TaskDetail extends LitElement {
   static styles = css`
-    :host { display: block; }
+    :host {
+      display: block;
+    }
 
     /* ── Header card ── */
     .header-card {
@@ -50,7 +60,9 @@ export class TaskDetail extends LitElement {
       gap: 0.75rem;
     }
 
-    .back-btn { flex-shrink: 0; }
+    .back-btn {
+      flex-shrink: 0;
+    }
 
     .header-title-area {
       flex: 1;
@@ -60,7 +72,10 @@ export class TaskDetail extends LitElement {
       gap: 0.75rem;
     }
 
-    .type-icon { font-size: 1.25rem; flex-shrink: 0; }
+    .type-icon {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
 
     .title-display {
       font-size: 1.25rem;
@@ -115,7 +130,9 @@ export class TaskDetail extends LitElement {
       text-decoration: underline;
     }
 
-    .parent-breadcrumb sl-icon { font-size: 0.75rem; }
+    .parent-breadcrumb sl-icon {
+      font-size: 0.75rem;
+    }
 
     /* ── Two-column layout ── */
     .body-layout {
@@ -134,119 +151,22 @@ export class TaskDetail extends LitElement {
       min-width: 0;
     }
 
-    /* ── Sidebar ── */
-    .sidebar {
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-    }
-
-    .sidebar-heading {
-      font-size: 0.7rem;
-      font-weight: 600;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      padding: 0 0.5rem;
-      margin-bottom: 0.25rem;
-    }
-
-    .meta-row {
+    /* ── Blocked banner ── */
+    .blocked-banner {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 0.4rem 0.5rem;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: rgba(var(--sl-color-warning-500-rgb, 245, 158, 11), 0.1);
+      border: 1px solid var(--sl-color-warning-500);
       border-radius: 6px;
-      font-size: 0.8rem;
-      transition: background 0.15s;
-      cursor: default;
+      font-size: 0.85rem;
+      color: var(--sl-color-warning-500);
+      margin-bottom: 1rem;
     }
 
-    .meta-row:hover {
-      background: var(--surface-card-hover);
-    }
-
-    .meta-row.editable {
-      cursor: pointer;
-    }
-
-    .meta-row.editable:hover .edit-pencil {
-      opacity: 1;
-    }
-
-    .meta-label {
-      color: var(--text-tertiary);
-      font-weight: 500;
-    }
-
-    .meta-value {
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-    }
-
-    .edit-pencil {
-      opacity: 0;
-      font-size: 0.7rem;
-      color: var(--text-tertiary);
-      transition: opacity 0.15s;
-    }
-
-    .commit-sha {
-      font-family: var(--sl-font-mono);
-      font-size: 0.75rem;
-      background: var(--surface-card);
-      padding: 0.1rem 0.35rem;
-      border-radius: 4px;
-    }
-
-    .commit-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.25rem;
-      align-items: center;
-    }
-
-    .commit-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.2rem;
-      font-family: var(--sl-font-mono);
-      font-size: 0.7rem;
-      background: var(--surface-card);
-      padding: 0.1rem 0.35rem;
-      border-radius: 4px;
-      border: 1px solid var(--sl-color-neutral-200);
-    }
-
-    .commit-chip .remove {
-      cursor: pointer;
-      opacity: 0.5;
-      font-size: 0.6rem;
-    }
-    .commit-chip .remove:hover { opacity: 1; }
-
-    .provenance-link {
-      font-size: 0.75rem;
-      color: var(--sl-color-purple-400);
-      cursor: pointer;
-      text-decoration: none;
-    }
-    .provenance-link:hover { text-decoration: underline; }
-
-    .link-action {
-      font-size: 0.75rem;
-      color: var(--sl-color-primary-400);
-      cursor: pointer;
-    }
-
-    .link-action:hover {
-      text-decoration: underline;
-    }
-
-    /* ── Description ── */
-    .description-section {
+    /* ── Children ── */
+    .children-section {
       margin-bottom: 1.25rem;
     }
 
@@ -257,48 +177,6 @@ export class TaskDetail extends LitElement {
       text-transform: uppercase;
       letter-spacing: 0.05em;
       margin-bottom: 0.5rem;
-    }
-
-    .description-content {
-      color: var(--text-secondary);
-      line-height: 1.6;
-      font-size: 0.9rem;
-      padding: 0.75rem 0.75rem 0.75rem 1rem;
-      background: var(--surface-card);
-      border-radius: 6px;
-      border-left: 3px solid var(--sl-color-primary-500);
-      cursor: default;
-      position: relative;
-    }
-
-    .description-content:hover {
-      border-left-color: var(--sl-color-primary-400);
-    }
-
-    .description-content:hover .edit-hint {
-      display: inline;
-    }
-
-
-    .no-description {
-      color: var(--text-tertiary);
-      font-style: italic;
-      font-size: 0.85rem;
-      cursor: pointer;
-      padding: 0.5rem;
-      border-radius: 6px;
-      border: 1px dashed var(--border-subtle);
-      text-align: center;
-    }
-
-    .no-description:hover {
-      background: var(--surface-card);
-      border-color: var(--border-medium);
-    }
-
-    /* ── Children ── */
-    .children-section {
-      margin-bottom: 1.25rem;
     }
 
     .child-list {
@@ -317,7 +195,9 @@ export class TaskDetail extends LitElement {
       border-radius: 6px;
       font-size: 0.875rem;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
+      transition:
+        background 0.15s,
+        border-color 0.15s;
     }
 
     .child-item:hover {
@@ -329,175 +209,6 @@ export class TaskDetail extends LitElement {
       flex: 1;
       color: var(--text-primary);
       font-weight: 500;
-    }
-
-    /* ── Dependencies ── */
-    .dep-section {
-      margin-bottom: 1.25rem;
-    }
-
-    .dep-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-    }
-
-    .dep-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.4rem 0.75rem;
-      background: var(--surface-card);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .dep-item:hover {
-      background: var(--surface-card-hover);
-    }
-
-    .dep-item .dep-title {
-      flex: 1;
-      color: var(--text-primary);
-      font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .dep-item .remove-dep {
-      opacity: 0;
-      transition: opacity 0.15s;
-    }
-
-    .dep-item:hover .remove-dep {
-      opacity: 1;
-    }
-
-    .blocked-banner {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 0.75rem;
-      background: rgba(var(--sl-color-warning-500-rgb, 245, 158, 11), 0.1);
-      border: 1px solid var(--sl-color-warning-500);
-      border-radius: 6px;
-      font-size: 0.85rem;
-      color: var(--sl-color-warning-500);
-      margin-bottom: 1rem;
-    }
-
-    .dep-add-row {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-      margin-top: 0.5rem;
-    }
-
-    /* ── Comments ── */
-    .comments-section {
-      margin-bottom: 1rem;
-    }
-
-    .comment-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-    }
-
-    .comment {
-      padding: 0.75rem;
-      background: var(--surface-card);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-    }
-
-    .comment-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 0.35rem;
-    }
-
-    .comment-author {
-      font-weight: 600;
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-    }
-
-    .comment-time {
-      font-size: 0.75rem;
-      color: var(--text-tertiary);
-    }
-
-    .comment-content {
-      color: var(--text-primary);
-      font-size: 0.875rem;
-      line-height: 1.5;
-    }
-
-
-    /* ── Collapsed comment input ── */
-    .comment-input-collapsed {
-      padding: 0.5rem 0.75rem;
-      background: var(--surface-card);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      color: var(--text-tertiary);
-      font-size: 0.85rem;
-      cursor: text;
-      transition: border-color 0.15s;
-    }
-
-    .comment-input-collapsed:hover {
-      border-color: var(--border-medium);
-      color: var(--text-secondary);
-    }
-
-    .add-comment {
-      display: flex;
-      gap: 0.5rem;
-      align-items: flex-end;
-    }
-
-    .add-comment sl-textarea {
-      flex: 1;
-    }
-
-    /* ── Activity events ── */
-    .activity-event {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.5rem;
-      padding: 0.35rem 0.75rem;
-      font-size: 0.8rem;
-      color: var(--text-tertiary);
-    }
-
-    .activity-event sl-icon {
-      font-size: 0.75rem;
-      margin-top: 0.15rem;
-      flex-shrink: 0;
-    }
-
-    .activity-summary {
-      flex: 1;
-      line-height: 1.4;
-    }
-
-    .activity-actor {
-      color: var(--text-secondary);
-      font-weight: 500;
-    }
-
-    .activity-time {
-      font-size: 0.7rem;
-      white-space: nowrap;
-      flex-shrink: 0;
     }
 
     /* ── Misc ── */
@@ -515,26 +226,35 @@ export class TaskDetail extends LitElement {
       height: 0.7rem;
       color: var(--text-tertiary);
     }
+
+    .no-description {
+      color: var(--text-tertiary);
+      font-style: italic;
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 6px;
+      border: 1px dashed var(--border-subtle);
+      text-align: center;
+    }
   `;
 
-  @property({ type: String, attribute: 'session-code' }) sessionCode = '';
-  @property({ type: String, attribute: 'project-id' }) projectId = '';
-  @property({ type: String, attribute: 'task-id' }) taskId = '';
+  @property({ type: String, attribute: "session-code" }) sessionCode = "";
+  @property({ type: String, attribute: "project-id" }) projectId = "";
+  @property({ type: String, attribute: "task-id" }) taskId = "";
   @property({ type: Boolean }) readonly = false;
   @property({ type: Array }) participants: SessionParticipant[] = [];
 
   @state() private _task: TaskDetailView | null = null;
   @state() private _loading = true;
-  @state() private _error = '';
-  @state() private _commentText = '';
-  @state() private _commentLoading = false;
-  @state() private _commentExpanded = false;
+  @state() private _error = "";
   @state() private _editingTitle = false;
-  @state() private _editingDescription = false;
-  @state() private _editingField: string | null = null; // 'type' | 'status' | 'assignee' | 'commit'
   @state() private _activity: ActivityEvent[] = [];
-  @state() private _addingBlocker = false;
-  @state() private _allTasks: { id: string; ticket_id: string; title: string }[] = [];
+  @state() private _allTasks: {
+    id: string;
+    ticket_id: string;
+    title: string;
+  }[] = [];
 
   private _storeUnsub: (() => void) | null = null;
 
@@ -542,7 +262,7 @@ export class TaskDetail extends LitElement {
     super.connectedCallback();
     this._loadTask();
     this._storeUnsub = store.subscribe((event) => {
-      if (event.type === 'tasks-changed') {
+      if (event.type === "tasks-changed") {
         this._loadTask();
       }
     });
@@ -555,7 +275,7 @@ export class TaskDetail extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('taskId') && this.taskId) {
+    if (changed.has("taskId") && this.taskId) {
       this._loadTask();
     }
   }
@@ -563,25 +283,29 @@ export class TaskDetail extends LitElement {
   private async _loadTask() {
     if ((!this.sessionCode && !this.projectId) || !this.taskId) return;
     this._loading = true;
-    this._error = '';
+    this._error = "";
     try {
       const taskPromise = this.sessionCode
         ? fetchTask(this.sessionCode, this.taskId)
         : fetchProjectTask(this.projectId, this.taskId);
       const activityPromise = this.sessionCode
-        ? fetchActivity(this.sessionCode, { target_id: this.taskId }).catch(() => [] as ActivityEvent[])
+        ? fetchActivity(this.sessionCode, {
+            target_id: this.taskId,
+          }).catch(() => [] as ActivityEvent[])
         : Promise.resolve([] as ActivityEvent[]);
-      const [task, activity] = await Promise.all([taskPromise, activityPromise]);
+      const [task, activity] = await Promise.all([
+        taskPromise,
+        activityPromise,
+      ]);
       this._task = task;
       this._activity = activity;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('taskDetail.errorLoad');
+      this._error =
+        err instanceof Error ? err.message : t("taskDetail.errorLoad");
     } finally {
       this._loading = false;
     }
   }
-
-
 
   private async _updateField(fields: Record<string, unknown>) {
     if (!this._task) return;
@@ -589,101 +313,163 @@ export class TaskDetail extends LitElement {
       await updateTask(this.sessionCode, this._task.id, fields);
       await this._loadTask();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('taskDetail.errorUpdate');
+      this._error =
+        err instanceof Error ? err.message : t("taskDetail.errorUpdate");
     }
-  }
-
-  private async _addCommit(sha: string) {
-    if (!this._task) return;
-    const hashes = [...this._task.commit_hashes, sha];
-    await this._updateField({ commit_hashes: hashes });
-  }
-
-  private async _removeCommit(sha: string) {
-    if (!this._task) return;
-    const hashes = this._task.commit_hashes.filter((h: string) => h !== sha);
-    await this._updateField({ commit_hashes: hashes });
-  }
-
-  private _navigateToTask(taskId: string) {
-    this.dispatchEvent(new CustomEvent('navigate-task', { detail: taskId, bubbles: true, composed: true }));
   }
 
   private async _handleDelete() {
     if (!this._task) return;
     try {
       await deleteTask(this.sessionCode, this._task.id);
-      this.dispatchEvent(new CustomEvent('deleted'));
+      this.dispatchEvent(new CustomEvent("deleted"));
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('taskDetail.errorDelete');
+      this._error =
+        err instanceof Error ? err.message : t("taskDetail.errorDelete");
     }
   }
 
-  private _getCurrentParticipantId(): string | null {
-    return store.get().sessionState?.participantId ?? null;
-  }
-
-  private async _claimTask() {
-    if (!this._task) return;
-    const pid = this._getCurrentParticipantId();
-    if (!pid) return;
-    await this._updateField({ assigned_to: pid });
-  }
-
-  private async _unclaimTask() {
-    if (!this._task) return;
-    await this._updateField({ assigned_to: null });
-  }
-
-  private _renderClaimButton(task: TaskDetailView) {
-    const currentPid = this._getCurrentParticipantId();
-    if (!currentPid) return nothing;
-
-    if (!task.assigned_to) {
-      return html`
-        <sl-button size="small" variant="primary" outline style="width: 100%; margin-top: 0.25rem;"
-          @click=${this._claimTask}>
-          <sl-icon slot="prefix" name="hand-index-thumb"></sl-icon>
-          ${t('taskBoard.sidebar.claim')}
-        </sl-button>`;
-    }
-
-    if (task.assigned_to === currentPid) {
-      return html`
-        <sl-button size="small" variant="neutral" outline style="width: 100%; margin-top: 0.25rem;"
-          @click=${this._unclaimTask}>
-          <sl-icon slot="prefix" name="x-circle"></sl-icon>
-          ${t('taskBoard.sidebar.unclaim')}
-        </sl-button>`;
-    }
-
-    return nothing;
-  }
-
-  private async _handleAddComment() {
-    if (!this._task || !this._commentText.trim()) return;
-    this._commentLoading = true;
+  private async _handleAddComment(text: string) {
+    if (!this._task || !text) return;
     try {
-      await addComment(this.sessionCode, this._task.id, this._commentText.trim());
-      this._commentText = '';
-      this._commentExpanded = false;
+      await addComment(this.sessionCode, this._task.id, text);
       await this._loadTask();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('taskDetail.errorComment');
-    } finally {
-      this._commentLoading = false;
+      this._error =
+        err instanceof Error ? err.message : t("taskDetail.errorComment");
     }
+  }
+
+  private async _handleAddBlocker(blockerId: string) {
+    if (!this._task) return;
+    try {
+      await addDependency(this.sessionCode, blockerId, this._task.id);
+      await this._loadTask();
+    } catch (err) {
+      this._error =
+        err instanceof Error ? err.message : t("taskDetail.errorAddDep");
+    }
+  }
+
+  private async _handleRemoveBlocker(blockerId: string) {
+    if (!this._task) return;
+    try {
+      await removeDependency(this.sessionCode, blockerId, this._task.id);
+      await this._loadTask();
+    } catch (err) {
+      this._error =
+        err instanceof Error ? err.message : t("taskDetail.errorRemoveDep");
+    }
+  }
+
+  private async _handleRemoveBlocks(blockedId: string) {
+    if (!this._task) return;
+    try {
+      await removeDependency(this.sessionCode, this._task.id, blockedId);
+      await this._loadTask();
+    } catch (err) {
+      this._error =
+        err instanceof Error ? err.message : t("taskDetail.errorRemoveDep");
+    }
+  }
+
+  private async _loadAllTasks() {
+    if (this._allTasks.length > 0) return;
+    try {
+      const tasks = await fetchTasks(this.sessionCode);
+      this._allTasks = tasks.map((tk) => ({
+        id: tk.id,
+        ticket_id: tk.ticket_id,
+        title: tk.title,
+      }));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private _renderChildren(task: TaskDetailView) {
+    return html`
+      <div class="children-section">
+        <div
+          class="section-heading"
+          style="display: flex; align-items: center; justify-content: space-between;"
+        >
+          <span
+            >${t("taskDetail.childrenCount", {
+              count: task.children.length,
+            })}</span
+          >
+          <sl-button
+            size="small"
+            variant="text"
+            @click=${() =>
+              this.dispatchEvent(
+                new CustomEvent("create-child", { detail: task.id }),
+              )}
+          >
+            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+            ${t("taskDetail.add")}
+          </sl-button>
+        </div>
+        ${task.children.length > 0
+          ? html`
+              <div class="child-list">
+                ${task.children.map(
+                  (child) => html`
+                    <div
+                      class="child-item"
+                      @click=${() =>
+                        this.dispatchEvent(
+                          new CustomEvent("navigate-task", {
+                            detail: child.id,
+                          }),
+                        )}
+                    >
+                      <sl-icon
+                        name=${TASK_TYPE_ICONS[child.task_type]}
+                        style="color: ${TASK_TYPE_COLORS[child.task_type]}"
+                      ></sl-icon>
+                      <span
+                        style="font-family: var(--sl-font-mono); opacity: 0.7; font-size: 0.8rem;"
+                        >${child.ticket_id}</span
+                      >
+                      <span class="child-title">${child.title}</span>
+                      <sl-badge
+                        variant=${STATUS_VARIANTS[child.status] as string}
+                        pill
+                        size="small"
+                      >
+                        ${STATUS_LABELS[child.status]}
+                      </sl-badge>
+                    </div>
+                  `,
+                )}
+              </div>
+            `
+          : html`
+              <span
+                class="no-description"
+                style="cursor: default; border: none; padding: 0.25rem;"
+                >${t("taskDetail.noChildren")}</span
+              >
+            `}
+      </div>
+    `;
   }
 
   render() {
     if (this._loading) {
-      return html`<div class="loading"><sl-spinner style="font-size: 2rem;"></sl-spinner></div>`;
+      return html`<div class="loading">
+        <sl-spinner style="font-size: 2rem;"></sl-spinner>
+      </div>`;
     }
 
     if (!this._task) {
       return html`
-        <sl-alert variant="danger" open>${t('taskDetail.notFound')}</sl-alert>
-        <sl-button @click=${() => this.dispatchEvent(new CustomEvent('back'))}>${t('taskDetail.back')}</sl-button>
+        <sl-alert variant="danger" open>${t("taskDetail.notFound")}</sl-alert>
+        <sl-button @click=${() => this.dispatchEvent(new CustomEvent("back"))}
+          >${t("taskDetail.back")}</sl-button
+        >
       `;
     }
 
@@ -691,32 +477,64 @@ export class TaskDetail extends LitElement {
     const typeColor = TASK_TYPE_COLORS[task.task_type];
 
     return html`
-      ${this._error ? html`
-        <sl-alert variant="danger" open closable @sl-after-hide=${() => { this._error = ''; }} style="margin-bottom: 1rem;">
-          ${this._error}
-        </sl-alert>
-      ` : nothing}
-
-      ${task.parent ? html`
-        <div class="parent-breadcrumb"
-          @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: task.parent!.id }))}
-        >
-          <sl-icon name=${TASK_TYPE_ICONS[task.parent.task_type]} style="color: ${TASK_TYPE_COLORS[task.parent.task_type]}"></sl-icon>
-          <span style="font-family: var(--sl-font-mono); opacity: 0.7;">${task.parent.ticket_id}</span>
-          ${task.parent.title}
-        </div>
-      ` : nothing}
+      ${this._error
+        ? html`
+            <sl-alert
+              variant="danger"
+              open
+              closable
+              @sl-after-hide=${() => {
+                this._error = "";
+              }}
+              style="margin-bottom: 1rem;"
+            >
+              ${this._error}
+            </sl-alert>
+          `
+        : nothing}
+      ${task.parent
+        ? html`
+            <div
+              class="parent-breadcrumb"
+              @click=${() =>
+                this.dispatchEvent(
+                  new CustomEvent("navigate-task", {
+                    detail: task.parent!.id,
+                  }),
+                )}
+            >
+              <sl-icon
+                name=${TASK_TYPE_ICONS[task.parent.task_type]}
+                style="color: ${TASK_TYPE_COLORS[task.parent.task_type]}"
+              ></sl-icon>
+              <span style="font-family: var(--sl-font-mono); opacity: 0.7;"
+                >${task.parent.ticket_id}</span
+              >
+              ${task.parent.title}
+            </div>
+          `
+        : nothing}
 
       <!-- Header card -->
       <div class="header-card">
         <div class="header-top">
-          <sl-icon-button class="back-btn" name="arrow-left" label=${t('taskDetail.back')}
-            @click=${() => this.dispatchEvent(new CustomEvent('back'))}
+          <sl-icon-button
+            class="back-btn"
+            name="arrow-left"
+            label=${t("taskDetail.back")}
+            @click=${() => this.dispatchEvent(new CustomEvent("back"))}
           ></sl-icon-button>
 
           <div class="header-title-area">
-            <sl-icon class="type-icon" name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
-            <span style="font-family: var(--sl-font-mono); color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap;">${task.ticket_id}</span>
+            <sl-icon
+              class="type-icon"
+              name=${TASK_TYPE_ICONS[task.task_type]}
+              style="color: ${typeColor}"
+            ></sl-icon>
+            <span
+              style="font-family: var(--sl-font-mono); color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap;"
+              >${task.ticket_id}</span
+            >
             ${this._editingTitle
               ? html`<sl-input
                   value=${task.title}
@@ -724,58 +542,103 @@ export class TaskDetail extends LitElement {
                   style="flex: 1;"
                   @sl-change=${(e: Event) => {
                     const val = (e.target as HTMLInputElement).value.trim();
-                    if (val && val !== task.title) this._updateField({ title: val });
+                    if (val && val !== task.title)
+                      void this._updateField({ title: val });
                     this._editingTitle = false;
                   }}
-                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingTitle = false; }}
+                  @keydown=${(e: KeyboardEvent) => {
+                    if (e.key === "Escape") this._editingTitle = false;
+                  }}
                 ></sl-input>`
-              : html`<h2 class="title-display" @click=${() => { this._editingTitle = true; }}>
-                  ${task.title}<sl-icon class="edit-hint" name="pencil"></sl-icon>
-                </h2>`
-            }
+              : html`<h2
+                  class="title-display"
+                  @click=${() => {
+                    this._editingTitle = true;
+                  }}
+                >
+                  ${task.title}<sl-icon
+                    class="edit-hint"
+                    name="pencil"
+                  ></sl-icon>
+                </h2>`}
           </div>
 
           <div class="header-actions">
-            <sl-badge variant=${STATUS_VARIANTS[task.status] as any} pill>
+            <sl-badge variant=${STATUS_VARIANTS[task.status] as string} pill>
               ${STATUS_LABELS[task.status]}
             </sl-badge>
 
             <sl-dropdown>
-              <sl-icon-button slot="trigger" name="three-dots-vertical" label=${t('taskBoard.action.actions')}></sl-icon-button>
+              <sl-icon-button
+                slot="trigger"
+                name="three-dots-vertical"
+                label=${t("taskBoard.action.actions")}
+              ></sl-icon-button>
               <sl-menu>
-                ${task.status !== 'in_progress' ? html`
-                  <sl-menu-item @click=${() => this._updateField({ status: 'in_progress' })}>
-                    <sl-icon slot="prefix" name="play-fill"></sl-icon>
-                    ${t('taskDetail.startWork')}
-                  </sl-menu-item>
-                ` : nothing}
-                ${task.status !== 'done' ? html`
-                  <sl-menu-item @click=${() => this._updateField({ status: 'done' })}>
-                    <sl-icon slot="prefix" name="check-lg"></sl-icon>
-                    ${t('taskDetail.markDone')}
-                  </sl-menu-item>
-                ` : nothing}
-                ${task.status !== 'closed' ? html`
-                  <sl-menu-item @click=${() => this._updateField({ status: 'closed' })}>
-                    <sl-icon slot="prefix" name="x-circle"></sl-icon>
-                    ${t('taskDetail.close')}
-                  </sl-menu-item>
-                ` : nothing}
-                ${task.status !== 'open' ? html`
-                  <sl-menu-item @click=${() => this._updateField({ status: 'open' })}>
-                    <sl-icon slot="prefix" name="arrow-counterclockwise"></sl-icon>
-                    ${t('taskDetail.reopen')}
-                  </sl-menu-item>
-                ` : nothing}
+                ${task.status !== "in_progress"
+                  ? html`
+                      <sl-menu-item
+                        @click=${() =>
+                          void this._updateField({ status: "in_progress" })}
+                      >
+                        <sl-icon slot="prefix" name="play-fill"></sl-icon>
+                        ${t("taskDetail.startWork")}
+                      </sl-menu-item>
+                    `
+                  : nothing}
+                ${task.status !== "done"
+                  ? html`
+                      <sl-menu-item
+                        @click=${() =>
+                          void this._updateField({ status: "done" })}
+                      >
+                        <sl-icon slot="prefix" name="check-lg"></sl-icon>
+                        ${t("taskDetail.markDone")}
+                      </sl-menu-item>
+                    `
+                  : nothing}
+                ${task.status !== "closed"
+                  ? html`
+                      <sl-menu-item
+                        @click=${() =>
+                          void this._updateField({ status: "closed" })}
+                      >
+                        <sl-icon slot="prefix" name="x-circle"></sl-icon>
+                        ${t("taskDetail.close")}
+                      </sl-menu-item>
+                    `
+                  : nothing}
+                ${task.status !== "open"
+                  ? html`
+                      <sl-menu-item
+                        @click=${() =>
+                          void this._updateField({ status: "open" })}
+                      >
+                        <sl-icon
+                          slot="prefix"
+                          name="arrow-counterclockwise"
+                        ></sl-icon>
+                        ${t("taskDetail.reopen")}
+                      </sl-menu-item>
+                    `
+                  : nothing}
                 <sl-divider></sl-divider>
-                <sl-menu-item @click=${() => this.dispatchEvent(new CustomEvent('create-child', { detail: task.id }))}>
+                <sl-menu-item
+                  @click=${() =>
+                    this.dispatchEvent(
+                      new CustomEvent("create-child", { detail: task.id }),
+                    )}
+                >
                   <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-                  ${t('taskDetail.addChild')}
+                  ${t("taskDetail.addChild")}
                 </sl-menu-item>
                 <sl-divider></sl-divider>
-                <sl-menu-item style="color: var(--sl-color-danger-500);" @click=${() => this._handleDelete()}>
+                <sl-menu-item
+                  style="color: var(--sl-color-danger-500);"
+                  @click=${() => void this._handleDelete()}
+                >
                   <sl-icon slot="prefix" name="trash"></sl-icon>
-                  ${t('taskDetail.delete')}
+                  ${t("taskDetail.delete")}
                 </sl-menu-item>
               </sl-menu>
             </sl-dropdown>
@@ -786,679 +649,71 @@ export class TaskDetail extends LitElement {
       <!-- Body: main + sidebar -->
       <div class="body-layout">
         <div class="main-column">
-          ${task.blocked_by.length > 0 ? html`
-            <div class="blocked-banner">
-              <sl-icon name="exclamation-triangle-fill"></sl-icon>
-              ${t('taskDetail.blockedBy')} ${task.blocked_by.map(b => b.ticket_id).join(', ')}
-            </div>
-          ` : nothing}
-          ${this._renderDescription(task)}
+          ${task.blocked_by.length > 0
+            ? html`
+                <div class="blocked-banner">
+                  <sl-icon name="exclamation-triangle-fill"></sl-icon>
+                  ${t("taskDetail.blockedBy")}
+                  ${task.blocked_by.map((b) => b.ticket_id).join(", ")}
+                </div>
+              `
+            : nothing}
+
+          <task-description
+            .description=${task.description}
+            @description-changed=${(e: CustomEvent) =>
+              void this._updateField({
+                description: e.detail.description,
+              })}
+          ></task-description>
+
           ${this._renderChildren(task)}
-          ${this._renderDependencies(task)}
+
+          <task-dependencies
+            .task=${task}
+            .allTasks=${this._allTasks}
+            @blocker-added=${(e: CustomEvent) =>
+              void this._handleAddBlocker(e.detail.blockerId)}
+            @blocker-removed=${(e: CustomEvent) =>
+              void this._handleRemoveBlocker(e.detail.blockerId)}
+            @blocks-removed=${(e: CustomEvent) =>
+              void this._handleRemoveBlocks(e.detail.blockedId)}
+            @navigate-task=${(e: CustomEvent) =>
+              this.dispatchEvent(
+                new CustomEvent("navigate-task", {
+                  detail: e.detail,
+                  bubbles: true,
+                  composed: true,
+                }),
+              )}
+            @load-all-tasks=${() => void this._loadAllTasks()}
+          ></task-dependencies>
+
           <sl-divider></sl-divider>
-          ${this._renderComments(task)}
+
+          <task-comment-thread
+            .comments=${task.comments}
+            .activity=${this._activity}
+            .participants=${this.participants}
+            @comment-added=${(e: CustomEvent) =>
+              void this._handleAddComment(e.detail.text)}
+          ></task-comment-thread>
         </div>
 
-        ${this._renderSidebar(task)}
-      </div>
-    `;
-  }
-
-  private _renderDescription(task: TaskDetailView) {
-    return html`
-      <div class="description-section">
-        <div class="section-heading">${t('taskDetail.description')}</div>
-        ${this._editingDescription
-          ? html`<div>
-              <sl-textarea
-                value=${task.description ?? ''}
-                rows="4"
-                resize="auto"
-                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingDescription = false; }}
-              ></sl-textarea>
-              <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                <sl-button size="small" variant="primary" @click=${(e: Event) => {
-                  const textarea = (e.target as HTMLElement).closest('.description-section')?.querySelector('sl-textarea');
-                  const val = (textarea as any)?.value ?? '';
-                  this._updateField({ description: val || null });
-                  this._editingDescription = false;
-                }}>${t('taskDetail.save')}</sl-button>
-                <sl-button size="small" @click=${() => { this._editingDescription = false; }}>${t('taskDetail.cancel')}</sl-button>
-              </div>
-            </div>`
-          : task.description
-            ? html`<div class="description-content" @click=${() => { this._editingDescription = true; }}>
-                <markdown-content .content=${task.description}></markdown-content>
-                <sl-icon class="edit-hint" name="pencil" style="position: absolute; top: 0.5rem; right: 0.5rem;"></sl-icon>
-              </div>`
-            : html`<div class="no-description" @click=${() => { this._editingDescription = true; }}>${t('taskDetail.clickToAdd')}</div>`
-        }
-      </div>
-    `;
-  }
-
-  private _renderChildren(task: TaskDetailView) {
-    return html`
-      <div class="children-section">
-        <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
-          <span>${t('taskDetail.childrenCount', { count: task.children.length })}</span>
-          <sl-button size="small" variant="text"
-            @click=${() => this.dispatchEvent(new CustomEvent('create-child', { detail: task.id }))}
-          >
-            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-            ${t('taskDetail.add')}
-          </sl-button>
-        </div>
-        ${task.children.length > 0 ? html`
-          <div class="child-list">
-            ${task.children.map(child => html`
-              <div class="child-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: child.id }))}>
-                <sl-icon name=${TASK_TYPE_ICONS[child.task_type]} style="color: ${TASK_TYPE_COLORS[child.task_type]}"></sl-icon>
-                <span style="font-family: var(--sl-font-mono); opacity: 0.7; font-size: 0.8rem;">${child.ticket_id}</span>
-                <span class="child-title">${child.title}</span>
-                <sl-badge variant=${STATUS_VARIANTS[child.status] as any} pill size="small">
-                  ${STATUS_LABELS[child.status]}
-                </sl-badge>
-              </div>
-            `)}
-          </div>
-        ` : html`<span class="no-description" style="cursor: default; border: none; padding: 0.25rem;">${t('taskDetail.noChildren')}</span>`}
-      </div>
-    `;
-  }
-
-  private async _loadAllTasks() {
-    if (this._allTasks.length > 0) return;
-    try {
-      const tasks = await fetchTasks(this.sessionCode);
-      this._allTasks = tasks.map(tk => ({ id: tk.id, ticket_id: tk.ticket_id, title: tk.title }));
-    } catch { /* ignore */ }
-  }
-
-  private async _handleAddBlocker(blockerId: string) {
-    if (!this._task) return;
-    try {
-      await addDependency(this.sessionCode, blockerId, this._task.id);
-      this._addingBlocker = false;
-      await this._loadTask();
-    } catch (err) {
-      this._error = err instanceof Error ? err.message : t('taskDetail.errorAddDep');
-    }
-  }
-
-  private async _handleRemoveBlocker(blockerId: string) {
-    if (!this._task) return;
-    try {
-      await removeDependency(this.sessionCode, blockerId, this._task.id);
-      await this._loadTask();
-    } catch (err) {
-      this._error = err instanceof Error ? err.message : t('taskDetail.errorRemoveDep');
-    }
-  }
-
-  private async _handleRemoveBlocks(blockedId: string) {
-    if (!this._task) return;
-    try {
-      await removeDependency(this.sessionCode, this._task.id, blockedId);
-      await this._loadTask();
-    } catch (err) {
-      this._error = err instanceof Error ? err.message : t('taskDetail.errorRemoveDep');
-    }
-  }
-
-  private _renderDependencies(task: TaskDetailView) {
-    const hasBlockedBy = task.blocked_by.length > 0;
-    const hasBlocks = task.blocks.length > 0;
-
-    if (!hasBlockedBy && !hasBlocks && !this._addingBlocker) {
-      return html`
-        <div class="dep-section">
-          <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>${t('taskDetail.dependencies')}</span>
-            <sl-button size="small" variant="text" @click=${() => { this._addingBlocker = true; this._loadAllTasks(); }}>
-              <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-              ${t('taskDetail.add')}
-            </sl-button>
-          </div>
-        </div>
-      `;
-    }
-
-    // Filter tasks that can be selected as blockers (not self, not already blocking)
-    const existingBlockerIds = new Set(task.blocked_by.map(b => b.id));
-    existingBlockerIds.add(task.id);
-    const availableTasks = this._allTasks.filter(tk => !existingBlockerIds.has(tk.id));
-
-    return html`
-      <div class="dep-section">
-        <div class="section-heading" style="display: flex; align-items: center; justify-content: space-between;">
-          <span>Dependencies</span>
-          <sl-button size="small" variant="text" @click=${() => { this._addingBlocker = true; this._loadAllTasks(); }}>
-            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-            ${t('taskDetail.addBlocker')}
-          </sl-button>
-        </div>
-
-        ${hasBlockedBy ? html`
-          <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; font-weight: 600;">${t('taskDetail.blockedByLabel')}</div>
-          <div class="dep-list">
-            ${task.blocked_by.map(b => html`
-              <div class="dep-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: b.id }))}>
-                <sl-icon name=${TASK_TYPE_ICONS[b.task_type]} style="color: ${TASK_TYPE_COLORS[b.task_type]}; font-size: 0.85rem;"></sl-icon>
-                <span style="font-family: var(--sl-font-mono); opacity: 0.7; font-size: 0.8rem;">${b.ticket_id}</span>
-                <span class="dep-title">${b.title}</span>
-                <sl-badge variant=${STATUS_VARIANTS[b.status] as any} pill size="small">${STATUS_LABELS[b.status]}</sl-badge>
-                <sl-icon-button class="remove-dep" name="x-lg" label="Remove" style="font-size: 0.7rem;"
-                  @click=${(e: Event) => { e.stopPropagation(); this._handleRemoveBlocker(b.id); }}
-                ></sl-icon-button>
-              </div>
-            `)}
-          </div>
-        ` : nothing}
-
-        ${hasBlocks ? html`
-          <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem; margin-top: ${hasBlockedBy ? '0.75rem' : '0'}; font-weight: 600;">${t('taskDetail.blocksLabel')}</div>
-          <div class="dep-list">
-            ${task.blocks.map(b => html`
-              <div class="dep-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: b.id }))}>
-                <sl-icon name=${TASK_TYPE_ICONS[b.task_type]} style="color: ${TASK_TYPE_COLORS[b.task_type]}; font-size: 0.85rem;"></sl-icon>
-                <span style="font-family: var(--sl-font-mono); opacity: 0.7; font-size: 0.8rem;">${b.ticket_id}</span>
-                <span class="dep-title">${b.title}</span>
-                <sl-badge variant=${STATUS_VARIANTS[b.status] as any} pill size="small">${STATUS_LABELS[b.status]}</sl-badge>
-                <sl-icon-button class="remove-dep" name="x-lg" label="Remove" style="font-size: 0.7rem;"
-                  @click=${(e: Event) => { e.stopPropagation(); this._handleRemoveBlocks(b.id); }}
-                ></sl-icon-button>
-              </div>
-            `)}
-          </div>
-        ` : nothing}
-
-        ${this._addingBlocker ? html`
-          <div class="dep-add-row">
-            <sl-select size="small" placeholder=${t('taskDetail.selectBlocker')} style="flex: 1;"
-              @sl-change=${(e: Event) => {
-                const val = (e.target as HTMLSelectElement).value;
-                if (val) this._handleAddBlocker(val);
-              }}
-            >
-              ${availableTasks.map(tk => html`
-                <sl-option value=${tk.id}>${tk.ticket_id} — ${tk.title}</sl-option>
-              `)}
-            </sl-select>
-            <sl-icon-button name="x-lg" label="Cancel" @click=${() => { this._addingBlocker = false; }}></sl-icon-button>
-          </div>
-        ` : nothing}
-      </div>
-    `;
-  }
-
-  private _activityIcon(eventType: string): string {
-    switch (eventType) {
-      case 'task_created': return 'plus-circle';
-      case 'task_status_changed': return 'arrow-right-circle';
-      case 'task_assigned': return 'person-check';
-      case 'task_unassigned': return 'person-dash';
-      case 'task_updated': return 'pencil-square';
-      case 'task_closed': return 'check-circle';
-      case 'task_deleted': return 'trash';
-      case 'comment_added': return 'chat-dots';
-      case 'dependency_added': return 'link-45deg';
-      case 'dependency_removed': return 'link-45deg';
-      default: return 'clock-history';
-    }
-  }
-
-  private _renderComments(task: TaskDetailView) {
-    // Build a unified timeline: comments + activity events, sorted chronologically
-    type TimelineItem =
-      | { kind: 'comment'; created_at: string; data: (typeof task.comments)[0] }
-      | { kind: 'activity'; created_at: string; data: ActivityEvent };
-
-    const items: TimelineItem[] = [
-      ...task.comments.map(c => ({ kind: 'comment' as const, created_at: c.created_at, data: c })),
-      // Filter out comment_added events to avoid duplication with actual comments
-      ...this._activity
-        .filter(a => a.event_type !== 'comment_added')
-        .map(a => ({ kind: 'activity' as const, created_at: a.created_at, data: a })),
-    ];
-    items.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-
-    return html`
-      <div class="comments-section">
-        <div class="section-heading">${t('taskDetail.activityCount', { count: items.length })}</div>
-
-        ${items.length > 0 ? html`
-          <div class="comment-list">
-            ${items.map(item => item.kind === 'comment'
-              ? html`
-                <div class="comment">
-                  <div class="comment-header">
-                    <span class="comment-author">${getParticipantName(item.data.author_id, this.participants)}</span>
-                    <sl-tooltip content=${formatDate(item.created_at)}>
-                      <span class="comment-time">${relativeTime(item.created_at)}</span>
-                    </sl-tooltip>
-                  </div>
-                  <div class="comment-content"><markdown-content .content=${item.data.content}></markdown-content></div>
-                </div>`
-              : html`
-                <div class="activity-event">
-                  <sl-icon name=${this._activityIcon(item.data.event_type)}></sl-icon>
-                  <span class="activity-summary">
-                    <span class="activity-actor">${item.data.actor_name}</span>
-                    ${item.data.summary}
-                  </span>
-                  <sl-tooltip content=${formatDate(item.created_at)}>
-                    <span class="activity-time">${relativeTime(item.created_at)}</span>
-                  </sl-tooltip>
-                </div>`
+        <task-metadata-panel
+          .task=${task}
+          .participants=${this.participants}
+          @field-changed=${(e: CustomEvent) =>
+            void this._updateField(e.detail.fields)}
+          @navigate-task=${(e: CustomEvent) =>
+            this.dispatchEvent(
+              new CustomEvent("navigate-task", {
+                detail: e.detail,
+                bubbles: true,
+                composed: true,
+              }),
             )}
-          </div>
-        ` : nothing}
-
-        ${this._commentExpanded
-          ? html`
-            <div class="add-comment">
-              <sl-textarea
-                placeholder=${t('taskDetail.commentPlaceholder')}
-                value=${this._commentText}
-                @sl-input=${(e: Event) => { this._commentText = (e.target as HTMLTextAreaElement).value; }}
-                @keydown=${(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && this._commentText.trim()) {
-                    e.preventDefault();
-                    this._handleAddComment();
-                  }
-                  if (e.key === 'Escape' && !this._commentText.trim()) {
-                    this._commentExpanded = false;
-                  }
-                }}
-                rows="2"
-                resize="auto"
-              ></sl-textarea>
-              <sl-button
-                variant="primary"
-                size="small"
-                ?loading=${this._commentLoading}
-                ?disabled=${!this._commentText.trim()}
-                @click=${() => this._handleAddComment()}
-              >
-                <sl-icon slot="prefix" name="send"></sl-icon>
-                ${t('taskDetail.commentSend')}
-              </sl-button>
-            </div>`
-          : html`
-            <div class="comment-input-collapsed" @click=${() => {
-              this._commentExpanded = true;
-              this.updateComplete.then(() => {
-                const ta = this.shadowRoot?.querySelector('.add-comment sl-textarea') as HTMLElement | null;
-                ta?.focus();
-              });
-            }}>
-              ${t('taskDetail.commentPlaceholderShort')}
-            </div>`
-        }
-      </div>
-    `;
-  }
-
-  private _renderSidebar(task: TaskDetailView) {
-    return html`
-      <div class="sidebar">
-        <div class="sidebar-heading">${t('taskDetail.sidebar.details')}</div>
-
-        <!-- Ticket ID (read-only) -->
-        <div class="meta-row">
-          <span class="meta-label">${t('taskDetail.sidebar.ticket')}</span>
-          <span class="meta-value" style="font-family: var(--sl-font-mono);">${task.ticket_id}</span>
-        </div>
-
-        <!-- Type -->
-        ${this._editingField === 'type'
-          ? html`
-            <div class="meta-row">
-              <sl-select size="small" value=${task.task_type}
-                @sl-change=${(e: Event) => {
-                  const val = (e.target as HTMLSelectElement).value;
-                  if (val !== task.task_type) this._updateField({ task_type: val });
-                  this._editingField = null;
-                }}
-                style="width: 100%;"
-              >
-                ${(['epic', 'story', 'task', 'subtask', 'bug'] as const).map(tt => html`
-                  <sl-option value=${tt}>
-                    <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[tt]} style="color: ${TASK_TYPE_COLORS[tt]}"></sl-icon>
-                    ${TASK_TYPE_LABELS[tt]}
-                  </sl-option>
-                `)}
-              </sl-select>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'type'; }}>
-              <span class="meta-label">${t('taskDetail.sidebar.type')}</span>
-              <span class="meta-value">
-                <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${TASK_TYPE_COLORS[task.task_type]}; font-size: 0.85rem;"></sl-icon>
-                ${TASK_TYPE_LABELS[task.task_type]}
-                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
-              </span>
-            </div>`
-        }
-
-        <!-- Status -->
-        ${this._editingField === 'status'
-          ? html`
-            <div class="meta-row">
-              <sl-select size="small" value=${task.status}
-                @sl-change=${(e: Event) => {
-                  this._updateField({ status: (e.target as HTMLSelectElement).value });
-                  this._editingField = null;
-                }}
-                style="width: 100%;"
-              >
-                ${(['open', 'in_progress', 'done', 'closed'] as TaskStatus[]).map(s => html`
-                  <sl-option value=${s}>${STATUS_LABELS[s]}</sl-option>
-                `)}
-              </sl-select>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'status'; }}>
-              <span class="meta-label">${t('taskDetail.sidebar.status')}</span>
-              <span class="meta-value">
-                <sl-badge variant=${STATUS_VARIANTS[task.status] as any} pill size="small">${STATUS_LABELS[task.status]}</sl-badge>
-                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
-              </span>
-            </div>`
-        }
-
-        <!-- Priority -->
-        ${this._editingField === 'priority'
-          ? html`
-            <div class="meta-row">
-              <sl-select size="small" value=${task.priority}
-                @sl-change=${(e: Event) => {
-                  const val = (e.target as HTMLSelectElement).value;
-                  if (val !== task.priority) this._updateField({ priority: val });
-                  this._editingField = null;
-                }}
-                style="width: 100%;"
-              >
-                ${(['critical', 'high', 'medium', 'low'] as const).map(p => html`
-                  <sl-option value=${p}>
-                    <sl-icon slot="prefix" name=${PRIORITY_ICONS[p]} style="color: ${PRIORITY_COLORS[p]}"></sl-icon>
-                    ${PRIORITY_LABELS[p]}
-                  </sl-option>
-                `)}
-              </sl-select>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'priority'; }}>
-              <span class="meta-label">${t('taskDetail.sidebar.priority')}</span>
-              <span class="meta-value">
-                <sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.85rem;"></sl-icon>
-                ${PRIORITY_LABELS[task.priority]}
-                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
-              </span>
-            </div>`
-        }
-
-        <!-- Complexity -->
-        ${this._editingField === 'complexity'
-          ? html`
-            <div class="meta-row">
-              <sl-select size="small" value=${task.complexity}
-                @sl-change=${(e: Event) => {
-                  const val = (e.target as HTMLSelectElement).value;
-                  if (val !== task.complexity) this._updateField({ complexity: val });
-                  this._editingField = null;
-                }}
-                style="width: 100%;"
-              >
-                ${(['xl', 'large', 'medium', 'small', 'trivial'] as const).map(c => html`
-                  <sl-option value=${c}>${COMPLEXITY_LABELS[c]}</sl-option>
-                `)}
-              </sl-select>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'complexity'; }}>
-              <span class="meta-label">${t('taskDetail.sidebar.complexity')}</span>
-              <span class="meta-value">
-                ${COMPLEXITY_LABELS[task.complexity]}
-                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
-              </span>
-            </div>`
-        }
-
-        <!-- Assignee -->
-        ${this._editingField === 'assignee'
-          ? html`
-            <div class="meta-row">
-              <sl-select size="small" value=${task.assigned_to ?? ''}
-                placeholder=${t('taskDetail.sidebar.unassigned')} clearable
-                @sl-change=${(e: Event) => {
-                  const val = (e.target as HTMLSelectElement).value;
-                  this._updateField({ assigned_to: val || null });
-                  this._editingField = null;
-                }}
-                style="width: 100%;"
-              >
-                ${this.participants.map(p => html`
-                  <sl-option value=${p.id}>
-                    <sl-icon slot="prefix" name=${p.participant_type === 'agent' ? 'robot' : 'person-fill'}></sl-icon>
-                    ${p.display_name}
-                  </sl-option>
-                `)}
-              </sl-select>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'assignee'; }}>
-              <span class="meta-label">${t('taskDetail.sidebar.assignee')}</span>
-              <span class="meta-value">
-                ${task.assigned_to
-                  ? html`<sl-icon name=${this.participants.find(p => p.id === task.assigned_to)?.participant_type === 'agent' ? 'robot' : 'person-fill'} style="font-size: 0.8rem;"></sl-icon> ${getParticipantName(task.assigned_to, this.participants)}`
-                  : html`<span style="color: var(--text-tertiary);">${t('taskDetail.sidebar.unassigned')}</span>`
-                }
-                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
-              </span>
-            </div>
-            ${this._renderClaimButton(task)}`
-        }
-
-        <sl-divider style="--spacing: 0.25rem;"></sl-divider>
-
-        <!-- Creator (read-only) -->
-        <div class="meta-row">
-          <span class="meta-label">${t('taskDetail.sidebar.creator')}</span>
-          <span class="meta-value">${getParticipantName(task.created_by, this.participants)}</span>
-        </div>
-
-        <!-- Created -->
-        <div class="meta-row">
-          <span class="meta-label">${t('taskDetail.sidebar.created')}</span>
-          <span class="meta-value">
-            <sl-tooltip content=${formatDate(task.created_at)}>
-              <span>${relativeTime(task.created_at)}</span>
-            </sl-tooltip>
-          </span>
-        </div>
-
-        <!-- Updated -->
-        ${task.updated_at !== task.created_at ? html`
-          <div class="meta-row">
-            <span class="meta-label">${t('taskDetail.sidebar.updated')}</span>
-            <span class="meta-value">
-              <sl-tooltip content=${formatDate(task.updated_at)}>
-                <span>${relativeTime(task.updated_at)}</span>
-              </sl-tooltip>
-            </span>
-          </div>
-        ` : nothing}
-
-        <!-- Closed -->
-        ${task.closed_at ? html`
-          <div class="meta-row">
-            <span class="meta-label">${t('taskDetail.sidebar.closed')}</span>
-            <span class="meta-value">
-              <sl-tooltip content=${formatDate(task.closed_at)}>
-                <span>${relativeTime(task.closed_at)}</span>
-              </sl-tooltip>
-            </span>
-          </div>
-        ` : nothing}
-
-        <sl-divider style="--spacing: 0.25rem;"></sl-divider>
-
-        <!-- Commits -->
-        <div class="meta-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
-          <span class="meta-label">${t('taskDetail.sidebar.commits')}</span>
-          ${task.commit_hashes.length > 0
-            ? html`
-              <div class="commit-chips">
-                ${task.commit_hashes.map((sha: string) => html`
-                  <span class="commit-chip">
-                    ${sha.substring(0, 8)}
-                    <span class="remove" @click=${() => this._removeCommit(sha)}>x</span>
-                  </span>
-                `)}
-              </div>`
-            : nothing
-          }
-          ${this._editingField === 'commit'
-            ? html`
-              <sl-input
-                size="small"
-                placeholder=${t('taskDetail.sidebar.commitPlaceholder')}
-                style="width: 100%; font-family: var(--sl-font-mono); font-size: 0.75rem;"
-                @sl-change=${(e: Event) => {
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  if (val) this._addCommit(val);
-                  this._editingField = null;
-                }}
-                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingField = null; }}
-              ></sl-input>`
-            : html`<span class="link-action" @click=${() => { this._editingField = 'commit'; }}>${t('taskDetail.sidebar.addCommit')}</span>`
-          }
-        </div>
-
-        <!-- No Code Change -->
-        <div class="meta-row">
-          <span class="meta-label">${t('taskDetail.sidebar.noCodeChange')}</span>
-          <sl-switch
-            size="small"
-            ?checked=${task.no_code_change}
-            @sl-change=${(e: Event) => {
-              this._updateField({ no_code_change: (e.target as HTMLInputElement).checked });
-            }}
-          ></sl-switch>
-        </div>
-
-        <!-- Source (provenance) -->
-        ${task.source_task_id
-          ? html`
-            <div class="meta-row">
-              <span class="meta-label">${t('taskDetail.sidebar.derivedFrom')}</span>
-              <span class="meta-value">
-                <a class="provenance-link" @click=${() => this._navigateToTask(task.source_task_id!)}>
-                  <sl-icon name="arrow-return-left" style="font-size: 0.7rem;"></sl-icon>
-                  ${t('taskDetail.sidebar.sourceTask')}
-                </a>
-              </span>
-            </div>`
-          : nothing
-        }
-
-        <sl-divider style="--spacing: 0.25rem;"></sl-divider>
-
-        <!-- Model Config -->
-        <div class="sidebar-heading">Model Config</div>
-
-        <!-- Model Hint -->
-        ${this._editingField === 'model_hint'
-          ? html`
-            <div class="meta-row">
-              <sl-input
-                size="small"
-                placeholder="e.g. claude-opus-4-5"
-                value=${task.model_hint ?? ''}
-                style="width: 100%; font-family: var(--sl-font-mono); font-size: 0.75rem;"
-                @sl-change=${(e: Event) => {
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  this._updateField({ model_hint: val || null });
-                  this._editingField = null;
-                }}
-                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingField = null; }}
-              ></sl-input>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'model_hint'; }}>
-              <span class="meta-label">Model</span>
-              <span class="meta-value">
-                ${task.model_hint
-                  ? html`<span style="font-family: var(--sl-font-mono); font-size: 0.75rem;">${task.model_hint}</span>`
-                  : html`<span style="color: var(--text-tertiary);">default</span>`
-                }
-                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
-              </span>
-            </div>`
-        }
-
-        <!-- Budget Tier -->
-        ${this._editingField === 'budget_tier'
-          ? html`
-            <div class="meta-row">
-              <sl-select size="small" value=${task.budget_tier ?? ''}
-                @sl-change=${(e: Event) => {
-                  const val = (e.target as HTMLSelectElement).value;
-                  this._updateField({ budget_tier: val || null });
-                  this._editingField = null;
-                }}
-                style="width: 100%;"
-              >
-                <sl-option value="">default</sl-option>
-                <sl-option value="high">High</sl-option>
-                <sl-option value="medium">Medium</sl-option>
-                <sl-option value="low">Low</sl-option>
-              </sl-select>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'budget_tier'; }}>
-              <span class="meta-label">Budget</span>
-              <span class="meta-value">
-                ${task.budget_tier
-                  ? html`<span>${task.budget_tier}</span>`
-                  : html`<span style="color: var(--text-tertiary);">default</span>`
-                }
-                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
-              </span>
-            </div>`
-        }
-
-        <!-- Provider -->
-        ${this._editingField === 'provider'
-          ? html`
-            <div class="meta-row">
-              <sl-input
-                size="small"
-                placeholder="e.g. anthropic"
-                value=${task.provider ?? ''}
-                style="width: 100%;"
-                @sl-change=${(e: Event) => {
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  this._updateField({ provider: val || null });
-                  this._editingField = null;
-                }}
-                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingField = null; }}
-              ></sl-input>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'provider'; }}>
-              <span class="meta-label">Provider</span>
-              <span class="meta-value">
-                ${task.provider
-                  ? html`<span>${task.provider}</span>`
-                  : html`<span style="color: var(--text-tertiary);">default</span>`
-                }
-                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
-              </span>
-            </div>`
-        }
+        ></task-metadata-panel>
       </div>
     `;
   }
@@ -1466,6 +721,6 @@ export class TaskDetail extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'task-detail': TaskDetail;
+    "task-detail": TaskDetail;
   }
 }
