@@ -1,18 +1,25 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import { agentStream, type AgentStreamEvent, type AgentStreamListener } from '../../state/agent-stream.js';
-import { authStore } from '../../state/auth-state.js';
-import { t } from '../../lib/i18n.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import {
+  agentStream,
+  type AgentStreamEvent,
+  type AgentStreamListener,
+} from "../../state/agent-stream.js";
+import {
+  fetchToolInvocations,
+  fetchWorkspaceLogs,
+} from "../../state/agent-api.js";
+import { t } from "../../lib/i18n.js";
 
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
-import '@shoelace-style/shoelace/dist/components/tab/tab.js';
-import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
+import "@shoelace-style/shoelace/dist/components/tab-group/tab-group.js";
+import "@shoelace-style/shoelace/dist/components/tab/tab.js";
+import "@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js";
 
 interface ToolEvent {
-  kind: 'tool';
+  kind: "tool";
   id: string;
   tool_name: string;
   is_error: boolean;
@@ -21,14 +28,14 @@ interface ToolEvent {
 }
 
 interface OutputLine {
-  kind: 'output';
+  kind: "output";
   line: string;
   fd: string;
   ts: string;
 }
 
 interface StateEvent {
-  kind: 'state';
+  kind: "state";
   to: string;
   detail: string;
   ts: string;
@@ -39,10 +46,12 @@ type ActivityEntry = ToolEvent | OutputLine | StateEvent;
 const MAX_ENTRIES = 500;
 const MAX_OUTPUT_LINES = 1000;
 
-@customElement('agent-activity-panel')
+@customElement("agent-activity-panel")
 export class AgentActivityPanel extends LitElement {
   static styles = css`
-    :host { display: block; }
+    :host {
+      display: block;
+    }
 
     .panel-container {
       background: var(--surface-card);
@@ -73,7 +82,9 @@ export class AgentActivityPanel extends LitElement {
       border-bottom: 1px solid var(--border-subtle);
       align-items: baseline;
     }
-    .entry:last-child { border-bottom: none; }
+    .entry:last-child {
+      border-bottom: none;
+    }
 
     .entry-ts {
       font-size: 0.7rem;
@@ -90,9 +101,15 @@ export class AgentActivityPanel extends LitElement {
       min-width: 3.5rem;
       flex-shrink: 0;
     }
-    .entry-kind.tool { color: var(--sl-color-primary-400); }
-    .entry-kind.output { color: var(--sl-color-neutral-400); }
-    .entry-kind.state { color: var(--sl-color-warning-400); }
+    .entry-kind.tool {
+      color: var(--sl-color-primary-400);
+    }
+    .entry-kind.output {
+      color: var(--sl-color-neutral-400);
+    }
+    .entry-kind.state {
+      color: var(--sl-color-warning-400);
+    }
 
     .entry-detail {
       flex: 1;
@@ -103,7 +120,9 @@ export class AgentActivityPanel extends LitElement {
       text-overflow: ellipsis;
     }
 
-    .entry-detail.error { color: var(--sl-color-danger-400); }
+    .entry-detail.error {
+      color: var(--sl-color-danger-400);
+    }
 
     .tool-duration {
       font-size: 0.7rem;
@@ -125,8 +144,12 @@ export class AgentActivityPanel extends LitElement {
       word-break: break-all;
     }
 
-    .output-line { display: block; }
-    .output-line.stderr { color: #f85149; }
+    .output-line {
+      display: block;
+    }
+    .output-line.stderr {
+      color: #f85149;
+    }
 
     /* --- Tool list tab --- */
     .tool-item {
@@ -136,7 +159,9 @@ export class AgentActivityPanel extends LitElement {
       border-bottom: 1px solid var(--border-subtle);
       align-items: center;
     }
-    .tool-item:last-child { border-bottom: none; }
+    .tool-item:last-child {
+      border-bottom: none;
+    }
 
     .tool-name {
       font-family: var(--sl-font-mono);
@@ -178,14 +203,19 @@ export class AgentActivityPanel extends LitElement {
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.3;
+      }
     }
   `;
 
-  @property() sessionCode = '';
-  @property() participantId = '';
-  @property() workspaceId = '';
+  @property() sessionCode = "";
+  @property() participantId = "";
+  @property() workspaceId = "";
 
   @state() private _allEntries: ActivityEntry[] = [];
   @state() private _outputLines: OutputLine[] = [];
@@ -193,14 +223,14 @@ export class AgentActivityPanel extends LitElement {
   @state() private _connected = false;
   @state() private _historicalTools: ToolEvent[] = [];
   @state() private _historicalLoaded = false;
-  @state() private _currentState = '';
+  @state() private _currentState = "";
 
   private _listener: AgentStreamListener = (event: AgentStreamEvent) => {
     if (event.participant_id !== this.participantId) return;
 
-    if (event.stream === 'tool') {
+    if (event.stream === "tool") {
       const entry: ToolEvent = {
-        kind: 'tool',
+        kind: "tool",
         id: event.data.id,
         tool_name: event.data.tool_name,
         is_error: event.data.is_error,
@@ -209,29 +239,34 @@ export class AgentActivityPanel extends LitElement {
       };
       this._toolEvents = [...this._toolEvents.slice(-(MAX_ENTRIES - 1)), entry];
       this._allEntries = [...this._allEntries.slice(-(MAX_ENTRIES - 1)), entry];
-    } else if (event.stream === 'output') {
+    } else if (event.stream === "output") {
       const entry: OutputLine = {
-        kind: 'output',
+        kind: "output",
         line: event.data.line,
         fd: event.data.fd,
         ts: event.data.ts,
       };
-      this._outputLines = [...this._outputLines.slice(-(MAX_OUTPUT_LINES - 1)), entry];
+      this._outputLines = [
+        ...this._outputLines.slice(-(MAX_OUTPUT_LINES - 1)),
+        entry,
+      ];
       this._allEntries = [...this._allEntries.slice(-(MAX_ENTRIES - 1)), entry];
-    } else if (event.stream === 'state') {
+    } else if (event.stream === "state") {
       const entry: StateEvent = {
-        kind: 'state',
-        to: (event.data as any).to ?? '',
-        detail: (event.data as any).detail ?? '',
+        kind: "state",
+        to: (event.data as any).to ?? "",
+        detail: (event.data as any).detail ?? "",
         ts: (event.data as any).ts ?? new Date().toISOString(),
       };
       this._currentState = entry.to;
       this._allEntries = [...this._allEntries.slice(-(MAX_ENTRIES - 1)), entry];
-      this.dispatchEvent(new CustomEvent('agent-state-change', {
-        detail: { state: entry.to, detail: entry.detail },
-        bubbles: true,
-        composed: true,
-      }));
+      this.dispatchEvent(
+        new CustomEvent("agent-state-change", {
+          detail: { state: entry.to, detail: entry.detail },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     }
 
     this.requestUpdate();
@@ -265,7 +300,7 @@ export class AgentActivityPanel extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('sessionCode') || changed.has('participantId')) {
+    if (changed.has("sessionCode") || changed.has("participantId")) {
       this._stopStreaming();
       if (this.sessionCode && this.participantId) {
         this._startStreaming();
@@ -294,37 +329,25 @@ export class AgentActivityPanel extends LitElement {
   private async _loadHistorical() {
     if (this._historicalLoaded) return;
 
-    const token = authStore.getAccessToken();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
     // Load historical tool invocations
     try {
-      const res = await fetch(
-        `/api/sessions/${this.sessionCode}/tool-invocations?participant_id=${this.participantId}&limit=50`,
-        { headers },
+      const data = await fetchToolInvocations(
+        this.sessionCode,
+        this.participantId,
+        { limit: 50 },
       );
-      if (res.ok) {
-        const data = await res.json() as Array<{
-          id: string;
-          tool_name: string;
-          is_error: boolean;
-          duration_ms: number;
-          created_at: string;
-        }>;
-        this._historicalTools = data.map(d => ({
-          kind: 'tool' as const,
-          id: d.id,
-          tool_name: d.tool_name,
-          is_error: d.is_error,
-          duration_ms: d.duration_ms,
-          ts: d.created_at,
-        }));
-        const liveIds = new Set(this._toolEvents.map(te => te.id));
-        const unique = this._historicalTools.filter(te => !liveIds.has(te.id));
-        this._toolEvents = [...unique, ...this._toolEvents];
-        this._allEntries = [...unique, ...this._allEntries];
-      }
+      this._historicalTools = data.map((d) => ({
+        kind: "tool" as const,
+        id: d.id,
+        tool_name: d.tool_name,
+        is_error: d.is_error,
+        duration_ms: d.duration_ms,
+        ts: d.created_at,
+      }));
+      const liveIds = new Set(this._toolEvents.map((te) => te.id));
+      const unique = this._historicalTools.filter((te) => !liveIds.has(te.id));
+      this._toolEvents = [...unique, ...this._toolEvents];
+      this._allEntries = [...unique, ...this._allEntries];
     } catch {
       // Non-critical
     }
@@ -332,25 +355,17 @@ export class AgentActivityPanel extends LitElement {
     // Load historical output lines from workspace logs
     if (this.workspaceId) {
       try {
-        const logRes = await fetch(
-          `/api/workspaces/${this.workspaceId}/logs?limit=200`,
-          { headers },
-        );
-        if (logRes.ok) {
-          const logData = await logRes.json() as Array<{
-            line: string;
-            fd: string;
-            ts: string;
-          }>;
-          const historicalOutput: OutputLine[] = logData.map(d => ({
-            kind: 'output' as const,
-            line: d.line,
-            fd: d.fd,
-            ts: d.ts,
-          }));
-          this._outputLines = [...historicalOutput, ...this._outputLines];
-          this._allEntries = [...historicalOutput, ...this._allEntries];
-        }
+        const logData = await fetchWorkspaceLogs(this.workspaceId, {
+          limit: 200,
+        });
+        const historicalOutput: OutputLine[] = logData.map((d) => ({
+          kind: "output" as const,
+          line: d.line,
+          fd: d.fd,
+          ts: d.ts,
+        }));
+        this._outputLines = [...historicalOutput, ...this._outputLines];
+        this._allEntries = [...historicalOutput, ...this._allEntries];
       } catch {
         // Non-critical
       }
@@ -361,7 +376,9 @@ export class AgentActivityPanel extends LitElement {
         this._logRefreshTimer = window.setTimeout(() => {
           this._historicalLoaded = false;
           this._outputLines = [];
-          this._allEntries = this._allEntries.filter(e => e.kind !== 'output');
+          this._allEntries = this._allEntries.filter(
+            (e) => e.kind !== "output",
+          );
           this._loadHistorical();
         }, 5000);
       }
@@ -371,22 +388,24 @@ export class AgentActivityPanel extends LitElement {
   }
 
   private _scrollToBottom() {
-    const containers = this.shadowRoot?.querySelectorAll('.tab-content, .output-container');
-    containers?.forEach(el => {
+    const containers = this.shadowRoot?.querySelectorAll(
+      ".tab-content, .output-container",
+    );
+    containers?.forEach((el) => {
       el.scrollTop = el.scrollHeight;
     });
   }
 
   private _formatTime(iso: string): string {
     try {
-      return new Date(iso).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
+      return new Date(iso).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
         hour12: false,
       });
     } catch {
-      return '';
+      return "";
     }
   }
 
@@ -402,41 +421,62 @@ export class AgentActivityPanel extends LitElement {
       <div class="panel-container">
         <sl-tab-group>
           <sl-tab slot="nav" panel="all">
-            ${t('agentActivity.tab.all')}
-            <sl-badge variant="neutral" pill>${this._allEntries.length}</sl-badge>
+            ${t("agentActivity.tab.all")}
+            <sl-badge variant="neutral" pill
+              >${this._allEntries.length}</sl-badge
+            >
           </sl-tab>
           <sl-tab slot="nav" panel="tools">
-            ${t('agentActivity.tab.tools')}
-            <sl-badge variant="neutral" pill>${this._toolEvents.length}</sl-badge>
+            ${t("agentActivity.tab.tools")}
+            <sl-badge variant="neutral" pill
+              >${this._toolEvents.length}</sl-badge
+            >
           </sl-tab>
-          <sl-tab slot="nav" panel="output">${t('agentActivity.tab.output')}</sl-tab>
+          <sl-tab slot="nav" panel="output"
+            >${t("agentActivity.tab.output")}</sl-tab
+          >
 
           <sl-tab-panel name="all">
-            ${this._connected ? html`
-              <div class="live-indicator"><span class="live-dot"></span> ${t('agentActivity.live')}</div>
-            ` : nothing}
+            ${this._connected
+              ? html`
+                  <div class="live-indicator">
+                    <span class="live-dot"></span> ${t("agentActivity.live")}
+                  </div>
+                `
+              : nothing}
             <div class="tab-content">
               ${this._allEntries.length === 0
-                ? html`<div class="empty-state">${t('agentActivity.emptyAll')}</div>`
-                : this._allEntries.map(e => this._renderEntry(e))}
+                ? html`<div class="empty-state">
+                    ${t("agentActivity.emptyAll")}
+                  </div>`
+                : this._allEntries.map((e) => this._renderEntry(e))}
             </div>
           </sl-tab-panel>
 
           <sl-tab-panel name="tools">
             <div class="tab-content">
               ${this._toolEvents.length === 0
-                ? html`<div class="empty-state">${t('agentActivity.emptyTools')}</div>`
-                : this._toolEvents.map(te => this._renderToolItem(te))}
+                ? html`<div class="empty-state">
+                    ${t("agentActivity.emptyTools")}
+                  </div>`
+                : this._toolEvents.map((te) => this._renderToolItem(te))}
             </div>
           </sl-tab-panel>
 
           <sl-tab-panel name="output">
             <div class="output-container">
               ${this._outputLines.length === 0
-                ? html`<span style="color: #8b949e; font-style: italic;">${t('agentActivity.emptyOutput')}</span>`
-                : this._outputLines.map(o => html`
-                    <span class="output-line ${o.fd === 'stderr' ? 'stderr' : ''}">${o.line}\n</span>
-                  `)}
+                ? html`<span style="color: #8b949e; font-style: italic;"
+                    >${t("agentActivity.emptyOutput")}</span
+                  >`
+                : this._outputLines.map(
+                    (o) => html`
+                      <span
+                        class="output-line ${o.fd === "stderr" ? "stderr" : ""}"
+                        >${o.line}
+                      </span>
+                    `,
+                  )}
             </div>
           </sl-tab-panel>
         </sl-tab-group>
@@ -445,23 +485,33 @@ export class AgentActivityPanel extends LitElement {
   }
 
   private _renderEntry(e: ActivityEntry) {
-    if (e.kind === 'tool') {
+    if (e.kind === "tool") {
       return html`
         <div class="entry">
           <span class="entry-ts">${this._formatTime(e.ts)}</span>
-          <span class="entry-kind tool">${t('agentActivity.kind.tool')}</span>
-          <span class="entry-detail ${e.is_error ? 'error' : ''}">${e.tool_name}</span>
-          <span class="tool-duration">${this._formatDuration(e.duration_ms)}</span>
-          ${e.is_error ? html`<sl-badge variant="danger" size="small">${t('agentActivity.errorBadge')}</sl-badge>` : nothing}
+          <span class="entry-kind tool">${t("agentActivity.kind.tool")}</span>
+          <span class="entry-detail ${e.is_error ? "error" : ""}"
+            >${e.tool_name}</span
+          >
+          <span class="tool-duration"
+            >${this._formatDuration(e.duration_ms)}</span
+          >
+          ${e.is_error
+            ? html`<sl-badge variant="danger" size="small"
+                >${t("agentActivity.errorBadge")}</sl-badge
+              >`
+            : nothing}
         </div>
       `;
     }
-    if (e.kind === 'state') {
+    if (e.kind === "state") {
       return html`
         <div class="entry">
           <span class="entry-ts">${this._formatTime(e.ts)}</span>
-          <span class="entry-kind state">${t('agentActivity.kind.state')}</span>
-          <span class="entry-detail">${e.to}${e.detail ? ` — ${e.detail}` : ''}</span>
+          <span class="entry-kind state">${t("agentActivity.kind.state")}</span>
+          <span class="entry-detail"
+            >${e.to}${e.detail ? ` — ${e.detail}` : ""}</span
+          >
         </div>
       `;
     }
@@ -481,7 +531,11 @@ export class AgentActivityPanel extends LitElement {
         <div class="tool-meta">
           <span>${this._formatDuration(te.duration_ms)}</span>
           <span>${this._formatTime(te.ts)}</span>
-          ${te.is_error ? html`<sl-badge variant="danger" size="small">${t('agentActivity.errorBadgeFull')}</sl-badge>` : nothing}
+          ${te.is_error
+            ? html`<sl-badge variant="danger" size="small"
+                >${t("agentActivity.errorBadgeFull")}</sl-badge
+              >`
+            : nothing}
         </div>
       </div>
     `;
@@ -490,6 +544,6 @@ export class AgentActivityPanel extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'agent-activity-panel': AgentActivityPanel;
+    "agent-activity-panel": AgentActivityPanel;
   }
 }

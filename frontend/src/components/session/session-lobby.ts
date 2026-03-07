@@ -1,34 +1,39 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
-import { store, type SessionState } from '../../state/app-state.js';
-import { connectSession, disconnectSession } from '../../state/session-connection.js';
-import { authStore } from '../../state/auth-state.js';
-import { navigateTo } from '../../router.js';
-import type { RouterLocation } from '@vaadin/router';
-import { t } from '../../lib/i18n.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, state } from "lit/decorators.js";
+import { store, type SessionState } from "../../state/app-state.js";
+import {
+  connectSession,
+  disconnectSession,
+} from "../../state/session-connection.js";
+import { authStore } from "../../state/auth-state.js";
+import { createSession, joinSessionByCode } from "../../state/session-api.js";
+import { navigateTo } from "../../router.js";
+import type { RouterLocation } from "@vaadin/router";
+import { t } from "../../lib/i18n.js";
 
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/input/input.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/divider/divider.js';
-import '@shoelace-style/shoelace/dist/components/alert/alert.js';
-import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
-import '@shoelace-style/shoelace/dist/components/tab/tab.js';
-import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
+import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/input/input.js";
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
+import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/tab-group/tab-group.js";
+import "@shoelace-style/shoelace/dist/components/tab/tab.js";
+import "@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js";
 
-import '../tasks/task-board.js';
-import './activity-view.js';
+import "../tasks/task-board.js";
+import "./activity-view.js";
 
-const API_BASE = '';  // proxied via vite
+type LobbyState = "landing" | "creating" | "joining" | "in-session";
 
-type LobbyState = 'landing' | 'creating' | 'joining' | 'in-session';
-
-@customElement('session-lobby')
+@customElement("session-lobby")
 export class SessionLobby extends LitElement {
   static styles = css`
-    :host { display: block; flex: 1; }
+    :host {
+      display: block;
+      flex: 1;
+    }
 
     .landing {
       display: flex;
@@ -38,8 +43,20 @@ export class SessionLobby extends LitElement {
       min-height: 100%;
       padding: 2rem;
       background:
-        repeating-radial-gradient(circle at 20% 50%, transparent 0, transparent 40px, var(--color-primary-glow) 41px, transparent 42px),
-        repeating-radial-gradient(circle at 80% 20%, transparent 0, transparent 60px, var(--color-primary-glow) 61px, transparent 62px),
+        repeating-radial-gradient(
+          circle at 20% 50%,
+          transparent 0,
+          transparent 40px,
+          var(--color-primary-glow) 41px,
+          transparent 42px
+        ),
+        repeating-radial-gradient(
+          circle at 80% 20%,
+          transparent 0,
+          transparent 60px,
+          var(--color-primary-glow) 61px,
+          transparent 62px
+        ),
         var(--surface-1, #111320);
     }
 
@@ -70,7 +87,9 @@ export class SessionLobby extends LitElement {
     }
 
     @media (max-width: 480px) {
-      .landing-options { grid-template-columns: 1fr; }
+      .landing-options {
+        grid-template-columns: 1fr;
+      }
     }
 
     .option-card {
@@ -81,7 +100,10 @@ export class SessionLobby extends LitElement {
       padding: 1.75rem 1.25rem;
       background: var(--surface-card);
       box-shadow: var(--shadow-md);
-      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      transition:
+        border-color 0.2s,
+        box-shadow 0.2s,
+        transform 0.15s;
     }
 
     .option-card:hover {
@@ -110,8 +132,12 @@ export class SessionLobby extends LitElement {
       margin: 0;
     }
 
-    .option-card--create sl-icon { color: var(--sl-color-primary-500); }
-    .option-card--join sl-icon { color: var(--sl-color-success-500); }
+    .option-card--create sl-icon {
+      color: var(--sl-color-primary-500);
+    }
+    .option-card--join sl-icon {
+      color: var(--sl-color-success-500);
+    }
 
     .flow-container {
       display: flex;
@@ -151,7 +177,9 @@ export class SessionLobby extends LitElement {
       margin-bottom: 1.5rem;
     }
 
-    .flow-card .back-link:hover { color: var(--sl-color-primary-400); }
+    .flow-card .back-link:hover {
+      color: var(--sl-color-primary-400);
+    }
 
     .join-code-box {
       text-align: center;
@@ -214,48 +242,58 @@ export class SessionLobby extends LitElement {
       flex: 1;
     }
 
-    .error-msg { margin-bottom: 0.75rem; }
+    .error-msg {
+      margin-bottom: 0.75rem;
+    }
   `;
 
   // Set by @vaadin/router — reactive so view switches trigger re-render
   @state() location!: RouterLocation;
 
-  @state() private _lobbyState: LobbyState = 'landing';
-  @state() private _joinCode = '';
+  @state() private _lobbyState: LobbyState = "landing";
+  @state() private _joinCode = "";
   @state() private _loading = false;
-  @state() private _error = '';
-  @state() private _sessionState: SessionState | null = store.get().sessionState;
+  @state() private _error = "";
+  @state() private _sessionState: SessionState | null =
+    store.get().sessionState;
   @state() private _codeCopied = false;
 
   // For creating sessions, we need a project ID.
   // TODO: add project selection UI. For now, use a fixed default.
-  @state() private _projectId = '';
-  @state() private _sessionName = '';
+  @state() private _projectId = "";
+  @state() private _sessionName = "";
 
   private _unsubscribe: (() => void) | null = null;
   private _popstateHandler = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
-    window.addEventListener('popstate', this._popstateHandler);
+    window.addEventListener("popstate", this._popstateHandler);
     this._unsubscribe = store.subscribe((event) => {
-      if (event.type === 'session-connected' || event.type === 'session-updated' || event.type === 'session-disconnected') {
+      if (
+        event.type === "session-connected" ||
+        event.type === "session-updated" ||
+        event.type === "session-disconnected"
+      ) {
         this._sessionState = store.get().sessionState;
-        if (event.type === 'session-connected') {
-          this._lobbyState = 'in-session';
+        if (event.type === "session-connected") {
+          this._lobbyState = "in-session";
           const code = store.get().sessionState?.code;
           // Only navigate if not already on a session URL (preserves deep-link suffixes like /tasks/:ticketId)
-          if (code && !window.location.pathname.startsWith(`/sessions/${code}`)) {
+          if (
+            code &&
+            !window.location.pathname.startsWith(`/sessions/${code}`)
+          ) {
             navigateTo(`/sessions/${code}`);
           }
-        } else if (event.type === 'session-disconnected') {
-          this._lobbyState = 'landing';
-          navigateTo('/projects');
+        } else if (event.type === "session-disconnected") {
+          this._lobbyState = "landing";
+          navigateTo("/projects");
         }
       }
     });
     if (this._sessionState) {
-      this._lobbyState = 'in-session';
+      this._lobbyState = "in-session";
     } else {
       this._tryJoinFromRoute();
     }
@@ -264,7 +302,7 @@ export class SessionLobby extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
-    window.removeEventListener('popstate', this._popstateHandler);
+    window.removeEventListener("popstate", this._popstateHandler);
   }
 
   private async _tryJoinFromRoute() {
@@ -273,41 +311,44 @@ export class SessionLobby extends LitElement {
     const code = params.code.toUpperCase();
 
     // Wait for auth to be ready
-    const waitForAuth = () => new Promise<void>((resolve) => {
-      if (authStore.get().isAuthenticated) { resolve(); return; }
-      const unsub = authStore.subscribe((event) => {
-        if (event.type === 'auth-success') { unsub(); resolve(); }
-        if (event.type === 'auth-logout' || event.type === 'auth-error') { unsub(); resolve(); }
+    const waitForAuth = () =>
+      new Promise<void>((resolve) => {
+        if (authStore.get().isAuthenticated) {
+          resolve();
+          return;
+        }
+        const unsub = authStore.subscribe((event) => {
+          if (event.type === "auth-success") {
+            unsub();
+            resolve();
+          }
+          if (event.type === "auth-logout" || event.type === "auth-error") {
+            unsub();
+            resolve();
+          }
+        });
       });
-    });
     await waitForAuth();
     if (!authStore.get().isAuthenticated) return;
 
     this._loading = true;
-    this._lobbyState = 'joining';
+    this._lobbyState = "joining";
     this._joinCode = code;
     try {
-      const token = authStore.getAccessToken();
       const user = authStore.user;
-      const res = await fetch(`${API_BASE}/api/sessions/${code}/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ display_name: user?.name ?? 'Participant' }),
-      });
-      if (!res.ok) {
-        navigateTo('/projects');
-        throw new Error(await res.text() || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      store.setSession(code, data.participant_id, data.session, data.agent_code);
+      const data = await joinSessionByCode(code, user?.name ?? "Participant");
+      store.setSession(
+        code,
+        data.participant_id,
+        data.session,
+        data.agent_code,
+      );
       connectSession(code);
       this._requestNotificationPermission();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('lobby.errorRejoin');
-      this._lobbyState = 'landing';
+      navigateTo("/projects");
+      this._error = err instanceof Error ? err.message : t("lobby.errorRejoin");
+      this._lobbyState = "landing";
     } finally {
       this._loading = false;
     }
@@ -317,33 +358,32 @@ export class SessionLobby extends LitElement {
     try {
       await navigator.clipboard.writeText(code);
       this._codeCopied = true;
-      setTimeout(() => { this._codeCopied = false; }, 1000);
-    } catch { /* clipboard may be blocked */ }
+      setTimeout(() => {
+        this._codeCopied = false;
+      }, 1000);
+    } catch {
+      /* clipboard may be blocked */
+    }
   }
 
   private async _createSession() {
     this._loading = true;
-    this._error = '';
+    this._error = "";
     try {
-      const token = authStore.getAccessToken();
-      const res = await fetch(`${API_BASE}/api/sessions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
-          project_id: this._projectId || undefined,
-          name: this._sessionName.trim() || undefined,
-        }),
+      const data = await createSession({
+        project_id: this._projectId || undefined,
+        name: this._sessionName.trim() || undefined,
       });
-      if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
-      const data = await res.json();
-      store.setSession(data.session.code, data.session.participants[0]?.id, data.session, data.agent_code);
+      store.setSession(
+        data.session.code,
+        data.session.participants[0]?.id,
+        data.session,
+        data.agent_code,
+      );
       connectSession(data.session.code);
       this._requestNotificationPermission();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('lobby.errorCreate');
+      this._error = err instanceof Error ? err.message : t("lobby.errorCreate");
     } finally {
       this._loading = false;
     }
@@ -351,37 +391,32 @@ export class SessionLobby extends LitElement {
 
   private async _joinSession() {
     if (!this._joinCode.trim()) {
-      this._error = t('lobby.errorJoinCode');
+      this._error = t("lobby.errorJoinCode");
       return;
     }
     this._loading = true;
-    this._error = '';
+    this._error = "";
     try {
       const code = this._joinCode.trim().toUpperCase();
-      const token = authStore.getAccessToken();
       const user = authStore.user;
-      const res = await fetch(`${API_BASE}/api/sessions/${code}/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ display_name: user?.name ?? 'Participant' }),
-      });
-      if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
-      const data = await res.json();
-      store.setSession(code, data.participant_id, data.session, data.agent_code);
+      const data = await joinSessionByCode(code, user?.name ?? "Participant");
+      store.setSession(
+        code,
+        data.participant_id,
+        data.session,
+        data.agent_code,
+      );
       connectSession(code);
       this._requestNotificationPermission();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('lobby.errorJoin');
+      this._error = err instanceof Error ? err.message : t("lobby.errorJoin");
     } finally {
       this._loading = false;
     }
   }
 
   private _requestNotificationPermission() {
-    if ('Notification' in window && Notification.permission === 'default') {
+    if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
   }
@@ -393,34 +428,60 @@ export class SessionLobby extends LitElement {
 
   render() {
     switch (this._lobbyState) {
-      case 'landing': return this._renderLanding();
-      case 'creating': return this._renderCreating();
-      case 'joining': return this._renderJoining();
-      case 'in-session': return this._renderInSession();
+      case "landing":
+        return this._renderLanding();
+      case "creating":
+        return this._renderCreating();
+      case "joining":
+        return this._renderJoining();
+      case "in-session":
+        return this._renderInSession();
     }
   }
 
   private _renderLanding() {
     return html`
       <div class="landing">
-        <h1>${t('lobby.title')}</h1>
-        <p class="subtitle">${t('lobby.subtitle')}</p>
+        <h1>${t("lobby.title")}</h1>
+        <p class="subtitle">${t("lobby.subtitle")}</p>
         <div class="landing-options">
-          <div class="option-card option-card--create"
-               role="button" tabindex="0"
-               @click=${() => { this._lobbyState = 'creating'; this._error = ''; }}
-               @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'creating'; } }}>
+          <div
+            class="option-card option-card--create"
+            role="button"
+            tabindex="0"
+            @click=${() => {
+              this._lobbyState = "creating";
+              this._error = "";
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                this._lobbyState = "creating";
+              }
+            }}
+          >
             <sl-icon name="plus-circle-fill"></sl-icon>
-            <p class="option-title">${t('lobby.newSession')}</p>
-            <p class="option-desc">${t('lobby.newSessionDesc')}</p>
+            <p class="option-title">${t("lobby.newSession")}</p>
+            <p class="option-desc">${t("lobby.newSessionDesc")}</p>
           </div>
-          <div class="option-card option-card--join"
-               role="button" tabindex="0"
-               @click=${() => { this._lobbyState = 'joining'; this._error = ''; }}
-               @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'joining'; } }}>
+          <div
+            class="option-card option-card--join"
+            role="button"
+            tabindex="0"
+            @click=${() => {
+              this._lobbyState = "joining";
+              this._error = "";
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                this._lobbyState = "joining";
+              }
+            }}
+          >
             <sl-icon name="box-arrow-in-right"></sl-icon>
-            <p class="option-title">${t('lobby.joinSession')}</p>
-            <p class="option-desc">${t('lobby.joinSessionDesc')}</p>
+            <p class="option-title">${t("lobby.joinSession")}</p>
+            <p class="option-desc">${t("lobby.joinSessionDesc")}</p>
           </div>
         </div>
       </div>
@@ -431,22 +492,41 @@ export class SessionLobby extends LitElement {
     return html`
       <div class="flow-container">
         <div class="flow-card">
-          <span class="back-link" role="button" tabindex="0"
-                @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}>
-            <sl-icon name="arrow-left"></sl-icon> ${t('lobby.back')}
+          <span
+            class="back-link"
+            role="button"
+            tabindex="0"
+            @click=${() => {
+              this._lobbyState = "landing";
+              this._error = "";
+            }}
+          >
+            <sl-icon name="arrow-left"></sl-icon> ${t("lobby.back")}
           </span>
-          <h2>${t('lobby.createTitle')}</h2>
-          ${this._error ? html`<sl-alert variant="danger" open class="error-msg">${this._error}</sl-alert>` : nothing}
+          <h2>${t("lobby.createTitle")}</h2>
+          ${this._error
+            ? html`<sl-alert variant="danger" open class="error-msg"
+                >${this._error}</sl-alert
+              >`
+            : nothing}
           <sl-input
-            label="${t('lobby.sessionNameLabel')}"
-            placeholder="${t('lobby.sessionNamePlaceholder')}"
+            label="${t("lobby.sessionNameLabel")}"
+            placeholder="${t("lobby.sessionNamePlaceholder")}"
             value=${this._sessionName}
-            @sl-input=${(e: CustomEvent) => { this._sessionName = (e.target as HTMLInputElement).value; }}
-            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createSession(); }}
+            @sl-input=${(e: CustomEvent) => {
+              this._sessionName = (e.target as HTMLInputElement).value;
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === "Enter") void this._createSession();
+            }}
           ></sl-input>
-          <sl-button variant="primary" ?loading=${this._loading} @click=${() => void this._createSession()}>
+          <sl-button
+            variant="primary"
+            ?loading=${this._loading}
+            @click=${() => void this._createSession()}
+          >
             <sl-icon slot="prefix" name="arrow-right-circle"></sl-icon>
-            ${t('lobby.createButton')}
+            ${t("lobby.createButton")}
           </sl-button>
         </div>
       </div>
@@ -457,20 +537,42 @@ export class SessionLobby extends LitElement {
     return html`
       <div class="flow-container">
         <div class="flow-card">
-          <span class="back-link" role="button" tabindex="0"
-                @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}>
-            <sl-icon name="arrow-left"></sl-icon> ${t('lobby.back')}
+          <span
+            class="back-link"
+            role="button"
+            tabindex="0"
+            @click=${() => {
+              this._lobbyState = "landing";
+              this._error = "";
+            }}
+          >
+            <sl-icon name="arrow-left"></sl-icon> ${t("lobby.back")}
           </span>
-          <h2>${t('lobby.joinTitle')}</h2>
-          ${this._error ? html`<sl-alert variant="danger" open class="error-msg">${this._error}</sl-alert>` : nothing}
-          <sl-input label="${t('lobby.joinCodeLabel')}" placeholder="${t('lobby.joinCodePlaceholder')}"
-                    value=${this._joinCode}
-                    @sl-input=${(e: CustomEvent) => { this._joinCode = (e.target as HTMLInputElement).value; }}
-                    @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._joinSession(); }}
-                    autocomplete="off"></sl-input>
-          <sl-button variant="primary" ?loading=${this._loading} @click=${() => void this._joinSession()}>
+          <h2>${t("lobby.joinTitle")}</h2>
+          ${this._error
+            ? html`<sl-alert variant="danger" open class="error-msg"
+                >${this._error}</sl-alert
+              >`
+            : nothing}
+          <sl-input
+            label="${t("lobby.joinCodeLabel")}"
+            placeholder="${t("lobby.joinCodePlaceholder")}"
+            value=${this._joinCode}
+            @sl-input=${(e: CustomEvent) => {
+              this._joinCode = (e.target as HTMLInputElement).value;
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === "Enter") void this._joinSession();
+            }}
+            autocomplete="off"
+          ></sl-input>
+          <sl-button
+            variant="primary"
+            ?loading=${this._loading}
+            @click=${() => void this._joinSession()}
+          >
             <sl-icon slot="prefix" name="box-arrow-in-right"></sl-icon>
-            ${t('lobby.joinButton')}
+            ${t("lobby.joinButton")}
           </sl-button>
         </div>
       </div>
@@ -478,7 +580,7 @@ export class SessionLobby extends LitElement {
   }
 
   private get _isActivityRoute(): boolean {
-    return window.location.pathname.endsWith('/activity');
+    return window.location.pathname.endsWith("/activity");
   }
 
   private _renderInSession() {
@@ -500,7 +602,7 @@ export class SessionLobby extends LitElement {
       <div class="session-workspace">
         <task-board
           session-code=${session.code}
-          session-name=${session.name ?? ''}
+          session-name=${session.name ?? ""}
           .participants=${session.participants}
         ></task-board>
       </div>
@@ -510,6 +612,6 @@ export class SessionLobby extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'session-lobby': SessionLobby;
+    "session-lobby": SessionLobby;
   }
 }

@@ -1,20 +1,27 @@
-import { authStore } from './auth-state.js';
+import { authStore } from "./auth-state.js";
 
-const API_BASE = '';
+const API_BASE = "";
 
 function authHeaders(): Record<string, string> {
   const token = authStore.getAccessToken();
   return {
-    'Content-Type': 'application/json',
-    ...(token && { 'Authorization': `Bearer ${token}` }),
+    "Content-Type": "application/json",
+    ...(token && { Authorization: `Bearer ${token}` }),
   };
 }
 
 // --- Project-level agent views ---
 
-export type TaskStatus = 'open' | 'in_progress' | 'done' | 'closed';
-export type TaskType = 'epic' | 'story' | 'task' | 'subtask' | 'bug';
-export type WorkspaceStatus = 'pending' | 'creating' | 'running' | 'stopping' | 'stopped' | 'failed' | 'destroyed';
+export type TaskStatus = "open" | "in_progress" | "done" | "closed";
+export type TaskType = "epic" | "story" | "task" | "subtask" | "bug";
+export type WorkspaceStatus =
+  | "pending"
+  | "creating"
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "failed"
+  | "destroyed";
 
 export interface AgentTaskSummary {
   id: string;
@@ -74,7 +81,7 @@ export interface ProjectAgentDetailView {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
   }
   return res.json();
@@ -85,17 +92,23 @@ export async function fetchProjectAgents(
   opts?: { includeDisconnected?: boolean },
 ): Promise<ProjectAgentView[]> {
   const params = new URLSearchParams();
-  if (opts?.includeDisconnected) params.set('include_disconnected', 'true');
+  if (opts?.includeDisconnected) params.set("include_disconnected", "true");
   const qs = params.toString();
   const res = await fetch(
-    `${API_BASE}/api/projects/${projectId}/agents${qs ? `?${qs}` : ''}`,
+    `${API_BASE}/api/projects/${projectId}/agents${qs ? `?${qs}` : ""}`,
     { headers: authHeaders() },
   );
   return handleResponse(res);
 }
 
-export async function fetchProjectAgent(projectId: string, agentId: string): Promise<ProjectAgentDetailView> {
-  const res = await fetch(`${API_BASE}/api/projects/${projectId}/agents/${agentId}`, { headers: authHeaders() });
+export async function fetchProjectAgent(
+  projectId: string,
+  agentId: string,
+): Promise<ProjectAgentDetailView> {
+  const res = await fetch(
+    `${API_BASE}/api/projects/${projectId}/agents/${agentId}`,
+    { headers: authHeaders() },
+  );
   return handleResponse(res);
 }
 
@@ -118,10 +131,10 @@ export async function fetchMessages(
   opts?: { limit?: number },
 ): Promise<MessageView[]> {
   const params = new URLSearchParams();
-  if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.limit) params.set("limit", String(opts.limit));
   const qs = params.toString();
   const res = await fetch(
-    `${API_BASE}/api/sessions/${sessionCode}/participants/${participantId}/messages${qs ? `?${qs}` : ''}`,
+    `${API_BASE}/api/sessions/${sessionCode}/participants/${participantId}/messages${qs ? `?${qs}` : ""}`,
     { headers: authHeaders() },
   );
   return handleResponse(res);
@@ -135,10 +148,56 @@ export async function sendMessage(
   const res = await fetch(
     `${API_BASE}/api/sessions/${sessionCode}/participants/${participantId}/messages`,
     {
-      method: 'POST',
+      method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({ content }),
     },
+  );
+  return handleResponse(res);
+}
+
+// --- Tool invocations ---
+
+export interface ToolInvocationView {
+  id: string;
+  tool_name: string;
+  is_error: boolean;
+  duration_ms: number;
+  created_at: string;
+}
+
+export async function fetchToolInvocations(
+  sessionCode: string,
+  participantId: string,
+  opts?: { limit?: number },
+): Promise<ToolInvocationView[]> {
+  const params = new URLSearchParams({ participant_id: participantId });
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const res = await fetch(
+    `${API_BASE}/api/sessions/${sessionCode}/tool-invocations?${params}`,
+    { headers: authHeaders() },
+  );
+  return handleResponse(res);
+}
+
+// --- Workspace logs ---
+
+export interface WorkspaceLogLine {
+  line: string;
+  fd: string;
+  ts: string;
+}
+
+export async function fetchWorkspaceLogs(
+  workspaceId: string,
+  opts?: { limit?: number },
+): Promise<WorkspaceLogLine[]> {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  const res = await fetch(
+    `${API_BASE}/api/workspaces/${workspaceId}/logs${qs ? `?${qs}` : ""}`,
+    { headers: authHeaders() },
   );
   return handleResponse(res);
 }

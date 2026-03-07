@@ -18,6 +18,7 @@ import {
 import { store, type SessionView } from "../../state/app-state.js";
 import { connectSession } from "../../state/session-connection.js";
 import { authStore } from "../../state/auth-state.js";
+import { createSession, joinSessionByCode } from "../../state/session-api.js";
 import { navigateTo } from "../../router.js";
 import type { RouterLocation } from "@vaadin/router";
 import { t } from "../../lib/i18n.js";
@@ -51,8 +52,6 @@ import "../tasks/task-board.js";
 import "../automations/automation-panel.js";
 // Lazy-loaded when graph tab is shown (Three.js is ~800KB)
 const ensureGraphLoaded = () => import("../graph/dependency-graph.js");
-
-const API_BASE = "";
 
 @customElement("project-workspace")
 export class ProjectWorkspace extends LitElement {
@@ -668,20 +667,10 @@ export class ProjectWorkspace extends LitElement {
     this._creatingSess = true;
     this._error = "";
     try {
-      const token = authStore.getAccessToken();
-      const res = await fetch(`${API_BASE}/api/sessions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
-          project_id: this.projectId,
-          name: this._newSessionName.trim() || undefined,
-        }),
+      const data = await createSession({
+        project_id: this.projectId,
+        name: this._newSessionName.trim() || undefined,
       });
-      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
-      const data = await res.json();
       store.setSession(
         data.session.code,
         data.session.participants[0]?.id,
@@ -701,19 +690,9 @@ export class ProjectWorkspace extends LitElement {
   }
 
   private async _joinSession(code: string) {
-    const token = authStore.getAccessToken();
     const user = authStore.user;
     try {
-      const res = await fetch(`${API_BASE}/api/sessions/${code}/join`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ display_name: user?.name ?? "Participant" }),
-      });
-      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await joinSessionByCode(code, user?.name ?? "Participant");
       store.setSession(
         code,
         data.participant_id,
