@@ -252,8 +252,7 @@ Event-driven reactions and scheduled jobs, powered by RabbitMQ.
 
 ### Action Types
 
-- `invoke_agent` — create an ephemeral invocation (`claude -p`) in a workspace pool. Supports `--resume` for session continuity. **Preferred path.**
-- `launch_agent` — *(deprecated)* launch a Coder workspace with 1:1 agent coupling. Emits a deprecation warning. Migrate to `invoke_agent`.
+- `invoke_agent` — create an ephemeral invocation (`claude -p`) in a workspace pool. Supports `--resume` for session continuity.
 - `webhook` — HTTP callback (not yet implemented)
 - `mcp_tool` — invoke an MCP tool via Streamable HTTP client
 
@@ -267,7 +266,7 @@ Event-driven reactions and scheduled jobs, powered by RabbitMQ.
 ### Environment
 
 - `AMQP_URL` — RabbitMQ connection (default: `amqp://seam:seam@localhost:5672`)
-- `WORKER_API_TOKEN` — Bearer token for worker to call server API (invoke_agent/launch_agent actions)
+- `WORKER_API_TOKEN` — Bearer token for worker to call server API (invoke_agent action)
 - `SEAM_URL` — Server URL for internal API calls (default: `http://localhost:3002`)
 - RabbitMQ management UI: `http://localhost:15672` (seam/seam)
 

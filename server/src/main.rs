@@ -226,7 +226,6 @@ async fn main() {
         .route("/api/projects/{project_id}/events", get(routes::events::list_events))
         // Agent API
         .route("/api/agent/join", post(routes::agent::agent_join))
-        .route("/api/sessions/{code}/agents", post(routes::agents::launch_agent))
         // Project agents
         .route("/api/projects/{project_id}/agents", get(routes::agents::list_project_agents))
         .route("/api/projects/{project_id}/agents/{agent_id}", get(routes::agents::get_project_agent))
