@@ -46,13 +46,7 @@ selfservice:
             - https://seam.tacklines.com
         passwordless: false
     passkey:
-      enabled: true
-      config:
-        rp:
-          display_name: Seam
-          id: seam.tacklines.com
-          origins:
-            - https://seam.tacklines.com
+      enabled: false
 
   flows:
     login:
