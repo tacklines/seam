@@ -51,7 +51,7 @@ services:
 
   hydra:
     image: oryd/hydra:v2.3
-    command: serve all --config /etc/config/hydra/hydra.yml
+    command: serve all --config /etc/config/hydra/hydra.yml --dangerous-force-http
     volumes:
       - ./infra/ory/hydra-prod.yml:/etc/config/hydra/hydra.yml:ro
     depends_on:
