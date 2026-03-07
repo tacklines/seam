@@ -3,6 +3,17 @@ name: Build & Deploy
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "agents/docs/**"
+      - ".claude/**"
+      - "**.md"
+      - "!server/**"
+      - "!frontend/**"
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
 
 permissions:
   id-token: write
@@ -12,8 +23,28 @@ env:
   AWS_REGION: us-east-1
 
 jobs:
-  build-and-deploy:
+  check:
     runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: TypeScript check
+        run: cd frontend && npx tsc --noEmit
+
+  build:
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +58,10 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Set image metadata
+        id: meta
+        run: echo "image=${{ steps.ecr.outputs.registry }}/seam/server" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -37,8 +72,8 @@ jobs:
           file: server/Dockerfile
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/seam/server:latest
-            ${{ steps.ecr.outputs.registry }}/seam/server:sha-${{ github.sha }}
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:sha-${{ github.sha }}
           build-args: |
             VITE_AUTH_AUTHORITY=https://auth.seam.tacklines.com
             VITE_APP_URL=https://seam.tacklines.com
@@ -46,17 +81,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  deploy:
+    needs: [check, build]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Deploy via SSM
         run: |
           INSTANCE_ID=${{ secrets.EC2_INSTANCE_ID }}
-          ECR_URL="${{ steps.ecr.outputs.registry }}/seam/server"
+          ECR_URL="${{ needs.build.outputs.image }}"
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters "commands=[
               'ECR_REGISTRY=$(echo $ECR_URL | cut -d/ -f1)',
-              'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY',
+              'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin \$ECR_REGISTRY',
               'docker pull ${ECR_URL}:latest',
               'docker create --name seam-extract ${ECR_URL}:latest true 2>/dev/null; docker cp seam-extract:/app/static/. /opt/seam/static/; docker rm seam-extract; chown -R caddy:caddy /opt/seam/static',
               'cd /opt/seam/repo && git pull --ff-only',
