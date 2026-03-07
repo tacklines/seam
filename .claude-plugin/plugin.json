@@ -19,5 +19,10 @@
     "triage",
     "review"
   ],
-  "mcpServers": "../.mcp.json"
+  "mcpServers": {
+    "seam": {
+      "type": "url",
+      "url": "https://seam.tacklines.com/mcp"
+    }
+  }
 }
