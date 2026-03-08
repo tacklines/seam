@@ -7,6 +7,7 @@ import {
   type ModelMetric,
 } from "../../state/metrics-api.js";
 import { t } from "../../lib/i18n.js";
+import { subscribeProjectMetrics } from "../../state/project-ws.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/card/card.js";
@@ -223,16 +224,39 @@ export class ProjectMetrics extends LitElement {
   @state() private _error = "";
   @state() private _period = "24h";
 
+  private _unsubscribeWs: (() => void) | null = null;
+
   connectedCallback() {
     super.connectedCallback();
     if (this.projectId) {
       void this._load();
+      this._subscribeToProject(this.projectId);
     }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._unsubscribeFromProject();
   }
 
   updated(changed: Map<string, unknown>) {
     if (changed.has("projectId") && this.projectId) {
       void this._load();
+      this._unsubscribeFromProject();
+      this._subscribeToProject(this.projectId);
+    }
+  }
+
+  private _subscribeToProject(projectId: string) {
+    this._unsubscribeWs = subscribeProjectMetrics(projectId, () => {
+      void this._load();
+    });
+  }
+
+  private _unsubscribeFromProject() {
+    if (this._unsubscribeWs) {
+      this._unsubscribeWs();
+      this._unsubscribeWs = null;
     }
   }
 

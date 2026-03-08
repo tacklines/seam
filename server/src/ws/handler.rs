@@ -24,6 +24,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
     let conn_id = Uuid::new_v4().to_string();
     let mut session_code: Option<String> = None;
+    let mut subscribed_projects: Vec<String> = Vec::new();
 
     // Spawn task to forward messages from channel to WebSocket
     let send_task = tokio::spawn(async move {
@@ -102,6 +103,27 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                 state.connections.unsubscribe_agent(code, &conn_id, pid);
                             }
                         }
+                        Some("subscribe_project") => {
+                            if let Some(pid) = parsed.get("projectId").and_then(|p| p.as_str()) {
+                                state
+                                    .connections
+                                    .subscribe_project(pid, &conn_id, tx.clone());
+                                subscribed_projects.push(pid.to_string());
+                                let _ = tx.send(
+                                    serde_json::json!({
+                                        "type": "subscribed_project",
+                                        "projectId": pid,
+                                    })
+                                    .to_string(),
+                                );
+                            }
+                        }
+                        Some("unsubscribe_project") => {
+                            if let Some(pid) = parsed.get("projectId").and_then(|p| p.as_str()) {
+                                state.connections.unsubscribe_project(pid, &conn_id);
+                                subscribed_projects.retain(|p| p != pid);
+                            }
+                        }
                         Some("ping") => {
                             let _ = tx.send(serde_json::json!({ "type": "pong" }).to_string());
                         }
@@ -112,6 +134,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             Message::Close(_) => break,
             _ => {}
         }
+    }
+
+    // Clean up project subscriptions
+    for pid in &subscribed_projects {
+        state.connections.unsubscribe_project(pid, &conn_id);
     }
 
     // Clean up — notify others if participant was identified

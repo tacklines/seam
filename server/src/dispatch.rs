@@ -344,6 +344,7 @@ async fn org_id_for_project(db: &PgPool, project_id: Uuid) -> Option<Uuid> {
 struct InvocationRow {
     id: Uuid,
     workspace_id: Uuid,
+    project_id: Uuid,
     session_id: Option<Uuid>,
     participant_id: Option<Uuid>,
     agent_perspective: String,
@@ -544,7 +545,7 @@ pub async fn dispatch_invocation(
 ) -> Result<(), DispatchError> {
     // 1. Load invocation
     let inv: Option<InvocationRow> = sqlx::query_as(
-        "SELECT id, workspace_id, session_id, participant_id,
+        "SELECT id, workspace_id, project_id, session_id, participant_id,
                 agent_perspective, prompt, system_prompt_append, resume_session_id,
                 model_hint, budget_tier, provider
          FROM invocations WHERE id = $1",
@@ -556,6 +557,7 @@ pub async fn dispatch_invocation(
         |(
             id,
             workspace_id,
+            project_id,
             session_id,
             participant_id,
             agent_perspective,
@@ -566,6 +568,7 @@ pub async fn dispatch_invocation(
             budget_tier,
             provider,
         ): (
+            Uuid,
             Uuid,
             Uuid,
             Option<Uuid>,
@@ -580,6 +583,7 @@ pub async fn dispatch_invocation(
         )| InvocationRow {
             id,
             workspace_id,
+            project_id,
             session_id,
             participant_id,
             agent_perspective,
@@ -931,6 +935,36 @@ pub async fn dispatch_invocation(
     if let Err(e) = crate::events::emit(db, &event).await {
         tracing::warn!("Failed to emit {event_type} event: {e}");
     }
+
+    // 13. Broadcast metrics_update to project subscribers
+    let duration_seconds: Option<f64> = sqlx::query_scalar(
+        "SELECT EXTRACT(EPOCH FROM (completed_at - started_at))::float8
+         FROM invocations WHERE id = $1",
+    )
+    .bind(inv.id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+
+    connections
+        .broadcast_to_project(
+            &inv.project_id.to_string(),
+            &serde_json::json!({
+                "type": "metrics_update",
+                "project_id": inv.project_id,
+                "data": {
+                    "event": event_type,
+                    "invocation_id": inv.id,
+                    "perspective": inv.agent_perspective,
+                    "duration_seconds": duration_seconds,
+                    "exit_code": exit_code,
+                    "cost_usd": cost_usd,
+                    "model_used": model_used,
+                }
+            }),
+        )
+        .await;
 
     tracing::info!(
         invocation_id = %inv.id,

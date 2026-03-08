@@ -20,6 +20,14 @@ pub struct ConnectionManager {
     sessions: DashMap<String, Vec<ConnInfo>>,
     /// MCP-connected agent participant IDs (session_code -> set of participant_id strings)
     mcp_agents: DashMap<String, HashSet<String>>,
+    /// project_id -> list of senders for project-level broadcasts (e.g. metrics updates)
+    project_subscribers: DashMap<String, Vec<ProjectSub>>,
+}
+
+#[derive(Clone)]
+pub struct ProjectSub {
+    pub conn_id: String,
+    pub tx: Tx,
 }
 
 impl Default for ConnectionManager {
@@ -33,6 +41,7 @@ impl ConnectionManager {
         Self {
             sessions: DashMap::new(),
             mcp_agents: DashMap::new(),
+            project_subscribers: DashMap::new(),
         }
     }
 
@@ -185,6 +194,38 @@ impl ConnectionManager {
                 if conn.participant_id.as_deref() == Some(participant_id) {
                     let _ = conn.tx.send(text.clone());
                 }
+            }
+        }
+    }
+
+    /// Subscribe a connection to project-level broadcasts (e.g. metrics updates).
+    pub fn subscribe_project(&self, project_id: &str, conn_id: &str, tx: Tx) {
+        self.project_subscribers
+            .entry(project_id.to_string())
+            .or_default()
+            .push(ProjectSub {
+                conn_id: conn_id.to_string(),
+                tx,
+            });
+    }
+
+    /// Unsubscribe a connection from project-level broadcasts.
+    pub fn unsubscribe_project(&self, project_id: &str, conn_id: &str) {
+        if let Some(mut subs) = self.project_subscribers.get_mut(project_id) {
+            subs.retain(|s| s.conn_id != conn_id);
+            if subs.is_empty() {
+                drop(subs);
+                self.project_subscribers.remove(project_id);
+            }
+        }
+    }
+
+    /// Broadcast a message to all connections subscribed to a project.
+    pub async fn broadcast_to_project(&self, project_id: &str, msg: &serde_json::Value) {
+        let text = serde_json::to_string(msg).unwrap_or_default();
+        if let Some(subs) = self.project_subscribers.get(project_id) {
+            for sub in subs.iter() {
+                let _ = sub.tx.send(text.clone());
             }
         }
     }
