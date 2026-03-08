@@ -28,12 +28,6 @@ function formatDuration(seconds: number | null): string {
   return remM > 0 ? `${h}h ${remM}m` : `${h}h`;
 }
 
-function successRateVariant(rate: number): string {
-  if (rate >= 90) return "success";
-  if (rate >= 70) return "warning";
-  return "danger";
-}
-
 function successRateColor(rate: number): string {
   if (rate >= 90) return "var(--sl-color-success-500, #22c55e)";
   if (rate >= 70) return "var(--sl-color-warning-500, #f59e0b)";
