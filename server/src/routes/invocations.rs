@@ -126,6 +126,113 @@ fn to_view(inv: Invocation) -> InvocationView {
     }
 }
 
+/// Fetches full task context for a given task ID and formats it as markdown.
+/// Returns None (with a warning log) if the task cannot be found or the query fails.
+async fn build_task_context(db: &sqlx::PgPool, task_id: Uuid) -> Option<String> {
+    // Task detail joined with project for ticket_prefix.
+    // Enums are cast to TEXT for safe tuple decoding.
+    let task_row: Option<(i32, String, String, Option<String>, String, String, String)> =
+        sqlx::query_as(
+            "SELECT t.ticket_number, p.ticket_prefix, t.title,
+                    t.description, t.status::text, t.priority::text, t.complexity::text
+             FROM tasks t
+             JOIN projects p ON p.id = t.project_id
+             WHERE t.id = $1",
+        )
+        .bind(task_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| tracing::warn!("build_task_context: failed to fetch task {task_id}: {e}"))
+        .ok()
+        .flatten();
+
+    let (ticket_number, ticket_prefix, title, description, status, priority, complexity) =
+        match task_row {
+            Some(row) => row,
+            None => {
+                tracing::warn!("build_task_context: task {task_id} not found");
+                return None;
+            }
+        };
+
+    let ticket_id = format!("{}-{}", ticket_prefix, ticket_number);
+
+    let mut md = format!(
+        "# Task Context\n\n\
+         **Task**: {ticket_id} {title}\n\
+         **Status**: {status} | **Priority**: {priority} | **Complexity**: {complexity}\n\n\
+         ## Description\n\
+         {}\n",
+        description.as_deref().unwrap_or("No description provided.")
+    );
+
+    // Recent comments (last 5), newest first
+    let comments: Vec<(String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT content, created_at FROM task_comments
+         WHERE task_id = $1 ORDER BY created_at DESC LIMIT 5",
+    )
+    .bind(task_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("build_task_context: failed to fetch comments: {e}");
+        vec![]
+    });
+
+    if !comments.is_empty() {
+        md.push_str("\n## Recent Comments (last 5)\n");
+        for (content, created_at) in &comments {
+            let ts = created_at.format("%Y-%m-%d %H:%M UTC");
+            md.push_str(&format!("- [{ts}] {content}\n"));
+        }
+    }
+
+    // Child tasks (same project, so same prefix)
+    let children: Vec<(i32, String, String)> = sqlx::query_as(
+        "SELECT ticket_number, title, status::text FROM tasks
+         WHERE parent_id = $1 ORDER BY created_at",
+    )
+    .bind(task_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("build_task_context: failed to fetch child tasks: {e}");
+        vec![]
+    });
+
+    if !children.is_empty() {
+        md.push_str("\n## Child Tasks\n");
+        for (cnum, ctitle, cstatus) in &children {
+            let cticket = format!("{}-{}", ticket_prefix, cnum);
+            md.push_str(&format!("- {cticket} {ctitle} ({cstatus})\n"));
+        }
+    }
+
+    // Dependencies (tasks this task depends on)
+    let deps: Vec<(i32, String, String)> = sqlx::query_as(
+        "SELECT t.ticket_number, t.title, t.status::text
+         FROM task_dependencies td JOIN tasks t ON t.id = td.depends_on_id
+         WHERE td.task_id = $1",
+    )
+    .bind(task_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("build_task_context: failed to fetch dependencies: {e}");
+        vec![]
+    });
+
+    if !deps.is_empty() {
+        md.push_str("\n## Dependencies\n");
+        for (dnum, dtitle, dstatus) in &deps {
+            let dticket = format!("{}-{}", ticket_prefix, dnum);
+            md.push_str(&format!("- {dticket} {dtitle} ({dstatus})\n"));
+        }
+    }
+
+    Some(md)
+}
+
 /// Verify project membership; returns Err(NOT_FOUND) when the user is not a member.
 async fn verify_project_member(
     db: &sqlx::PgPool,
@@ -246,6 +353,20 @@ pub async fn create_invocation(
         }
     }
 
+    // Build task context markdown when a task_id is provided; merge with any user-supplied
+    // system_prompt_append. Failures are non-fatal — log and proceed without context.
+    let task_context = if let Some(tid) = req.task_id {
+        build_task_context(&state.db, tid).await
+    } else {
+        None
+    };
+
+    let effective_system_prompt = match (task_context, &req.system_prompt_append) {
+        (Some(ctx), Some(user_spa)) => Some(format!("{ctx}\n\n---\n\n{user_spa}")),
+        (Some(ctx), None) => Some(ctx),
+        (None, spa) => spa.clone(),
+    };
+
     let inv = sqlx::query_as::<_, Invocation>(
         "INSERT INTO invocations
             (workspace_id, project_id, session_id, task_id,
@@ -260,7 +381,7 @@ pub async fn create_invocation(
     .bind(req.task_id)
     .bind(&req.agent_perspective)
     .bind(&req.prompt)
-    .bind(&req.system_prompt_append)
+    .bind(&effective_system_prompt)
     .bind(&req.resume_session_id)
     .bind(&effective_model_hint)
     .bind(&effective_budget_tier)
