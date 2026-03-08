@@ -1,0 +1,28 @@
+name: Push Coder Template
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/coder/templates/**"
+
+concurrency:
+  group: coder-template-push
+  cancel-in-progress: true
+
+jobs:
+  push-template:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Coder CLI
+        run: |
+          curl -fsSL https://coder.com/install.sh | sh
+
+      - name: Push template
+        env:
+          CODER_URL: ${{ secrets.CODER_URL }}
+          CODER_SESSION_TOKEN: ${{ secrets.CODER_TOKEN }}
+        run: |
+          coder templates push seam-agent --directory infra/coder/templates/seam-agent/ --yes
