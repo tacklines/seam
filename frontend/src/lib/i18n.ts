@@ -935,6 +935,13 @@ export const messagesEn: Record<string, string> = {
   "dispatch.request.action.decompose": "Decompose into Tasks",
   "dispatch.request.action.feasibility": "Assess Feasibility",
   "dispatch.request.action.custom": "Custom...",
+
+  // ── agent-level dispatch ──
+  "dispatch.agent.button": "Dispatch Agent",
+  "dispatch.agent.action.continueWork": "Continue Work",
+  "dispatch.agent.action.reviewOutput": "Review Output",
+  "dispatch.agent.action.diagnoseIssues": "Diagnose Issues",
+  "dispatch.agent.action.custom": "Custom...",
 };
 
 // Wire English into the locale map

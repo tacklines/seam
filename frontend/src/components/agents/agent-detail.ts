@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import {
   fetchProjectAgent,
   type ProjectAgentDetailView,
@@ -7,21 +7,28 @@ import {
 import { t } from "../../lib/i18n.js";
 import { relativeTime } from "../../lib/date-utils.js";
 import { WS_STATUS_VARIANT } from "../../lib/participant-utils.js";
+import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
 import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
 import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
-import "@shoelace-style/shoelace/dist/components/button/button.js";
-import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 
 import "../shared/markdown-content.js";
 import "./agent-activity-panel.js";
+import "../invocations/invoke-dialog.js";
 
 
 @customElement("agent-detail")
 export class AgentDetail extends LitElement {
+  @query("invoke-dialog") private _invokeDialog!: InvokeDialog;
+
   static styles = css`
     :host {
       display: block;
@@ -349,6 +356,41 @@ export class AgentDetail extends LitElement {
     );
   }
 
+  private _handleDispatchAction(e: CustomEvent) {
+    const action = (e.detail as { item: { value: string } }).item.value;
+    const agent = this._detail?.agent;
+    if (!agent) return;
+
+    const name = agent.display_name;
+
+    switch (action) {
+      case "continue": {
+        const taskTitle = agent.current_task?.title ?? "";
+        this._invokeDialog.showWithPerspective(
+          "coder",
+          `Continue working on this agent's last task${taskTitle ? ` ("${taskTitle}")` : ""}. Check the current state of the branch and continue where the previous agent left off.`,
+        );
+        break;
+      }
+      case "review":
+        this._invokeDialog.showWithPerspective(
+          "reviewer",
+          `Review the recent changes made by agent "${name}". Examine the diff on branch${agent.workspace?.branch ? ` "${agent.workspace.branch}"` : ""}, provide feedback, and identify any issues.`,
+        );
+        break;
+      case "diagnose":
+        this._invokeDialog.showWithPerspective(
+          "tester",
+          `Investigate any errors or failures from agent "${name}". Check logs, identify root causes, and report findings.${agent.workspace?.error_message ? `\n\nError message: ${agent.workspace.error_message}` : ""}`,
+        );
+        break;
+      case "custom":
+      default:
+        this._invokeDialog.show();
+        break;
+    }
+  }
+
   render() {
     if (this._loading) {
       return html`<div class="loading">
@@ -398,6 +440,49 @@ export class AgentDetail extends LitElement {
             ? t("agentDetail.online")
             : t("agentDetail.offline")}</sl-badge
         >
+        <sl-dropdown>
+          <sl-button
+            slot="trigger"
+            caret
+            size="small"
+            variant="primary"
+            outline
+            aria-label=${t("dispatch.agent.button")}
+            aria-haspopup="menu"
+          >
+            <sl-icon slot="prefix" name="robot"></sl-icon>
+            ${t("dispatch.agent.button")}
+          </sl-button>
+          <sl-menu
+            @sl-select=${(e: CustomEvent) => this._handleDispatchAction(e)}
+          >
+            ${agent.current_task
+              ? html`
+                  <sl-menu-item value="continue">
+                    <sl-icon slot="prefix" name="arrow-repeat"></sl-icon>
+                    ${t("dispatch.agent.action.continueWork")}
+                  </sl-menu-item>
+                `
+              : nothing}
+            <sl-menu-item value="review">
+              <sl-icon slot="prefix" name="code-slash"></sl-icon>
+              ${t("dispatch.agent.action.reviewOutput")}
+            </sl-menu-item>
+            ${agent.workspace?.error_message || !isOnline
+              ? html`
+                  <sl-menu-item value="diagnose">
+                    <sl-icon slot="prefix" name="bug"></sl-icon>
+                    ${t("dispatch.agent.action.diagnoseIssues")}
+                  </sl-menu-item>
+                `
+              : nothing}
+            <sl-divider></sl-divider>
+            <sl-menu-item value="custom">
+              <sl-icon slot="prefix" name="gear"></sl-icon>
+              ${t("dispatch.agent.action.custom")}
+            </sl-menu-item>
+          </sl-menu>
+        </sl-dropdown>
       </div>
 
       <div class="info-grid">
@@ -484,6 +569,8 @@ export class AgentDetail extends LitElement {
 
       ${this._renderActivity(recent_activity)}
       ${this._renderComments(recent_comments)}
+
+      <invoke-dialog project-id=${this.projectId}></invoke-dialog>
     `;
   }
 
