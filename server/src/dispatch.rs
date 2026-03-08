@@ -268,12 +268,15 @@ async fn wake_workspace<C: CoderApi>(
     if let Err(e) = client.start_workspace(coder_workspace_id).await {
         tracing::error!(error = %e, "Failed to wake workspace via Coder API; reverting status to stopped");
         // Revert the optimistic 'running' status set in the advisory lock txn
-        let _ = sqlx::query(
+        if let Err(db_err) = sqlx::query(
             "UPDATE workspaces SET status = 'stopped', updated_at = NOW() WHERE id = $1",
         )
         .bind(workspace_id)
         .execute(db)
-        .await;
+        .await
+        {
+            tracing::warn!(workspace_id = %workspace_id, error = %db_err, "failed to revert workspace status to stopped after wake failure");
+        }
         return Err(DispatchError::CoderApi(e.to_string()));
     }
 
@@ -306,12 +309,15 @@ async fn wake_workspace<C: CoderApi>(
         .await
     {
         tracing::error!(error = %e, "Workspace did not become ready after wake; reverting to stopped");
-        let _ = sqlx::query(
+        if let Err(db_err) = sqlx::query(
             "UPDATE workspaces SET status = 'stopped', updated_at = NOW() WHERE id = $1",
         )
         .bind(workspace_id)
         .execute(db)
-        .await;
+        .await
+        {
+            tracing::warn!(workspace_id = %workspace_id, error = %db_err, "failed to revert workspace status to stopped after readiness timeout");
+        }
         return Err(DispatchError::CoderApi(e.to_string()));
     }
 
@@ -965,8 +971,12 @@ pub async fn dispatch_invocation(
     // Apply a 2-hour hard timeout to prevent invocations from hanging forever.
     const DISPATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2 * 60 * 60);
 
-    let _ = stdout_task.await;
-    let _ = stderr_task.await;
+    if let Err(e) = stdout_task.await {
+        tracing::warn!(invocation_id = %inv.id, error = ?e, "stdout reader task panicked");
+    }
+    if let Err(e) = stderr_task.await {
+        tracing::warn!(invocation_id = %inv.id, error = ?e, "stderr reader task panicked");
+    }
 
     let exit_status = match tokio::time::timeout(DISPATCH_TIMEOUT, child.wait()).await {
         Ok(Ok(status)) => status,
@@ -1198,15 +1208,26 @@ fn which_coder() -> Option<std::path::PathBuf> {
 /// the failure reason cannot be determined. Categorization is best-effort
 /// and should never block completion of the invocation record update.
 fn categorize_error(exit_code: i32, output: &str) -> Option<String> {
-    if exit_code == 124 || output.contains("timed out") {
+    if exit_code == 124 || output.contains("timed out") || output.contains("deadline exceeded") {
         Some("timeout".to_string())
     } else if output.contains("WorkspaceNotReady")
         || (output.contains("workspace") && output.contains("failed"))
+        || output.contains("connection refused")
+        || output.contains("Connection refused")
     {
         Some("workspace_error".to_string())
-    } else if output.contains("rate_limit") || output.contains("overloaded") {
+    } else if output.contains("rate_limit")
+        || output.contains("overloaded")
+        || output.contains("529")
+    {
         Some("claude_error".to_string())
-    } else if output.contains("auth") || (output.contains("token") && output.contains("expired")) {
+    } else if output.contains("auth")
+        || (output.contains("token") && output.contains("expired"))
+        || output.contains("401")
+        || output.contains("403")
+        || output.contains("Unauthorized")
+        || output.contains("Forbidden")
+    {
         Some("auth_error".to_string())
     } else if exit_code != 0 {
         Some("system_error".to_string())

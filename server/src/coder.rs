@@ -24,6 +24,13 @@ pub trait CoderApi {
         req: CreateWorkspaceRequest,
     ) -> impl std::future::Future<Output = Result<CoderWorkspace, CoderError>> + Send;
 
+    /// Get a workspace by its Coder UUID.
+    #[allow(dead_code)]
+    fn get_workspace(
+        &self,
+        id: Uuid,
+    ) -> impl std::future::Future<Output = Result<CoderWorkspace, CoderError>> + Send;
+
     /// Poll the workspace until its build status is "running" (agent ready for SSH).
     ///
     /// Uses exponential backoff: 1s, 2s, 4s, 8s, ... up to `timeout` total.
@@ -406,6 +413,10 @@ impl CoderApi for CoderClient {
         self.create_workspace(owner, req).await
     }
 
+    async fn get_workspace(&self, id: Uuid) -> Result<CoderWorkspace, CoderError> {
+        self.get_workspace(id).await
+    }
+
     async fn wait_until_ready(
         &self,
         workspace_id: Uuid,
@@ -432,6 +443,9 @@ pub mod testing {
         pub get_template_result: Mutex<Result<Option<CoderTemplate>, String>>,
         /// Result returned by `create_workspace`.
         pub create_workspace_result: Mutex<Result<CoderWorkspace, String>>,
+        /// Result returned by `get_workspace`.
+        #[allow(dead_code)]
+        pub get_workspace_result: Mutex<Result<CoderWorkspace, String>>,
         /// If set, `wait_until_ready` returns this error instead of Ok.
         pub wait_until_ready_error: Mutex<Option<String>>,
 
@@ -439,6 +453,8 @@ pub mod testing {
         pub start_workspace_calls: Mutex<Vec<Uuid>>,
         pub get_template_calls: Mutex<Vec<String>>,
         pub create_workspace_calls: Mutex<Vec<(String, String)>>, // (owner, workspace_name)
+        #[allow(dead_code)]
+        pub get_workspace_calls: Mutex<Vec<Uuid>>,
         pub wait_until_ready_calls: Mutex<Vec<Uuid>>,
     }
 
@@ -478,14 +494,34 @@ pub mod testing {
                 },
             };
 
+            let get_workspace_ws = CoderWorkspace {
+                id: coder_workspace_id,
+                name: "seam-test".to_string(),
+                owner_id: Uuid::new_v4(),
+                owner_name: "me".to_string(),
+                template_id,
+                template_name: "seam-agent".to_string(),
+                latest_build: CoderWorkspaceBuild {
+                    id: Uuid::new_v4(),
+                    status: "running".to_string(),
+                    job: CoderProvisionerJob {
+                        id: Uuid::new_v4(),
+                        status: "succeeded".to_string(),
+                        error: None,
+                    },
+                },
+            };
+
             Self {
                 start_workspace_result: Mutex::new(Ok(build)),
                 get_template_result: Mutex::new(Ok(Some(template))),
                 create_workspace_result: Mutex::new(Ok(workspace)),
+                get_workspace_result: Mutex::new(Ok(get_workspace_ws)),
                 wait_until_ready_error: Mutex::new(None),
                 start_workspace_calls: Mutex::new(vec![]),
                 get_template_calls: Mutex::new(vec![]),
                 create_workspace_calls: Mutex::new(vec![]),
+                get_workspace_calls: Mutex::new(vec![]),
                 wait_until_ready_calls: Mutex::new(vec![]),
             }
         }
@@ -588,6 +624,35 @@ pub mod testing {
                 })
         }
 
+        async fn get_workspace(&self, id: Uuid) -> Result<CoderWorkspace, CoderError> {
+            self.get_workspace_calls.lock().unwrap().push(id);
+            self.get_workspace_result
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|ws| CoderWorkspace {
+                    id: ws.id,
+                    name: ws.name.clone(),
+                    owner_id: ws.owner_id,
+                    owner_name: ws.owner_name.clone(),
+                    template_id: ws.template_id,
+                    template_name: ws.template_name.clone(),
+                    latest_build: CoderWorkspaceBuild {
+                        id: ws.latest_build.id,
+                        status: ws.latest_build.status.clone(),
+                        job: CoderProvisionerJob {
+                            id: ws.latest_build.job.id,
+                            status: ws.latest_build.job.status.clone(),
+                            error: ws.latest_build.job.error.clone(),
+                        },
+                    },
+                })
+                .map_err(|e| CoderError::Api {
+                    status: 500,
+                    message: e.clone(),
+                })
+        }
+
         async fn wait_until_ready(
             &self,
             workspace_id: Uuid,
@@ -661,6 +726,9 @@ pub mod testing {
             _owner: &str,
             _req: CreateWorkspaceRequest,
         ) -> Result<CoderWorkspace, CoderError> {
+            unimplemented!()
+        }
+        async fn get_workspace(&self, _id: Uuid) -> Result<CoderWorkspace, CoderError> {
             unimplemented!()
         }
         async fn wait_until_ready(
