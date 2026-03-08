@@ -818,6 +818,7 @@ export class TaskDetail extends LitElement {
         <task-metadata-panel
           .task=${task}
           .participants=${this.participants}
+          .projectId=${this.projectId}
           @field-changed=${(e: CustomEvent) =>
             void this._updateField(e.detail.fields)}
           @navigate-task=${(e: CustomEvent) =>

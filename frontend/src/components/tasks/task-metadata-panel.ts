@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import { t } from "../../lib/i18n.js";
 import { formatDate, relativeTime } from "../../lib/date-utils.js";
 import { getParticipantName } from "../../lib/participant-utils.js";
@@ -17,6 +17,7 @@ import {
   PRIORITY_COLORS,
   COMPLEXITY_LABELS,
 } from "../../state/task-types.js";
+import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
@@ -27,6 +28,7 @@ import "@shoelace-style/shoelace/dist/components/select/select.js";
 import "@shoelace-style/shoelace/dist/components/option/option.js";
 import "@shoelace-style/shoelace/dist/components/switch/switch.js";
 import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
+import "../invocations/invoke-dialog.js";
 
 export interface FieldChangedDetail {
   fields: Record<string, unknown>;
@@ -161,8 +163,11 @@ export class TaskMetadataPanel extends LitElement {
 
   @property({ type: Object }) task!: TaskDetailView;
   @property({ type: Array }) participants: SessionParticipant[] = [];
+  @property({ type: String, attribute: "project-id" }) projectId = "";
 
   @state() private _editingField: string | null = null;
+
+  @query("invoke-dialog") private _invokeDialog!: InvokeDialog;
 
   private _emit(fields: Record<string, unknown>) {
     this.dispatchEvent(
@@ -213,6 +218,11 @@ export class TaskMetadataPanel extends LitElement {
     }
 
     return nothing;
+  }
+
+  private _dispatchAgent() {
+    const task = this.task;
+    this._invokeDialog.showWithPrompt(`[${task.ticket_id}] ${task.title}`);
   }
 
   render() {
@@ -774,6 +784,24 @@ export class TaskMetadataPanel extends LitElement {
                 </span>
               </div>
             `}
+        ${this.projectId &&
+        (task.status === "open" || task.status === "in_progress")
+          ? html`
+              <sl-divider style="--spacing: 0.25rem;"></sl-divider>
+              <sl-button
+                variant="primary"
+                size="small"
+                outline
+                style="width: 100%; margin-top: 0.5rem;"
+                @click=${() => this._dispatchAgent()}
+              >
+                <sl-icon slot="prefix" name="rocket"></sl-icon>
+                Dispatch Agent
+              </sl-button>
+            `
+          : nothing}
+
+        <invoke-dialog project-id=${this.projectId}></invoke-dialog>
       </div>
     `;
   }
