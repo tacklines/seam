@@ -71,6 +71,15 @@ export class InvokeDialog extends LitElement {
     this._prompt = prompt;
   }
 
+  showWithPerspective(perspective: string, prompt: string) {
+    this._open = true;
+    this._error = "";
+    this._submitting = false;
+    this._resumeSessionId = "";
+    this._perspective = perspective;
+    this._prompt = prompt;
+  }
+
   showContinue(opts: { claude_session_id: string; agent_perspective: string }) {
     this._open = true;
     this._error = "";

@@ -22,7 +22,10 @@ import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/divider/divider.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
 import "@shoelace-style/shoelace/dist/components/input/input.js";
 import "@shoelace-style/shoelace/dist/components/select/select.js";
 import "@shoelace-style/shoelace/dist/components/option/option.js";
@@ -220,9 +223,45 @@ export class TaskMetadataPanel extends LitElement {
     return nothing;
   }
 
-  private _dispatchAgent() {
+  private _handleDispatchAction(e: CustomEvent) {
+    const action = (e.detail as { item: { value: string } }).item.value;
     const task = this.task;
-    this._invokeDialog.showWithPrompt(`[${task.ticket_id}] ${task.title}`);
+
+    switch (action) {
+      case "implement":
+        this._invokeDialog.showWithPrompt(
+          `Implement the following task: ${task.title}\n\nRead the task context in your system prompt for full details. Follow the definition of done for this task type.`,
+        );
+        break;
+      case "plan":
+        this._invokeDialog.showWithPerspective(
+          "planner",
+          `Explore and plan the implementation for: ${task.title}\n\nAnalyze the codebase to understand what changes are needed. Produce a concrete implementation plan with specific files, functions, and changes. If this is an epic, break it down into actionable subtasks.`,
+        );
+        break;
+      case "review":
+        this._invokeDialog.showWithPerspective(
+          "reviewer",
+          `Review the code related to: ${task.title}\n\nCheck for correctness, security issues, performance problems, and adherence to project conventions. Report findings as task comments.`,
+        );
+        break;
+      case "test":
+        this._invokeDialog.showWithPerspective(
+          "coder",
+          `Run the test suite and verify the implementation for: ${task.title}\n\nRun \`cargo test\` and \`npm test\`. Report results including any failures, coverage gaps, or missing test cases. If tests fail, investigate the root cause.`,
+        );
+        break;
+      case "research":
+        this._invokeDialog.showWithPerspective(
+          "planner",
+          `Research the following topic for task: ${task.title}\n\nGather information from the codebase, documentation, and existing patterns. Report findings with file locations and confidence levels.`,
+        );
+        break;
+      case "custom":
+      default:
+        this._invokeDialog.show();
+        break;
+    }
   }
 
   render() {
@@ -788,20 +827,56 @@ export class TaskMetadataPanel extends LitElement {
         (task.status === "open" || task.status === "in_progress")
           ? html`
               <sl-divider style="--spacing: 0.25rem;"></sl-divider>
-              <sl-button
-                variant="primary"
-                size="small"
-                outline
-                style="width: 100%; margin-top: 0.5rem;"
-                @click=${() => this._dispatchAgent()}
-              >
-                <sl-icon slot="prefix" name="rocket"></sl-icon>
-                Dispatch Agent
-              </sl-button>
+              <sl-dropdown style="width: 100%; margin-top: 0.5rem;">
+                <sl-button
+                  slot="trigger"
+                  caret
+                  variant="primary"
+                  size="small"
+                  outline
+                  style="width: 100%;"
+                >
+                  <sl-icon slot="prefix" name="robot"></sl-icon>
+                  Dispatch Agent
+                </sl-button>
+                <sl-menu
+                  @sl-select=${(e: CustomEvent) =>
+                    this._handleDispatchAction(e)}
+                >
+                  <sl-menu-item value="implement">
+                    <sl-icon slot="prefix" name="code-slash"></sl-icon>
+                    Implement
+                  </sl-menu-item>
+                  <sl-menu-item value="plan">
+                    <sl-icon slot="prefix" name="diagram-3"></sl-icon>
+                    Plan / Explore
+                  </sl-menu-item>
+                  <sl-menu-item value="review">
+                    <sl-icon slot="prefix" name="search"></sl-icon>
+                    Review Code
+                  </sl-menu-item>
+                  <sl-menu-item value="test">
+                    <sl-icon slot="prefix" name="check2-circle"></sl-icon>
+                    Run Tests
+                  </sl-menu-item>
+                  <sl-menu-item value="research">
+                    <sl-icon slot="prefix" name="book"></sl-icon>
+                    Research
+                  </sl-menu-item>
+                  <sl-divider></sl-divider>
+                  <sl-menu-item value="custom">
+                    <sl-icon slot="prefix" name="gear"></sl-icon>
+                    Custom...
+                  </sl-menu-item>
+                </sl-menu>
+              </sl-dropdown>
             `
           : nothing}
 
-        <invoke-dialog project-id=${this.projectId} task-id=${this.task.id}></invoke-dialog>
+        <invoke-dialog
+          project-id=${this.projectId}
+          task-id=${this.task.id}
+        ></invoke-dialog>
       </div>
     `;
   }
