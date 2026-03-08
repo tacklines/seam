@@ -5,6 +5,10 @@ import {
   fetchInvocation,
   type InvocationDetailView,
 } from "../../state/invocation-api.js";
+import {
+  parseStreamOutput,
+  type StreamEvent,
+} from "../../lib/stream-parser.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
@@ -137,6 +141,85 @@ export class InvocationDetail extends LitElement {
       color: #f87171;
     }
 
+    .evt-text {
+      white-space: pre-wrap;
+      color: var(--text-primary, #e2e4ed);
+      padding: 0.25rem 0;
+      line-height: 1.5;
+    }
+
+    .evt-tool-call {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      padding: 0.2rem 0;
+      color: #60a5fa;
+    }
+
+    .evt-tool-call .tool-name {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .evt-tool-call .tool-desc {
+      color: #93a3b8;
+      font-size: 0.75rem;
+    }
+
+    .evt-tool-detail {
+      margin-left: 1rem;
+      padding: 0.25rem 0.5rem;
+      border-left: 2px solid #2a2d3e;
+      color: #8b8fa3;
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .evt-tool-result {
+      margin-left: 1rem;
+      padding: 0.25rem 0.5rem;
+      border-left: 2px solid #2d3a2e;
+      color: #9ca3af;
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .evt-tool-result.is-error {
+      border-left-color: #5a2d2d;
+      color: #f87171;
+    }
+
+    .evt-result {
+      white-space: pre-wrap;
+      color: var(--text-primary, #e2e4ed);
+      padding: 0.5rem;
+      background: rgba(96, 165, 250, 0.05);
+      border-radius: 4px;
+      margin-top: 0.5rem;
+      line-height: 1.5;
+    }
+
+    .evt-result.is-error {
+      background: rgba(248, 113, 113, 0.05);
+      color: #f87171;
+    }
+
+    .evt-error {
+      color: #f87171;
+      padding: 0.15rem 0;
+    }
+
+    .evt-raw {
+      color: var(--text-secondary, #a0a4b8);
+      padding: 0.15rem 0;
+    }
+
     .result-section {
       margin-top: 1rem;
       background: var(--surface-2, #1a1d2e);
@@ -232,6 +315,21 @@ export class InvocationDetail extends LitElement {
     }, 2000);
   }
 
+  private _cachedParsed: StreamEvent[] | null = null;
+  private _cachedOutputLen = -1;
+
+  private get _parsedOutput(): StreamEvent[] {
+    const len = this._invocation?.output.length ?? 0;
+    if (this._cachedParsed && this._cachedOutputLen === len) {
+      return this._cachedParsed;
+    }
+    this._cachedParsed = this._invocation
+      ? parseStreamOutput(this._invocation.output)
+      : [];
+    this._cachedOutputLen = len;
+    return this._cachedParsed;
+  }
+
   private _scrollOutputToBottom() {
     const el = this.shadowRoot?.querySelector(".output-lines");
     if (el) el.scrollTop = el.scrollHeight;
@@ -274,6 +372,42 @@ export class InvocationDetail extends LitElement {
       | null;
     if (dialog) {
       dialog.showWithPerspective(perspective, inv.prompt);
+    }
+  }
+
+  private _renderEvent(evt: StreamEvent) {
+    switch (evt.kind) {
+      case "text":
+        return html`<div class="evt-text">${evt.text}</div>`;
+      case "tool_call": {
+        const [name, ...descParts] = evt.text.split(": ");
+        const desc = descParts.join(": ");
+        return html`
+          <div class="evt-tool-call">
+            <span class="tool-name">${name}</span>
+            ${desc ? html`<span class="tool-desc">${desc}</span>` : nothing}
+          </div>
+          ${evt.detail
+            ? html`<div class="evt-tool-detail">${evt.detail}</div>`
+            : nothing}
+        `;
+      }
+      case "tool_result":
+        return html`<div
+          class="evt-tool-result ${evt.isError ? "is-error" : ""}"
+        >
+          ${evt.text}
+        </div>`;
+      case "result":
+        return html`<div
+          class="evt-result ${evt.isError ? "is-error" : ""}"
+        >
+          ${evt.text}
+        </div>`;
+      case "error":
+        return html`<div class="evt-error">${evt.text}</div>`;
+      case "raw":
+        return html`<div class="evt-raw">${evt.text}</div>`;
     }
   }
 
@@ -434,17 +568,11 @@ export class InvocationDetail extends LitElement {
             : nothing}
         </div>
         <div class="output-lines">
-          ${inv.output.length === 0
+          ${this._parsedOutput.length === 0
             ? html`<div class="log-line" style="color: var(--text-tertiary)">
                 No output yet...
               </div>`
-            : inv.output.map(
-                (line) => html`
-                  <div class="log-line ${line.fd === "stderr" ? "stderr" : ""}">
-                    ${line.line}
-                  </div>
-                `,
-              )}
+            : this._parsedOutput.map((evt) => this._renderEvent(evt))}
         </div>
       </div>
 
