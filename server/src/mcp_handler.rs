@@ -415,6 +415,20 @@ struct CreateInvocationParams {
     provider: Option<String>,
 }
 
+// --- Metrics params ---
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetMetricsSummaryParams {
+    /// Time period for metrics: "1h", "24h" (default), "7d", "30d"
+    period: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetCostSummaryParams {
+    /// Time period for cost data: "1h", "24h", "7d" (default), "30d"
+    period: Option<String>,
+}
+
 // --- Knowledge params ---
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -4750,6 +4764,243 @@ impl SeamMcp {
                 Ok(CallToolResult::error(vec![Content::text(error_message)]))
             }
         }
+    }
+
+    #[tool(
+        description = "Get project metrics summary including success rates, duration stats, and per-perspective/model breakdowns"
+    )]
+    async fn get_metrics_summary(
+        &self,
+        Parameters(params): Parameters<GetMetricsSummaryParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let period = params.period.as_deref().unwrap_or("24h");
+        let interval = match period {
+            "1h" => "1 hour",
+            "24h" => "24 hours",
+            "7d" => "7 days",
+            "30d" => "30 days",
+            _ => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid period. Use: 1h, 24h, 7d, or 30d",
+                )]))
+            }
+        };
+
+        // Overall counts and duration avg
+        let totals: (i64, i64, i64, i64, Option<f64>) = sqlx::query_as(&format!(
+            "SELECT
+                 COUNT(*) AS total,
+                 COUNT(*) FILTER (WHERE status = 'completed' AND (exit_code = 0 OR exit_code IS NULL)) AS success_count,
+                 COUNT(*) FILTER (WHERE status = 'failed' OR (status = 'completed' AND exit_code IS NOT NULL AND exit_code != 0)) AS failure_count,
+                 COUNT(*) FILTER (WHERE status IN ('pending', 'running')) AS pending_count,
+                 AVG(EXTRACT(EPOCH FROM (completed_at - started_at))) FILTER (WHERE completed_at IS NOT NULL AND started_at IS NOT NULL) AS avg_duration_seconds
+             FROM invocations
+             WHERE project_id = $1
+               AND created_at > NOW() - INTERVAL '{interval}'"
+        ))
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Failed to aggregate invocation totals: {e}"), None))?;
+
+        let (invocation_count, success_count, failure_count, pending_count, avg_duration) = totals;
+
+        // Duration percentiles
+        let percentiles: (Option<f64>, Option<f64>) = sqlx::query_as(&format!(
+            "SELECT
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (completed_at - started_at))),
+                 PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (completed_at - started_at)))
+             FROM invocations
+             WHERE project_id = $1
+               AND completed_at IS NOT NULL
+               AND started_at IS NOT NULL
+               AND created_at > NOW() - INTERVAL '{interval}'"
+        ))
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Failed to compute duration percentiles: {e}"), None))?;
+
+        let (p50, p95) = percentiles;
+
+        // By perspective
+        let perspective_rows: Vec<(String, i64, i64, i64, Option<f64>)> = sqlx::query_as(&format!(
+            "SELECT
+                 agent_perspective,
+                 COUNT(*) AS count,
+                 COUNT(*) FILTER (WHERE status = 'completed' AND (exit_code = 0 OR exit_code IS NULL)) AS success_count,
+                 COUNT(*) FILTER (WHERE status = 'failed' OR (status = 'completed' AND exit_code IS NOT NULL AND exit_code != 0)) AS failure_count,
+                 AVG(EXTRACT(EPOCH FROM (completed_at - started_at))) FILTER (WHERE completed_at IS NOT NULL AND started_at IS NOT NULL) AS avg_duration_seconds
+             FROM invocations
+             WHERE project_id = $1
+               AND created_at > NOW() - INTERVAL '{interval}'
+             GROUP BY agent_perspective
+             ORDER BY COUNT(*) DESC"
+        ))
+        .bind(project_id)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Failed to aggregate by perspective: {e}"), None))?;
+
+        let by_perspective: Vec<serde_json::Value> = perspective_rows
+            .into_iter()
+            .map(|(perspective, count, sc, fc, avg)| {
+                serde_json::json!({
+                    "perspective": perspective,
+                    "count": count,
+                    "success_count": sc,
+                    "failure_count": fc,
+                    "avg_duration_seconds": avg.unwrap_or(0.0),
+                })
+            })
+            .collect();
+
+        // By model
+        let model_rows: Vec<(String, i64, Option<f64>)> = sqlx::query_as(&format!(
+            "SELECT
+                 model_used,
+                 COUNT(*) AS count,
+                 COALESCE(SUM(cost_usd), 0.0) AS cost_usd
+             FROM invocations
+             WHERE project_id = $1
+               AND model_used IS NOT NULL
+               AND created_at > NOW() - INTERVAL '{interval}'
+             GROUP BY model_used
+             ORDER BY COUNT(*) DESC"
+        ))
+        .bind(project_id)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| {
+            McpError::internal_error(format!("Failed to aggregate by model: {e}"), None)
+        })?;
+
+        let total_cost: f64 = model_rows.iter().map(|(_, _, c)| c.unwrap_or(0.0)).sum();
+
+        let by_model: Vec<serde_json::Value> = model_rows
+            .into_iter()
+            .map(|(model, count, cost)| {
+                serde_json::json!({
+                    "model": model,
+                    "count": count,
+                    "cost_usd": cost.unwrap_or(0.0),
+                })
+            })
+            .collect();
+
+        let success_rate = if invocation_count > 0 {
+            success_count as f64 / invocation_count as f64
+        } else {
+            0.0
+        };
+
+        let result = serde_json::json!({
+            "period": period,
+            "invocation_count": invocation_count,
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "pending_count": pending_count,
+            "success_rate": success_rate,
+            "avg_duration_seconds": avg_duration.unwrap_or(0.0),
+            "p50_duration_seconds": p50.unwrap_or(0.0),
+            "p95_duration_seconds": p95.unwrap_or(0.0),
+            "total_cost_usd": total_cost,
+            "by_perspective": by_perspective,
+            "by_model": by_model,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "Get cost breakdown for project invocations")]
+    async fn get_cost_summary(
+        &self,
+        Parameters(params): Parameters<GetCostSummaryParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let period = params.period.as_deref().unwrap_or("7d");
+        let interval = match period {
+            "1h" => "1 hour",
+            "24h" => "24 hours",
+            "7d" => "7 days",
+            "30d" => "30 days",
+            _ => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid period. Use: 1h, 24h, 7d, or 30d",
+                )]))
+            }
+        };
+
+        // Per-model cost breakdown
+        let model_rows: Vec<(String, i64, Option<f64>, Option<i64>, Option<i64>)> =
+            sqlx::query_as(&format!(
+                "SELECT
+                     COALESCE(model_used, 'unknown') AS model,
+                     COUNT(*) AS invocation_count,
+                     COALESCE(SUM(cost_usd), 0.0) AS total_cost_usd,
+                     SUM(input_tokens) AS total_input_tokens,
+                     SUM(output_tokens) AS total_output_tokens
+                 FROM invocations
+                 WHERE project_id = $1
+                   AND created_at > NOW() - INTERVAL '{interval}'
+                 GROUP BY model_used
+                 ORDER BY SUM(cost_usd) DESC NULLS LAST"
+            ))
+            .bind(project_id)
+            .fetch_all(&self.db)
+            .await
+            .map_err(|e| {
+                McpError::internal_error(format!("Failed to aggregate costs by model: {e}"), None)
+            })?;
+
+        let total_cost: f64 = model_rows
+            .iter()
+            .map(|(_, _, c, _, _)| c.unwrap_or(0.0))
+            .sum();
+        let total_invocations: i64 = model_rows.iter().map(|(_, c, _, _, _)| c).sum();
+        let total_input_tokens: i64 = model_rows
+            .iter()
+            .map(|(_, _, _, i, _)| i.unwrap_or(0))
+            .sum();
+        let total_output_tokens: i64 = model_rows
+            .iter()
+            .map(|(_, _, _, _, o)| o.unwrap_or(0))
+            .sum();
+
+        let by_model: Vec<serde_json::Value> = model_rows
+            .into_iter()
+            .map(|(model, count, cost, input_tokens, output_tokens)| {
+                serde_json::json!({
+                    "model": model,
+                    "invocation_count": count,
+                    "cost_usd": cost.unwrap_or(0.0),
+                    "input_tokens": input_tokens.unwrap_or(0),
+                    "output_tokens": output_tokens.unwrap_or(0),
+                })
+            })
+            .collect();
+
+        let result = serde_json::json!({
+            "period": period,
+            "total_cost_usd": total_cost,
+            "total_invocations": total_invocations,
+            "total_input_tokens": total_input_tokens,
+            "total_output_tokens": total_output_tokens,
+            "by_model": by_model,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
     }
 }
 
