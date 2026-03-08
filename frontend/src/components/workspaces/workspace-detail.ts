@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import {
   fetchWorkspace,
   fetchWorkspaceEvents,
@@ -11,19 +11,24 @@ import {
 import { t } from "../../lib/i18n.js";
 import { relativeTime } from "../../lib/date-utils.js";
 import { WS_STATUS_VARIANT } from "../../lib/participant-utils.js";
+import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
 import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
 import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 
 import "../agents/agent-activity-panel.js";
-
+import "../invocations/invoke-dialog.js";
 
 @customElement("workspace-detail")
 export class WorkspaceDetail extends LitElement {
+  @query("invoke-dialog") private _invokeDialog!: InvokeDialog;
   static styles = css`
     :host {
       display: block;
@@ -249,7 +254,6 @@ export class WorkspaceDetail extends LitElement {
     }
   }
 
-
   private _goBack() {
     this.dispatchEvent(
       new CustomEvent("workspace-back", { bubbles: true, composed: true }),
@@ -273,6 +277,39 @@ export class WorkspaceDetail extends LitElement {
       this._goBack();
     } catch (err) {
       console.error("Failed to destroy workspace", err);
+    }
+  }
+
+  private _handleDispatchAction(e: CustomEvent) {
+    const action = (e.detail as { item: { value: string } }).item.value;
+    const ws = this._workspace;
+    if (!ws) return;
+
+    const name = ws.coder_workspace_name ?? ws.id.slice(0, 8);
+
+    switch (action) {
+      case "investigate":
+        this._invokeDialog.showWithPerspective(
+          "tester",
+          `Investigate the errors in workspace "${name}". Check logs, identify root causes, and report findings.${ws.error_message ? `\n\nError message: ${ws.error_message}` : ""}`,
+        );
+        break;
+      case "resume":
+        this._invokeDialog.showWithPerspective(
+          "coder",
+          `Resume work in workspace "${name}". Check the current state of the branch and continue where the previous agent left off.`,
+        );
+        break;
+      case "review":
+        this._invokeDialog.showWithPerspective(
+          "reviewer",
+          `Review the changes made in workspace "${name}". Examine the diff on branch${ws.branch ? ` "${ws.branch}"` : ""}, provide feedback, and identify any issues.`,
+        );
+        break;
+      case "custom":
+      default:
+        this._invokeDialog.show();
+        break;
     }
   }
 
@@ -355,6 +392,49 @@ export class WorkspaceDetail extends LitElement {
                 </sl-button>
               `
             : nothing}
+          <sl-dropdown>
+            <sl-button
+              slot="trigger"
+              caret
+              size="small"
+              variant="primary"
+              outline
+              aria-label=${t("dispatch.workspace.button")}
+              aria-haspopup="menu"
+            >
+              <sl-icon slot="prefix" name="robot"></sl-icon>
+              ${t("dispatch.workspace.button")}
+            </sl-button>
+            <sl-menu
+              @sl-select=${(e: CustomEvent) => this._handleDispatchAction(e)}
+            >
+              ${["failed", "errored"].includes(ws.status)
+                ? html`
+                    <sl-menu-item value="investigate">
+                      <sl-icon slot="prefix" name="bug"></sl-icon>
+                      ${t("dispatch.workspace.action.investigate")}
+                    </sl-menu-item>
+                  `
+                : nothing}
+              ${["running", "stopped"].includes(ws.status)
+                ? html`
+                    <sl-menu-item value="resume">
+                      <sl-icon slot="prefix" name="arrow-repeat"></sl-icon>
+                      ${t("dispatch.workspace.action.resume")}
+                    </sl-menu-item>
+                  `
+                : nothing}
+              <sl-menu-item value="review">
+                <sl-icon slot="prefix" name="code-slash"></sl-icon>
+                ${t("dispatch.workspace.action.review")}
+              </sl-menu-item>
+              <sl-divider></sl-divider>
+              <sl-menu-item value="custom">
+                <sl-icon slot="prefix" name="gear"></sl-icon>
+                ${t("dispatch.workspace.action.custom")}
+              </sl-menu-item>
+            </sl-menu>
+          </sl-dropdown>
         </div>
       </div>
 
@@ -383,9 +463,7 @@ export class WorkspaceDetail extends LitElement {
           ? html`
               <div class="info-card">
                 <div class="info-label">${t("workspaceDetail.started")}</div>
-                <div class="info-value">
-                  ${relativeTime(ws.started_at)}
-                </div>
+                <div class="info-value">${relativeTime(ws.started_at)}</div>
               </div>
             `
           : nothing}
@@ -393,9 +471,7 @@ export class WorkspaceDetail extends LitElement {
           ? html`
               <div class="info-card">
                 <div class="info-label">${t("workspaceDetail.stopped")}</div>
-                <div class="info-value">
-                  ${relativeTime(ws.stopped_at)}
-                </div>
+                <div class="info-value">${relativeTime(ws.stopped_at)}</div>
               </div>
             `
           : nothing}
@@ -464,6 +540,8 @@ export class WorkspaceDetail extends LitElement {
               </div>
             `}
       </div>
+
+      <invoke-dialog project-id=${this.projectId}></invoke-dialog>
     `;
   }
 }
