@@ -160,12 +160,12 @@ export class InvokeDialog extends LitElement {
         @sl-after-hide=${() => (this._open = false)}
       >
         ${this._coderStatus && !this._coderStatus.enabled
-          ? html`<sl-alert variant="warning" open>
+          ? html`<sl-alert variant="warning" open role="alert">
               <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
               ${t("invoke.coderNotConfigured")}
             </sl-alert>`
           : this._coderStatus && !this._coderStatus.connected
-            ? html`<sl-alert variant="warning" open>
+            ? html`<sl-alert variant="warning" open role="alert">
                 <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
                 ${t("invoke.coderConnectionIssue")}
                 ${this._coderStatus.error || t("invoke.coderConnectionUnknown")}
@@ -180,8 +180,11 @@ export class InvokeDialog extends LitElement {
             `
           : nothing}
         <div class="form-group">
-          <label>${t("invoke.perspectiveLabel")}</label>
+          <label id="invoke-perspective-label"
+            >${t("invoke.perspectiveLabel")}</label
+          >
           <sl-select
+            aria-labelledby="invoke-perspective-label"
             value=${this._perspective}
             @sl-change=${(e: Event) =>
               (this._perspective = (e.target as HTMLInputElement).value)}
@@ -205,9 +208,11 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>${t("invoke.promptLabel")}</label>
+          <label id="invoke-prompt-label">${t("invoke.promptLabel")}</label>
           <sl-textarea
             rows="4"
+            aria-labelledby="invoke-prompt-label"
+            aria-required="true"
             placeholder=${t("invoke.promptPlaceholder")}
             value=${this._prompt}
             @sl-input=${(e: Event) =>
@@ -216,8 +221,9 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>${t("invoke.branchLabel")}</label>
+          <label id="invoke-branch-label">${t("invoke.branchLabel")}</label>
           <sl-input
+            aria-labelledby="invoke-branch-label"
             placeholder="main"
             value=${this._branch}
             @sl-input=${(e: Event) =>
@@ -226,9 +232,12 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>${t("invoke.systemPromptLabel")}</label>
+          <label id="invoke-system-prompt-label"
+            >${t("invoke.systemPromptLabel")}</label
+          >
           <sl-textarea
             rows="2"
+            aria-labelledby="invoke-system-prompt-label"
             placeholder="Additional context for the agent..."
             value=${this._systemPrompt}
             @sl-input=${(e: Event) =>
@@ -237,8 +246,9 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>${t("invoke.modelLabel")}</label>
+          <label id="invoke-model-label">${t("invoke.modelLabel")}</label>
           <sl-input
+            aria-labelledby="invoke-model-label"
             placeholder="e.g. qwen3.5, opus, deepseek (uses your default if empty)"
             value=${this._modelHint}
             @sl-input=${(e: Event) =>
@@ -247,8 +257,9 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>${t("invoke.budgetLabel")}</label>
+          <label id="invoke-budget-label">${t("invoke.budgetLabel")}</label>
           <sl-select
+            aria-labelledby="invoke-budget-label"
             placeholder="Use default"
             value=${this._budgetTier}
             clearable
@@ -267,7 +278,7 @@ export class InvokeDialog extends LitElement {
         </div>
 
         ${this._error
-          ? html`<sl-alert variant="danger" open class="error">
+          ? html`<sl-alert variant="danger" open role="alert" class="error">
               <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
               ${this._error}
               ${this._error.includes("Coder") ||

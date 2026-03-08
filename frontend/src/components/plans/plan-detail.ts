@@ -344,6 +344,7 @@ export class PlanDetail extends LitElement {
           class="back-btn"
           size="small"
           variant="text"
+          aria-label="Back to plans"
           @click=${() =>
             this.dispatchEvent(
               new CustomEvent("plan-back", { bubbles: true, composed: true }),
@@ -424,6 +425,8 @@ export class PlanDetail extends LitElement {
                   variant="default"
                   size="small"
                   outline
+                  aria-label="Dispatch agent actions"
+                  aria-haspopup="menu"
                 >
                   <sl-icon slot="prefix" name="robot"></sl-icon>
                   Dispatch Agent

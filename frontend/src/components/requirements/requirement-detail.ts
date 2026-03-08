@@ -438,6 +438,7 @@ export class RequirementDetail extends LitElement {
           class="back-btn"
           size="small"
           variant="text"
+          aria-label=${t("requirementDetail.back")}
           @click=${() =>
             this.dispatchEvent(
               new CustomEvent("requirement-back", {
@@ -520,6 +521,8 @@ export class RequirementDetail extends LitElement {
                         size="small"
                         variant="primary"
                         outline
+                        aria-label="Dispatch agent actions"
+                        aria-haspopup="menu"
                       >
                         <sl-icon slot="prefix" name="robot"></sl-icon>
                         Dispatch Agent

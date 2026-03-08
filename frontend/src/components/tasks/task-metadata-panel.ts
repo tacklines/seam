@@ -839,6 +839,8 @@ export class TaskMetadataPanel extends LitElement {
                   size="small"
                   outline
                   style="width: 100%;"
+                  aria-label=${t("dispatch.button")}
+                  aria-haspopup="menu"
                 >
                   <sl-icon slot="prefix" name="robot"></sl-icon>
                   ${t("dispatch.button")}
