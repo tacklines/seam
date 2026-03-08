@@ -332,8 +332,8 @@ describe("workspace-detail", () => {
     const backEvents: Event[] = [];
     el.addEventListener("workspace-back", (e) => backEvents.push(e));
 
-    const comp = el as unknown as Record<string, unknown>;
-    (comp["_goBack"] as () => void).call(el);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (el as any)._goBack();
 
     expect(backEvents).toHaveLength(1);
   });
