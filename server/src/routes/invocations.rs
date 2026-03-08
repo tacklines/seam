@@ -415,6 +415,23 @@ pub async fn create_invocation(
         (None, spa) => spa.clone(),
     };
 
+    // Append push + PR creation instructions when a branch is specified.
+    let effective_prompt = if let Some(branch) = &effective_branch {
+        format!(
+            "{}\n\nWhen you are done with your changes, commit, push, and create a pull request:\n\
+             ```\n\
+             git add -A\n\
+             git commit -m \"<descriptive message>\"\n\
+             git push -u origin {branch}\n\
+             gh pr create --title \"<PR title>\" --body \"<summary of changes>\" --base main\n\
+             ```\n\
+             If `gh` is not available or PR creation fails, that's OK — the push is what matters.",
+            req.prompt
+        )
+    } else {
+        req.prompt.clone()
+    };
+
     let inv = sqlx::query_as::<_, Invocation>(
         "INSERT INTO invocations
             (workspace_id, project_id, session_id, task_id,
@@ -428,7 +445,7 @@ pub async fn create_invocation(
     .bind(req.session_id)
     .bind(req.task_id)
     .bind(&req.agent_perspective)
-    .bind(&req.prompt)
+    .bind(&effective_prompt)
     .bind(&effective_system_prompt)
     .bind(&req.resume_session_id)
     .bind(&effective_model_hint)
