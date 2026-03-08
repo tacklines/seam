@@ -12,7 +12,19 @@ use uuid::Uuid;
 
 use crate::coder::CoderApi;
 use crate::log_buffer::{LogBuffer, LogLine};
+use crate::workspace_token::WorkspaceTokenProvider;
 use crate::ws::ConnectionManager;
+
+/// Lazily-initialized workspace token provider.
+/// Configured from env vars on first access; None if not configured.
+static WORKSPACE_TOKEN_PROVIDER: std::sync::OnceLock<Option<WorkspaceTokenProvider>> =
+    std::sync::OnceLock::new();
+
+fn workspace_token_provider() -> Option<&'static WorkspaceTokenProvider> {
+    WORKSPACE_TOKEN_PROVIDER
+        .get_or_init(WorkspaceTokenProvider::from_env)
+        .as_ref()
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum DispatchError {
@@ -379,11 +391,55 @@ async fn provision_pool_workspace<C: CoderApi>(
         value: workspace_id.to_string(),
     });
 
-    // Inject Seam URL
-    if let Ok(seam_url) = std::env::var("SEAM_URL") {
+    // Inject Seam URL for workspace connectivity.
+    // WORKSPACE_SEAM_URL overrides SEAM_URL for workspace-accessible address.
+    // In Docker environments, workspaces can't reach localhost — they need
+    // host.docker.internal or an internal Docker network address.
+    let workspace_seam_url = std::env::var("WORKSPACE_SEAM_URL")
+        .or_else(|_| std::env::var("SEAM_URL"))
+        .ok()
+        .map(|url| {
+            // Auto-rewrite localhost for Docker workspaces when no explicit
+            // WORKSPACE_SEAM_URL is set.
+            url.replace("localhost", "host.docker.internal")
+                .replace("127.0.0.1", "host.docker.internal")
+        });
+
+    if let Some(seam_url) = &workspace_seam_url {
         params.push(crate::coder::RichParameterValue {
             name: "seam_url".to_string(),
-            value: seam_url,
+            value: seam_url.clone(),
+        });
+    }
+
+    // Inject Seam token for MCP auth + log forwarder.
+    // This token authenticates the workspace to the Seam server's /mcp endpoint
+    // and log ingest API. When MCP_AUTH_DISABLED=true, it still must be non-empty
+    // so the template's MCP configuration phase runs.
+    if workspace_seam_url.is_some() {
+        let token = if let Some(provider) = workspace_token_provider() {
+            match provider.get_token().await {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::warn!("Failed to mint workspace JWT, using placeholder: {e}");
+                    "workspace-internal".to_string()
+                }
+            }
+        } else if std::env::var("MCP_AUTH_DISABLED").unwrap_or_default() == "true" {
+            // Auth disabled — use placeholder (template still needs non-empty value
+            // for the Phase 6 guard to configure MCP)
+            "workspace-internal".to_string()
+        } else {
+            tracing::warn!(
+                "MCP auth is enabled but WORKSPACE_CLIENT_SECRET not set — \
+                 workspace MCP will fail to authenticate"
+            );
+            "workspace-internal".to_string()
+        };
+
+        params.push(crate::coder::RichParameterValue {
+            name: "seam_token".to_string(),
+            value: token,
         });
     }
 
@@ -509,7 +565,7 @@ async fn org_id_for_project(db: &PgPool, project_id: Uuid) -> Option<Uuid> {
 /// Row fetched from DB for dispatch.
 struct InvocationRow {
     id: Uuid,
-    workspace_id: Uuid,
+    workspace_id: Option<Uuid>,
     project_id: Uuid,
     session_id: Option<Uuid>,
     participant_id: Option<Uuid>,
@@ -735,7 +791,7 @@ pub async fn dispatch_invocation(
             provider,
         ): (
             Uuid,
-            Uuid,
+            Option<Uuid>,
             Uuid,
             Option<Uuid>,
             Option<Uuid>,
@@ -764,8 +820,18 @@ pub async fn dispatch_invocation(
 
     let inv = inv.ok_or(DispatchError::NotFound)?;
 
+    // workspace_id must be set before dispatch is called (background task does
+    // this before calling us).  Guard here to catch programming errors.
+    let inv_workspace_id = inv.workspace_id.ok_or_else(|| {
+        tracing::error!(
+            invocation_id = %invocation_id,
+            "Dispatch: invocation has no workspace_id (still pending?)"
+        );
+        DispatchError::WorkspaceNotReady
+    })?;
+
     tracing::info!(
-        workspace_id = %inv.workspace_id,
+        workspace_id = %inv_workspace_id,
         perspective = %inv.agent_perspective,
         resume_session_id = ?inv.resume_session_id,
         model_hint = ?inv.model_hint,
@@ -775,14 +841,14 @@ pub async fn dispatch_invocation(
     // 2. Load workspace — must have a coder_workspace_name and be running
     let ws: Option<(Option<String>, String)> =
         sqlx::query_as("SELECT coder_workspace_name, status FROM workspaces WHERE id = $1")
-            .bind(inv.workspace_id)
+            .bind(inv_workspace_id)
             .fetch_optional(db)
             .await?;
 
     let (coder_workspace_name, status) = ws.ok_or(DispatchError::WorkspaceNotReady)?;
     if status != "running" {
         tracing::warn!(
-            workspace_id = %inv.workspace_id,
+            workspace_id = %inv_workspace_id,
             workspace_status = %status,
             "Dispatch: workspace is not running"
         );
@@ -791,7 +857,7 @@ pub async fn dispatch_invocation(
     let workspace_name = coder_workspace_name.ok_or(DispatchError::WorkspaceNotReady)?;
 
     tracing::info!(
-        workspace_id = %inv.workspace_id,
+        workspace_id = %inv_workspace_id,
         workspace_name = %workspace_name,
         "Dispatch: workspace resolved and running"
     );
@@ -818,7 +884,7 @@ pub async fn dispatch_invocation(
         inv.id,
         None,
         serde_json::json!({
-            "workspace_id": inv.workspace_id,
+            "workspace_id": inv_workspace_id,
             "agent_perspective": inv.agent_perspective,
         }),
     );
@@ -833,7 +899,8 @@ pub async fn dispatch_invocation(
              --resume '{}' \
              --agent '{}' \
              --dangerously-skip-permissions \
-             --output-format json \
+             --verbose \
+             --output-format stream-json \
              --max-turns 50 \
              '{}'",
             bash_single_quote_escape(session_id),
@@ -845,7 +912,8 @@ pub async fn dispatch_invocation(
             "cd /workspace && claude -p \
              --agent '{}' \
              --dangerously-skip-permissions \
-             --output-format json \
+             --verbose \
+             --output-format stream-json \
              --max-turns 50 \
              '{}'",
             bash_single_quote_escape(&inv.agent_perspective),
@@ -890,7 +958,55 @@ pub async fn dispatch_invocation(
     };
     let participant_id_str = inv.participant_id.map(|p| p.to_string());
 
-    // 7. Spawn `coder ssh <workspace_name> -- bash -c '<cmd>'`
+    // 7. Wait for startup scripts to finish (sentinel file written at end of startup)
+    {
+        let max_wait = std::time::Duration::from_secs(300); // 5 min for npm install
+        let poll_interval = std::time::Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + max_wait;
+
+        tracing::info!(
+            workspace_name = %workspace_name,
+            "Dispatch: waiting for startup scripts to complete"
+        );
+
+        loop {
+            let probe = Command::new(&coder_bin)
+                .arg("ssh")
+                .arg(&workspace_name)
+                .arg("--")
+                .arg("test")
+                .arg("-f")
+                .arg("/tmp/.seam-ready")
+                .env("CODER_URL", &coder_url)
+                .env("CODER_SESSION_TOKEN", &coder_token)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .await;
+
+            match probe {
+                Ok(status) if status.success() => {
+                    tracing::info!("Dispatch: workspace startup complete (sentinel found)");
+                    break;
+                }
+                _ => {
+                    if std::time::Instant::now() >= deadline {
+                        tracing::error!(
+                            workspace_name = %workspace_name,
+                            "Dispatch: timed out waiting for workspace startup"
+                        );
+                        return Err(DispatchError::CoderApi(
+                            "Workspace startup scripts did not complete in time".to_string(),
+                        ));
+                    }
+                    tracing::debug!("Dispatch: workspace not ready yet, retrying in 5s...");
+                    tokio::time::sleep(poll_interval).await;
+                }
+            }
+        }
+    }
+
+    // 8. Spawn `coder ssh <workspace_name> -- bash -c '<cmd>'`
     tracing::info!(
         workspace_name = %workspace_name,
         perspective = %inv.agent_perspective,
@@ -938,10 +1054,13 @@ pub async fn dispatch_invocation(
 
     // Drain the channel: push to log buffer and broadcast
     let mut all_stdout_lines: Vec<String> = Vec::new();
+    let mut all_stderr_lines: Vec<String> = Vec::new();
 
     while let Some(tagged) = rx.recv().await {
         if tagged.fd == "stdout" {
             all_stdout_lines.push(tagged.line.clone());
+        } else {
+            all_stderr_lines.push(tagged.line.clone());
         }
         let ll = LogLine {
             line: tagged.line,
@@ -949,7 +1068,7 @@ pub async fn dispatch_invocation(
             ts: Utc::now().to_rfc3339(),
         };
         // Key by both invocation_id and workspace_id so polling via either works
-        log_buffer.push_multi(&[inv.id, inv.workspace_id], ll.clone());
+        log_buffer.push_multi(&[inv.id, inv_workspace_id], ll.clone());
 
         if let (Some(ref code), Some(ref pid)) = (&session_code, &participant_id_str) {
             connections
@@ -1064,7 +1183,32 @@ pub async fn dispatch_invocation(
     let error_message: Option<String> = if exit_status.success() {
         None
     } else {
-        Some(format!("Process exited with code {exit_code}"))
+        // Include the last 20 lines of stderr (or stdout if no stderr) for diagnosis
+        let tail_lines: Vec<&str> = if !all_stderr_lines.is_empty() {
+            all_stderr_lines
+                .iter()
+                .rev()
+                .take(20)
+                .rev()
+                .map(|s| s.as_str())
+                .collect()
+        } else {
+            all_stdout_lines
+                .iter()
+                .rev()
+                .take(20)
+                .rev()
+                .map(|s| s.as_str())
+                .collect()
+        };
+        let tail = tail_lines.join("\n");
+        if tail.is_empty() {
+            Some(format!(
+                "Process exited with code {exit_code} (no output captured)"
+            ))
+        } else {
+            Some(format!("Process exited with code {exit_code}\n\n{tail}"))
+        }
     };
 
     // Categorize errors based on exit code and output (best-effort, non-blocking)
@@ -1073,7 +1217,7 @@ pub async fn dispatch_invocation(
 
     if exit_status.success() {
         tracing::info!(
-            workspace_id = %inv.workspace_id,
+            workspace_id = %inv_workspace_id,
             exit_code = exit_code,
             model_used = ?model_used,
             input_tokens = ?input_tokens,
@@ -1082,9 +1226,19 @@ pub async fn dispatch_invocation(
             "Dispatch: process completed successfully"
         );
     } else {
+        // Log last few lines of stderr for quick diagnosis in server logs
+        let stderr_tail: String = all_stderr_lines
+            .iter()
+            .rev()
+            .take(5)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" | ");
         tracing::error!(
-            workspace_id = %inv.workspace_id,
+            workspace_id = %inv_workspace_id,
             exit_code = exit_code,
+            stderr_tail = %stderr_tail,
             "Dispatch: process exited with non-zero status"
         );
     }
@@ -1123,7 +1277,7 @@ pub async fn dispatch_invocation(
     let _ = sqlx::query(
         "UPDATE workspaces SET last_invocation_at = NOW(), updated_at = NOW() WHERE id = $1",
     )
-    .bind(inv.workspace_id)
+    .bind(inv_workspace_id)
     .execute(db)
     .await;
 
@@ -1139,7 +1293,7 @@ pub async fn dispatch_invocation(
         inv.id,
         None,
         serde_json::json!({
-            "workspace_id": inv.workspace_id,
+            "workspace_id": inv_workspace_id,
             "exit_code": exit_code,
             "status": final_status,
             "claude_session_id": claude_session_id,

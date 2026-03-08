@@ -13,6 +13,7 @@ mod mcp_handler;
 #[allow(dead_code)]
 mod models;
 mod routes;
+pub mod workspace_token;
 mod ws;
 
 use axum::{

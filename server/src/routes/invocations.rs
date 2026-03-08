@@ -46,7 +46,7 @@ pub struct ListInvocationsQuery {
 #[derive(Debug, Serialize)]
 pub struct InvocationView {
     pub id: Uuid,
-    pub workspace_id: Uuid,
+    pub workspace_id: Option<Uuid>,
     pub project_id: Uuid,
     pub session_id: Option<Uuid>,
     pub task_id: Option<Uuid>,
@@ -341,10 +341,11 @@ pub async fn create_invocation(
         "Invocation creation requested"
     );
 
-    // Resolve workspace: use provided ID or find/create from pool
-    let workspace_id = match req.workspace_id {
+    // If workspace_id is explicitly provided, validate it belongs to this project
+    // (fast DB lookup only — no Coder API calls).  For pool resolution we skip
+    // this step and let the background task do it asynchronously.
+    let explicit_workspace_id: Option<Uuid> = match req.workspace_id {
         Some(ws_id) => {
-            // Verify workspace belongs to this project
             let ws_exists: Option<(Uuid,)> =
                 sqlx::query_as("SELECT id FROM workspaces WHERE id = $1 AND project_id = $2")
                     .bind(ws_id)
@@ -365,63 +366,12 @@ pub async fn create_invocation(
                 ));
             }
             tracing::info!(workspace_id = %ws_id, "Invocation: using explicitly specified workspace");
-            ws_id
+            Some(ws_id)
         }
         None => {
-            // Resolve from pool: find running workspace or create one
-            tracing::info!(branch = ?effective_branch, "Invocation: resolving workspace from pool");
-            crate::dispatch::resolve_workspace(
-                &state.db,
-                project_id,
-                effective_branch.as_deref(),
-                user.id,
-            )
-            .await
-            .inspect(|ws_id| {
-                tracing::info!(workspace_id = %ws_id, "Invocation: pool workspace resolved");
-            })
-            .map_err(|e| {
-                tracing::error!("Failed to resolve workspace from pool: {e}");
-                use crate::dispatch::DispatchError;
-                let (status, details) = match &e {
-                    DispatchError::CoderNotConfigured => (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "Coder integration not configured. Set CODER_URL and CODER_TOKEN environment variables.".to_string(),
-                    ),
-                    DispatchError::CoderApi(msg) => (
-                        StatusCode::BAD_GATEWAY,
-                        msg.clone(),
-                    ),
-                    DispatchError::NoWorkspaceAvailable => (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "No workspace available and Coder not configured to create one".to_string(),
-                    ),
-                    DispatchError::WorkspaceNotReady => (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "Workspace exists but is not running".to_string(),
-                    ),
-                    DispatchError::Db(_) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Database error while resolving workspace".to_string(),
-                    ),
-                    DispatchError::CoderCliMissing => (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "Coder CLI not installed on server".to_string(),
-                    ),
-                    DispatchError::Exec(_) => (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "Failed to execute workspace command".to_string(),
-                    ),
-                    DispatchError::NotFound => (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "Workspace not found".to_string(),
-                    ),
-                };
-                (
-                    status,
-                    Json(serde_json::json!({"error": "workspace unavailable", "details": details})),
-                )
-            })?
+            // Workspace will be resolved asynchronously in the background task.
+            tracing::info!(branch = ?effective_branch, "Invocation: workspace will be resolved asynchronously");
+            None
         }
     };
 
@@ -493,7 +443,7 @@ pub async fn create_invocation(
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', $8, $9, $10, $11)
          RETURNING *",
     )
-    .bind(workspace_id)
+    .bind(explicit_workspace_id)
     .bind(project_id)
     .bind(req.session_id)
     .bind(req.task_id)
@@ -516,12 +466,12 @@ pub async fn create_invocation(
 
     tracing::info!(
         invocation_id = %inv.id,
-        workspace_id = %workspace_id,
+        workspace_id = ?inv.workspace_id,
         perspective = %inv.agent_perspective,
         task_id = ?inv.task_id,
         model_hint = ?inv.model_hint,
         resuming = inv.resume_session_id.is_some(),
-        "Invocation created"
+        "Invocation created (pending)"
     );
 
     let event = crate::events::DomainEvent::new(
@@ -530,7 +480,7 @@ pub async fn create_invocation(
         inv.id,
         Some(user.id),
         serde_json::json!({
-            "workspace_id": workspace_id,
+            "workspace_id": explicit_workspace_id,
             "project_id": project_id,
             "agent_perspective": req.agent_perspective,
             "task_id": req.task_id,
@@ -541,13 +491,97 @@ pub async fn create_invocation(
         tracing::warn!("Failed to emit domain event: {e}");
     }
 
-    // Dispatch the invocation asynchronously.
-    // Wrapped in AssertUnwindSafe + catch_unwind so that a panic in the dispatch
-    // task does not silently leave the invocation stuck in 'running'.
+    // Background task: resolve workspace (if not already known) then dispatch.
+    // Wrapped in AssertUnwindSafe + catch_unwind so panics don't silently leave
+    // the invocation stuck in 'pending' or 'running'.
     let invocation_id = inv.id;
     let dispatch_state = Arc::clone(&state);
+    let dispatch_branch = effective_branch.clone();
+    let dispatch_user_id = user.id;
+    let dispatch_project_id = project_id;
     tokio::spawn(async move {
         let db = dispatch_state.db.clone();
+
+        // Phase 1: resolve workspace_id if we don't have one yet.
+        let resolved_workspace_id = if let Some(ws_id) = explicit_workspace_id {
+            Ok(ws_id)
+        } else {
+            tracing::info!(
+                invocation_id = %invocation_id,
+                branch = ?dispatch_branch,
+                "Background: resolving workspace for invocation"
+            );
+            crate::dispatch::resolve_workspace(
+                &db,
+                dispatch_project_id,
+                dispatch_branch.as_deref(),
+                dispatch_user_id,
+            )
+            .await
+        };
+
+        let workspace_id = match resolved_workspace_id {
+            Ok(ws_id) => {
+                // Stamp the workspace_id on the invocation record now that we have it.
+                if explicit_workspace_id.is_none() {
+                    if let Err(e) = sqlx::query(
+                        "UPDATE invocations SET workspace_id = $2, updated_at = NOW()
+                         WHERE id = $1 AND status = 'pending'",
+                    )
+                    .bind(invocation_id)
+                    .bind(ws_id)
+                    .execute(&db)
+                    .await
+                    {
+                        tracing::error!(
+                            invocation_id = %invocation_id,
+                            error = %e,
+                            "Failed to set workspace_id on invocation"
+                        );
+                        // Mark failed — we can't dispatch without a workspace.
+                        let _ = sqlx::query(
+                            "UPDATE invocations SET status = 'failed', \
+                             error_message = $2, error_category = 'system_error', \
+                             completed_at = NOW(), updated_at = NOW() \
+                             WHERE id = $1 AND status = 'pending'",
+                        )
+                        .bind(invocation_id)
+                        .bind(format!("Failed to persist workspace_id: {e}"))
+                        .execute(&db)
+                        .await;
+                        return;
+                    }
+                }
+                ws_id
+            }
+            Err(e) => {
+                tracing::error!(
+                    invocation_id = %invocation_id,
+                    error = %e,
+                    "Background: workspace resolution failed"
+                );
+                let details = e.to_string();
+                let _ = sqlx::query(
+                    "UPDATE invocations SET status = 'failed', \
+                     error_message = $2, error_category = 'workspace_error', \
+                     completed_at = NOW(), updated_at = NOW() \
+                     WHERE id = $1 AND status = 'pending'",
+                )
+                .bind(invocation_id)
+                .bind(format!("Workspace resolution failed: {details}"))
+                .execute(&db)
+                .await;
+                return;
+            }
+        };
+
+        tracing::info!(
+            invocation_id = %invocation_id,
+            workspace_id = %workspace_id,
+            "Background: dispatching invocation"
+        );
+
+        // Phase 2: dispatch (shells out via coder ssh).
         let result = std::panic::AssertUnwindSafe(crate::dispatch::dispatch_invocation(
             &dispatch_state.db,
             &dispatch_state.log_buffer,
@@ -563,27 +597,39 @@ pub async fn create_invocation(
                 tracing::error!(invocation_id = %invocation_id, error = %e, "Dispatch failed");
                 // Best-effort: mark failed so the invocation doesn't stay 'running'
                 if let Err(db_err) = sqlx::query(
-                    "UPDATE invocations SET status = 'failed', error_message = $2, error_category = 'system_error', completed_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'running'",
+                    "UPDATE invocations SET status = 'failed', error_message = $2, \
+                     error_category = 'system_error', completed_at = NOW(), updated_at = NOW() \
+                     WHERE id = $1 AND status = 'running'",
                 )
                 .bind(invocation_id)
                 .bind(format!("Dispatch error: {e}"))
                 .execute(&db)
                 .await
                 {
-                    tracing::warn!(invocation_id = %invocation_id, error = %db_err, "failed to mark invocation failed after dispatch error");
+                    tracing::warn!(
+                        invocation_id = %invocation_id,
+                        error = %db_err,
+                        "failed to mark invocation failed after dispatch error"
+                    );
                 }
             }
             Err(_panic) => {
                 tracing::error!(invocation_id = %invocation_id, "Dispatch task panicked");
                 if let Err(db_err) = sqlx::query(
-                    "UPDATE invocations SET status = 'failed', error_message = $2, error_category = 'system_error', completed_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'running'",
+                    "UPDATE invocations SET status = 'failed', error_message = $2, \
+                     error_category = 'system_error', completed_at = NOW(), updated_at = NOW() \
+                     WHERE id = $1 AND status = 'running'",
                 )
                 .bind(invocation_id)
                 .bind("Dispatch task panicked unexpectedly")
                 .execute(&db)
                 .await
                 {
-                    tracing::warn!(invocation_id = %invocation_id, error = %db_err, "failed to mark invocation failed after panic");
+                    tracing::warn!(
+                        invocation_id = %invocation_id,
+                        error = %db_err,
+                        "failed to mark invocation failed after panic"
+                    );
                 }
             }
         }

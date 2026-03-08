@@ -4412,38 +4412,23 @@ impl SeamMcp {
             }
         };
 
-        // Resolve workspace from pool
-        let workspace_id = match crate::dispatch::resolve_workspace(
-            &self.db,
-            project_id,
-            effective_branch.as_deref(),
-            // Agent creates invocations without a user context; use a sentinel approach:
-            // look up the sponsor user from the participant
-            {
-                // Try to get the sponsor user id from the participant record
-                let participant_id = self.state.lock().ok().and_then(|s| s.participant_id);
-                match participant_id {
-                    Some(pid) => {
-                        let row: Option<(Uuid,)> =
-                            sqlx::query_as("SELECT user_id FROM participants WHERE id = $1")
-                                .bind(pid)
-                                .fetch_optional(&self.db)
-                                .await
-                                .ok()
-                                .flatten();
-                        row.map(|(uid,)| uid).unwrap_or_else(Uuid::new_v4)
-                    }
-                    None => Uuid::new_v4(),
+        // Look up the sponsor user id from the participant record (for workspace
+        // credential injection).  This is a fast DB lookup done synchronously so we
+        // can capture the result before spawning the background task.
+        let sponsor_user_id: Uuid = {
+            let participant_id = self.state.lock().ok().and_then(|s| s.participant_id);
+            match participant_id {
+                Some(pid) => {
+                    let row: Option<(Uuid,)> =
+                        sqlx::query_as("SELECT user_id FROM participants WHERE id = $1")
+                            .bind(pid)
+                            .fetch_optional(&self.db)
+                            .await
+                            .ok()
+                            .flatten();
+                    row.map(|(uid,)| uid).unwrap_or_else(Uuid::new_v4)
                 }
-            },
-        )
-        .await
-        {
-            Ok(ws_id) => ws_id,
-            Err(e) => {
-                return Ok(CallToolResult::error(vec![Content::text(format!(
-                    "Failed to resolve workspace: {e}"
-                ))]))
+                None => Uuid::new_v4(),
             }
         };
 
@@ -4479,15 +4464,16 @@ impl SeamMcp {
 
         let session_id = self.get_session_id();
 
+        // Insert with workspace_id = NULL (pending).  The background task will
+        // resolve the workspace and then dispatch.
         let inv: crate::models::Invocation = sqlx::query_as(
             "INSERT INTO invocations
                 (workspace_id, project_id, session_id, task_id,
                  agent_perspective, prompt, system_prompt_append, triggered_by,
                  resume_session_id, model_hint, budget_tier, provider)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'agent', $8, $9, $10, $11)
+             VALUES (NULL, $1, $2, $3, $4, $5, $6, 'agent', $7, $8, $9, $10)
              RETURNING *",
         )
-        .bind(workspace_id)
         .bind(project_id)
         .bind(session_id)
         .bind(task_id)
@@ -4504,19 +4490,86 @@ impl SeamMcp {
 
         tracing::info!(
             invocation_id = %inv.id,
-            workspace_id = %workspace_id,
             perspective = %inv.agent_perspective,
             task_id = ?inv.task_id,
-            "MCP: Invocation created by agent"
+            "MCP: Invocation created by agent (pending workspace resolution)"
         );
 
-        // Dispatch asynchronously
+        // Background task: resolve workspace then dispatch.
         let dispatch_db = self.db.clone();
         let dispatch_connections = self.connections.clone();
         let dispatch_log_buffer = self.log_buffer.clone();
         let invocation_id = inv.id;
+        let dispatch_branch = effective_branch.clone();
 
         tokio::spawn(async move {
+            // Phase 1: resolve workspace
+            let ws_result = crate::dispatch::resolve_workspace(
+                &dispatch_db,
+                project_id,
+                dispatch_branch.as_deref(),
+                sponsor_user_id,
+            )
+            .await;
+
+            let workspace_id = match ws_result {
+                Ok(ws_id) => {
+                    // Stamp workspace_id on the record.
+                    if let Err(e) = sqlx::query(
+                        "UPDATE invocations SET workspace_id = $2, updated_at = NOW()
+                         WHERE id = $1 AND status = 'pending'",
+                    )
+                    .bind(invocation_id)
+                    .bind(ws_id)
+                    .execute(&dispatch_db)
+                    .await
+                    {
+                        tracing::error!(
+                            invocation_id = %invocation_id,
+                            error = %e,
+                            "MCP: failed to set workspace_id on invocation"
+                        );
+                        let _ = sqlx::query(
+                            "UPDATE invocations SET status = 'failed', \
+                             error_message = $2, error_category = 'system_error', \
+                             completed_at = NOW(), updated_at = NOW() \
+                             WHERE id = $1 AND status = 'pending'",
+                        )
+                        .bind(invocation_id)
+                        .bind(format!("Failed to persist workspace_id: {e}"))
+                        .execute(&dispatch_db)
+                        .await;
+                        return;
+                    }
+                    ws_id
+                }
+                Err(e) => {
+                    tracing::error!(
+                        invocation_id = %invocation_id,
+                        error = %e,
+                        "MCP: workspace resolution failed"
+                    );
+                    let _ = sqlx::query(
+                        "UPDATE invocations SET status = 'failed', \
+                         error_message = $2, error_category = 'workspace_error', \
+                         completed_at = NOW(), updated_at = NOW() \
+                         WHERE id = $1 AND status = 'pending'",
+                    )
+                    .bind(invocation_id)
+                    .bind(format!("Workspace resolution failed: {e}"))
+                    .execute(&dispatch_db)
+                    .await;
+                    return;
+                }
+            };
+
+            tracing::info!(
+                invocation_id = %invocation_id,
+                workspace_id = %workspace_id,
+                "MCP: dispatching invocation"
+            );
+
+            // Phase 2: dispatch
             if let (Some(connections), Some(log_buffer)) =
                 (dispatch_connections, dispatch_log_buffer)
             {
@@ -4528,13 +4581,33 @@ impl SeamMcp {
                 )
                 .await
                 {
-                    tracing::error!(invocation_id = %invocation_id, "Dispatch failed: {e}");
+                    tracing::error!(invocation_id = %invocation_id, "MCP: dispatch failed: {e}");
+                    let _ = sqlx::query(
+                        "UPDATE invocations SET status = 'failed', \
+                         error_message = $2, error_category = 'system_error', \
+                         completed_at = NOW(), updated_at = NOW() \
+                         WHERE id = $1 AND status = 'running'",
+                    )
+                    .bind(invocation_id)
+                    .bind(format!("Dispatch error: {e}"))
+                    .execute(&dispatch_db)
+                    .await;
                 }
             } else {
                 tracing::warn!(
                     invocation_id = %invocation_id,
-                    "Dispatch skipped: connections or log_buffer not available"
+                    "MCP: dispatch skipped: connections or log_buffer not available"
                 );
+                let _ = sqlx::query(
+                    "UPDATE invocations SET status = 'failed', \
+                     error_message = $2, error_category = 'system_error', \
+                     completed_at = NOW(), updated_at = NOW() \
+                     WHERE id = $1 AND status = 'pending'",
+                )
+                .bind(invocation_id)
+                .bind("Dispatch infrastructure not available")
+                .execute(&dispatch_db)
+                .await;
             }
         });
 

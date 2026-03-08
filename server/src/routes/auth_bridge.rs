@@ -10,11 +10,11 @@ use serde::Deserialize;
 use serde_json::Value;
 
 fn hydra_admin_url() -> String {
-    std::env::var("HYDRA_ADMIN_URL").unwrap_or_else(|_| "http://hydra:4445".to_string())
+    std::env::var("HYDRA_ADMIN_URL").unwrap_or_else(|_| "http://localhost:4445".to_string())
 }
 
 fn kratos_admin_url() -> String {
-    std::env::var("KRATOS_ADMIN_URL").unwrap_or_else(|_| "http://kratos:4434".to_string())
+    std::env::var("KRATOS_ADMIN_URL").unwrap_or_else(|_| "http://localhost:4434".to_string())
 }
 
 /// Shared error helper: turn a reqwest error or unexpected status into a 502.

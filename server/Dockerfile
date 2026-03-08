@@ -63,7 +63,7 @@ WORKDIR /app
 
 # Runtime dependencies only:
 # - libpq5: postgres client library (sqlx runtime connection)
-# - ca-certificates: TLS root certs for outbound HTTPS (Keycloak, Coder, Ollama)
+# - ca-certificates: TLS root certs for outbound HTTPS (Hydra, Coder, Ollama)
 # - curl: HEALTHCHECK
 RUN apt-get update && apt-get install -y \
     libpq5 \

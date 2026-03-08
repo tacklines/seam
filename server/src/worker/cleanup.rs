@@ -1,7 +1,8 @@
 /// Periodic cleanup task that finds stuck workspaces and invocations and marks them failed.
 ///
-/// Runs every 5 minutes and handles two scenarios:
+/// Runs every 5 minutes and handles three scenarios:
 /// - Workspaces stuck in 'creating' or 'stopping' for > 10 minutes
+/// - Invocations stuck in 'pending' for > 30 minutes (workspace resolution died)
 /// - Invocations stuck in 'running' for > 3 hours
 use sqlx::PgPool;
 use std::time::Duration;
@@ -10,6 +11,7 @@ use tracing::{info, warn};
 const POLL_INTERVAL: Duration = Duration::from_secs(300); // 5 minutes
 const WORKSPACE_STUCK_MINUTES: i64 = 10;
 const INVOCATION_STUCK_HOURS: i64 = 3;
+const INVOCATION_PENDING_STUCK_MINUTES: i64 = 30;
 
 /// Run the stuck-resource cleanup loop.
 pub async fn run_stuck_resource_cleanup(pool: PgPool) {
@@ -20,6 +22,9 @@ pub async fn run_stuck_resource_cleanup(pool: PgPool) {
         interval.tick().await;
         if let Err(e) = cleanup_stuck_workspaces(&pool).await {
             warn!(error = %e, "Workspace cleanup pass failed");
+        }
+        if let Err(e) = cleanup_stuck_pending_invocations(&pool).await {
+            warn!(error = %e, "Pending invocation cleanup pass failed");
         }
         if let Err(e) = cleanup_stuck_invocations(&pool).await {
             warn!(error = %e, "Invocation cleanup pass failed");
@@ -68,6 +73,57 @@ async fn cleanup_stuck_workspaces(
 
     if !rows.is_empty() {
         info!(count = rows.len(), "Marked stuck workspaces as failed");
+    }
+
+    Ok(())
+}
+
+/// Find invocations stuck in 'pending' (workspace_id still NULL) for more than
+/// `INVOCATION_PENDING_STUCK_MINUTES` minutes.  This handles the case where
+/// the background workspace-resolution task died before completing.
+async fn cleanup_stuck_pending_invocations(
+    pool: &PgPool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let rows: Vec<(uuid::Uuid,)> = sqlx::query_as(
+        "SELECT id FROM invocations
+         WHERE status = 'pending'
+           AND created_at < NOW() - ($1 || ' minutes')::INTERVAL",
+    )
+    .bind(INVOCATION_PENDING_STUCK_MINUTES)
+    .fetch_all(pool)
+    .await?;
+
+    for (invocation_id,) in &rows {
+        tracing::warn!(
+            invocation_id = %invocation_id,
+            threshold_minutes = INVOCATION_PENDING_STUCK_MINUTES,
+            "Cleaning up stuck pending invocation"
+        );
+        if let Err(e) = sqlx::query(
+            "UPDATE invocations
+             SET status = 'failed',
+                 error_message = $2,
+                 error_category = 'workspace_error',
+                 completed_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $1 AND status = 'pending'",
+        )
+        .bind(invocation_id)
+        .bind(format!(
+            "Invocation stuck in 'pending' state for over {INVOCATION_PENDING_STUCK_MINUTES} minutes; workspace resolution likely failed"
+        ))
+        .execute(pool)
+        .await
+        {
+            warn!(invocation_id = %invocation_id, error = %e, "failed to update stuck pending invocation");
+        }
+    }
+
+    if !rows.is_empty() {
+        info!(
+            count = rows.len(),
+            "Marked stuck pending invocations as failed"
+        );
     }
 
     Ok(())
@@ -129,6 +185,7 @@ mod tests {
     const _: () = {
         assert!(WORKSPACE_STUCK_MINUTES > 0);
         assert!(INVOCATION_STUCK_HOURS > 0);
+        assert!(INVOCATION_PENDING_STUCK_MINUTES > 0);
     };
 
     #[test]

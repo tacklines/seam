@@ -487,7 +487,7 @@ pub struct CreateWorkspaceRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Invocation {
     pub id: Uuid,
-    pub workspace_id: Uuid,
+    pub workspace_id: Option<Uuid>,
     pub project_id: Uuid,
     pub session_id: Option<Uuid>,
     pub task_id: Option<Uuid>,
