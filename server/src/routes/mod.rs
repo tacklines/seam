@@ -11,6 +11,7 @@ pub mod integrations;
 pub mod invocations;
 pub mod me;
 pub mod messages;
+pub mod metrics;
 pub mod model_discovery;
 pub mod model_preferences;
 pub mod notes;

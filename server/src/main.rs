@@ -411,6 +411,15 @@ async fn main() {
             "/api/projects/{project_id}/cost-summary",
             get(routes::invocations::get_project_cost_summary),
         )
+        // Metrics
+        .route(
+            "/api/projects/{project_id}/metrics/summary",
+            get(routes::metrics::project_metrics_summary),
+        )
+        .route(
+            "/api/projects/{project_id}/metrics/invocation-timeline",
+            get(routes::metrics::invocation_timeline),
+        )
         // Integrations
         .route(
             "/api/integrations/coder/status",
