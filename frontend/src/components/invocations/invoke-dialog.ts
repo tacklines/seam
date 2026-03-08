@@ -44,6 +44,7 @@ export class InvokeDialog extends LitElement {
   `;
 
   @property({ attribute: "project-id" }) projectId = "";
+  @property({ attribute: "task-id" }) taskId = "";
   @state() private _open = false;
   @state() private _perspective = "coder";
   @state() private _prompt = "";
@@ -98,6 +99,7 @@ export class InvokeDialog extends LitElement {
         prompt: this._prompt.trim(),
         branch: this._branch.trim() || undefined,
         system_prompt_append: this._systemPrompt.trim() || undefined,
+        task_id: this.taskId || undefined,
         resume_session_id: this._resumeSessionId || undefined,
         model_hint: this._modelHint.trim() || undefined,
         budget_tier: this._budgetTier || undefined,

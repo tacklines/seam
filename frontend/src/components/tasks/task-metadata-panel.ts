@@ -801,7 +801,7 @@ export class TaskMetadataPanel extends LitElement {
             `
           : nothing}
 
-        <invoke-dialog project-id=${this.projectId}></invoke-dialog>
+        <invoke-dialog project-id=${this.projectId} task-id=${this.task.id}></invoke-dialog>
       </div>
     `;
   }
