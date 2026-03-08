@@ -530,8 +530,14 @@ pub async fn get_task(
     .await
     .unwrap_or_default();
 
+    let comment_count = comments.len() as i64;
+    let child_count = children.len() as i64;
+    let mut task_view = TaskView::from_task(task, prefix);
+    task_view.comment_count = comment_count;
+    task_view.child_count = child_count;
+
     Ok(Json(TaskDetailView {
-        task: TaskView::from_task(task, prefix),
+        task: task_view,
         parent: parent.map(|p| task_summary_view(&p, prefix)),
         comments: comments
             .into_iter()
@@ -1401,8 +1407,14 @@ pub async fn get_project_task(
     .await
     .unwrap_or_default();
 
+    let comment_count = comments.len() as i64;
+    let child_count = children.len() as i64;
+    let mut task_view = TaskView::from_task(task, prefix);
+    task_view.comment_count = comment_count;
+    task_view.child_count = child_count;
+
     Ok(Json(TaskDetailView {
-        task: TaskView::from_task(task, prefix),
+        task: task_view,
         parent: parent.map(|p| task_summary_view(&p, prefix)),
         comments: comments
             .into_iter()

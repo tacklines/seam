@@ -234,6 +234,30 @@ async fn build_task_context(db: &sqlx::PgPool, task_id: Uuid) -> Option<String> 
         }
     }
 
+    // Session codes — so the agent knows which session(s) this task belongs to
+    let session_codes: Vec<(String,)> = sqlx::query_as(
+        "SELECT s.code FROM sessions s
+         JOIN session_tasks st ON st.session_id = s.id
+         WHERE st.task_id = $1
+         ORDER BY s.created_at DESC",
+    )
+    .bind(task_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("build_task_context: failed to fetch session codes: {e}");
+        vec![]
+    });
+
+    if !session_codes.is_empty() {
+        let codes: Vec<&str> = session_codes.iter().map(|(c,)| c.as_str()).collect();
+        md.push_str(&format!(
+            "\n## Session\n\
+             Use `join_session` with code **{}** to connect to this task's session.\n",
+            codes[0]
+        ));
+    }
+
     Some(md)
 }
 
