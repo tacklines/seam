@@ -150,6 +150,7 @@ export class TaskBoardToolbar extends LitElement {
 
   @property({ type: Number, attribute: "filtered-count" }) filteredCount = 0;
   @property({ type: String, attribute: "session-name" }) sessionName = "";
+  @property({ type: Boolean, attribute: "select-mode" }) selectMode = false;
 
   private _emit(type: string, detail: object) {
     this.dispatchEvent(
@@ -198,6 +199,14 @@ export class TaskBoardToolbar extends LitElement {
               @click=${() => this._emit("refresh", {})}
             ></sl-icon-button>
           </sl-tooltip>
+          <sl-button
+            size="small"
+            variant=${this.selectMode ? "primary" : "default"}
+            @click=${() => this._emit("select-mode-toggle", {})}
+          >
+            <sl-icon slot="prefix" name="check2-square"></sl-icon>
+            ${t("taskBoard.batch.selectMode")}
+          </sl-button>
           ${this.isProjectMode
             ? html`
                 <sl-button

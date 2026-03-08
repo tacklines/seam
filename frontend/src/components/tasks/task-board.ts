@@ -74,8 +74,7 @@ export class TaskBoard extends LitElement {
     }
 
     .task-card {
-      display: grid;
-      grid-template-columns: auto auto 1fr auto auto;
+      display: flex;
       align-items: center;
       gap: 0.75rem;
       padding: 0.75rem 1rem;
@@ -146,6 +145,7 @@ export class TaskBoard extends LitElement {
     }
 
     .task-info {
+      flex: 1;
       min-width: 0;
     }
 
@@ -462,6 +462,42 @@ export class TaskBoard extends LitElement {
         transform: translateY(0);
       }
     }
+
+    /* ── Floating batch action bar ── */
+    .floating-batch-bar {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 1.25rem;
+      background: var(--sl-color-neutral-900);
+      color: var(--sl-color-neutral-0);
+      border-radius: 12px;
+      box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.35),
+        0 2px 8px rgba(0, 0, 0, 0.2);
+      z-index: 1000;
+      animation: toast-in 0.2s ease-out;
+      white-space: nowrap;
+    }
+
+    .floating-batch-bar .batch-count {
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--sl-color-neutral-0);
+      padding-right: 0.25rem;
+      border-right: 1px solid rgba(255, 255, 255, 0.2);
+      margin-right: 0.25rem;
+    }
+
+    .floating-batch-bar .batch-divider {
+      width: 1px;
+      height: 1.25rem;
+      background: rgba(255, 255, 255, 0.2);
+    }
   `;
 
   @property({ type: String, attribute: "session-code" })
@@ -490,6 +526,7 @@ export class TaskBoard extends LitElement {
   @state() private _collapsedGroups: Set<string> = new Set();
   @state() private _selectedTaskId: string | null = null;
   @state() private _selectedIds: Set<string> = new Set();
+  @state() private _selectMode = false;
   @state() private _batchLoading = false;
   @state() private _toastMessage = "";
   @state() private _showShortcuts = false;
@@ -537,8 +574,9 @@ export class TaskBoard extends LitElement {
       if (isInput) return;
       if (this._showShortcuts) {
         this._showShortcuts = false;
-      } else if (this._selectedIds.size > 0) {
-        this._clearSelection();
+      } else if (this._selectedIds.size > 0 || this._selectMode) {
+        this._selectedIds = new Set();
+        this._selectMode = false;
       } else if (this._selectedTaskId) {
         this._deselectTask();
       }
@@ -728,6 +766,13 @@ export class TaskBoard extends LitElement {
     this._selectedIds = new Set();
   }
 
+  private _toggleSelectMode() {
+    this._selectMode = !this._selectMode;
+    if (!this._selectMode) {
+      this._selectedIds = new Set();
+    }
+  }
+
   private async _batchSetStatus(status: TaskStatus) {
     if (this._selectedIds.size === 0) return;
     this._batchLoading = true;
@@ -886,6 +931,7 @@ export class TaskBoard extends LitElement {
         .participants=${this.participants}
         ?is-project-mode=${this._isProjectMode}
         ?sprint-panel-open=${this._sprintPanelOpen}
+        ?select-mode=${this._selectMode}
         filtered-count=${this._filteredTasks.length}
         session-name=${this.sessionName}
         @filter-changed=${(e: CustomEvent<FilterChangedDetail>) =>
@@ -900,6 +946,7 @@ export class TaskBoard extends LitElement {
         @sprint-toggle=${() => {
           this._sprintPanelOpen = !this._sprintPanelOpen;
         }}
+        @select-mode-toggle=${() => this._toggleSelectMode()}
         @refresh=${() => void this._loadTasks()}
       ></task-board-toolbar>
 
@@ -991,6 +1038,7 @@ export class TaskBoard extends LitElement {
             project-id=${this.projectId}
           ></invoke-dialog>`
         : nothing}
+      ${this._renderFloatingBatchBar()}
       ${this._toastMessage
         ? html`<div class="toast">${this._toastMessage}</div>`
         : nothing}
@@ -1057,67 +1105,78 @@ export class TaskBoard extends LitElement {
     `;
   }
 
-  private _renderBatchBar() {
+  private _renderFloatingBatchBar() {
     if (this._selectedIds.size === 0) return nothing;
     return html`
-      <div class="batch-bar">
+      <div class="floating-batch-bar">
         <span class="batch-count"
           >${t("taskBoard.batch.selected", {
             count: this._selectedIds.size,
           })}</span
         >
+        ${this.projectId
+          ? html`
+              <sl-button
+                size="small"
+                variant="primary"
+                @click=${() => this._batchDispatchAgent()}
+              >
+                <sl-icon slot="prefix" name="robot"></sl-icon>
+                ${t("taskBoard.batch.dispatch")}
+              </sl-button>
+              <div class="batch-divider"></div>
+            `
+          : nothing}
         <sl-button
           size="small"
-          variant="text"
-          @click=${() => this._clearSelection()}
-          >${t("taskBoard.batch.clear")}</sl-button
+          variant="neutral"
+          outline
+          @click=${() => void this._batchSetStatus("in_progress")}
+          ?loading=${this._batchLoading}
+          >${t("taskBoard.batch.start")}</sl-button
         >
-        <div class="batch-actions">
-          <sl-button
-            size="small"
-            @click=${() => void this._batchSetStatus("in_progress")}
-            ?loading=${this._batchLoading}
-            >${t("taskBoard.batch.start")}</sl-button
-          >
-          <sl-button
-            size="small"
-            @click=${() => void this._batchSetStatus("done")}
-            ?loading=${this._batchLoading}
-            >${t("taskBoard.batch.done")}</sl-button
-          >
-          <sl-button
-            size="small"
-            @click=${() => void this._batchSetStatus("closed")}
-            ?loading=${this._batchLoading}
-            >${t("taskBoard.batch.close")}</sl-button
-          >
-          <sl-button
-            size="small"
-            @click=${() => void this._batchSetStatus("open")}
-            ?loading=${this._batchLoading}
-            >${t("taskBoard.batch.reopen")}</sl-button
-          >
-          ${this.projectId
-            ? html`
-                <sl-button
-                  size="small"
-                  variant="primary"
-                  outline
-                  @click=${() => this._batchDispatchAgent()}
-                >
-                  <sl-icon slot="prefix" name="robot"></sl-icon>
-                  ${t("taskBoard.batch.dispatchAgent")}
-                </sl-button>
-              `
-            : nothing}
-          <sl-button
-            size="small"
-            variant="danger"
-            @click=${() => void this._batchDelete()}
-            ?loading=${this._batchLoading}
-            >${t("taskBoard.batch.delete")}</sl-button
-          >
-        </div>
+        <sl-button
+          size="small"
+          variant="neutral"
+          outline
+          @click=${() => void this._batchSetStatus("done")}
+          ?loading=${this._batchLoading}
+          >${t("taskBoard.batch.done")}</sl-button
+        >
+        <sl-button
+          size="small"
+          variant="neutral"
+          outline
+          @click=${() => void this._batchSetStatus("closed")}
+          ?loading=${this._batchLoading}
+          >${t("taskBoard.batch.close")}</sl-button
+        >
+        <sl-button
+          size="small"
+          variant="neutral"
+          outline
+          @click=${() => void this._batchSetStatus("open")}
+          ?loading=${this._batchLoading}
+          >${t("taskBoard.batch.reopen")}</sl-button
+        >
+        <div class="batch-divider"></div>
+        <sl-button
+          size="small"
+          variant="danger"
+          outline
+          @click=${() => void this._batchDelete()}
+          ?loading=${this._batchLoading}
+          >${t("taskBoard.batch.delete")}</sl-button
+        >
+        <sl-button
+          size="small"
+          variant="neutral"
+          @click=${() => {
+            this._selectedIds = new Set();
+            this._selectMode = false;
+          }}
+          >${t("taskBoard.batch.cancel")}</sl-button
+        >
       </div>
     `;
   }
@@ -1129,7 +1188,6 @@ export class TaskBoard extends LitElement {
       tasks.filter((tk) => tk.parent_id === id);
 
     return html`
-      ${this._renderBatchBar()}
       <div class="task-list">
         ${topLevel.map((task) => {
           const children = childrenOfTask(task.id);
@@ -1169,23 +1227,31 @@ export class TaskBoard extends LitElement {
           ? "selected"
           : ""}"
         @click=${() => {
-          this._selectTask(task.id);
+          if (this._selectMode) {
+            this._toggleSelect(task.id);
+          } else {
+            this._selectTask(task.id);
+          }
         }}
       >
-        <div
-          class="select-checkbox"
-          @click=${(e: Event) => {
-            e.stopPropagation();
-            this._toggleSelect(task.id);
-          }}
-        >
-          <sl-icon
-            name=${isSelected ? "check-square-fill" : "square"}
-            style="font-size: 1rem; color: ${isSelected
-              ? "var(--sl-color-primary-500)"
-              : "var(--text-tertiary)"}; cursor: pointer;"
-          ></sl-icon>
-        </div>
+        ${this._selectMode
+          ? html`
+              <div
+                class="select-checkbox"
+                @click=${(e: Event) => {
+                  e.stopPropagation();
+                  this._toggleSelect(task.id);
+                }}
+              >
+                <sl-icon
+                  name=${isSelected ? "check-square-fill" : "square"}
+                  style="font-size: 1rem; color: ${isSelected
+                    ? "var(--sl-color-primary-500)"
+                    : "var(--text-tertiary)"}; cursor: pointer;"
+                ></sl-icon>
+              </div>
+            `
+          : nothing}
         ${hasChildren
           ? html`
               <div
