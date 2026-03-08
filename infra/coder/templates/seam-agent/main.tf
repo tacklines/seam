@@ -274,6 +274,18 @@ FORWARDER
       sudo npm install -g @anthropic-ai/claude-code
     fi
 
+    # Install GitHub CLI (gh)
+    if ! command -v gh &> /dev/null; then
+      echo "Installing GitHub CLI..."
+      (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+        && sudo mkdir -p -m 755 /etc/apt/keyrings \
+        && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+    fi
+
     # Install tackline skills
     if [ -n "${data.coder_parameter.tackline_repo_url.value}" ]; then
       echo "Installing tackline..."
@@ -341,6 +353,12 @@ You are a planner agent. Your job is to analyze goals and decompose them into ac
 AGENT_EOF
 
       echo "Agent perspectives configured: coder, reviewer, planner"
+
+      # Configure gh CLI auth with GIT_TOKEN if available
+      if [ -n "$GIT_TOKEN" ] && command -v gh &> /dev/null; then
+        echo "$GIT_TOKEN" | gh auth login --with-token 2>/dev/null || echo "WARN: gh auth login failed (continuing)"
+        echo "GitHub CLI authenticated"
+      fi
     fi
 
     # Restore original stdout/stderr if tee was set up
