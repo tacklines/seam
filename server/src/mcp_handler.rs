@@ -375,6 +375,26 @@ struct StopWorkspaceParams {
     id: String,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CreateWorkspaceParams {
+    /// Git branch to check out in the workspace (auto-generated if not specified)
+    branch: Option<String>,
+    /// Coder template name (default: "seam-agent")
+    template_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct DestroyWorkspaceParams {
+    /// Workspace ID (UUID) of the workspace to destroy
+    id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CheckCredentialsParams {
+    /// Filter by credential type (e.g. "anthropic_api_key", "git_token"). Omit to list all.
+    credential_type: Option<String>,
+}
+
 // --- Invocation params ---
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -4782,6 +4802,395 @@ impl SeamMcp {
                 Ok(CallToolResult::error(vec![Content::text(error_message)]))
             }
         }
+    }
+
+    #[tool(
+        description = "Create a new Coder workspace for the current project. The workspace is provisioned asynchronously; use get_workspace to poll status."
+    )]
+    async fn create_workspace(
+        &self,
+        Parameters(params): Parameters<CreateWorkspaceParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let coder_url = std::env::var("CODER_URL").unwrap_or_default();
+        let coder_token = std::env::var("CODER_TOKEN").unwrap_or_default();
+        if coder_url.is_empty() || coder_token.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Coder integration is not configured on this server",
+            )]));
+        }
+
+        let template_name = params
+            .template_name
+            .unwrap_or_else(|| "seam-agent".to_string());
+
+        // Insert workspace record in pending state
+        let workspace: crate::models::Workspace = sqlx::query_as(
+            "INSERT INTO workspaces (project_id, template_name, branch, status)
+             VALUES ($1, $2, $3, 'pending')
+             RETURNING *",
+        )
+        .bind(project_id)
+        .bind(&template_name)
+        .bind(&params.branch)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|e| {
+            McpError::internal_error(format!("Failed to create workspace record: {e}"), None)
+        })?;
+
+        // Emit workspace.requested event
+        let event = crate::events::DomainEvent::new(
+            "workspace.requested",
+            "workspace",
+            workspace.id,
+            None,
+            serde_json::json!({
+                "template_name": template_name,
+                "branch": params.branch,
+                "project_id": project_id,
+            }),
+        );
+        if let Err(e) = crate::events::emit(&self.db, &event).await {
+            tracing::warn!("Failed to emit domain event: {e}");
+        }
+
+        // Resolve org_id for credential injection
+        let org_id: Option<Uuid> =
+            sqlx::query_as::<_, (Uuid,)>("SELECT org_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+                .ok()
+                .flatten()
+                .map(|(id,)| id);
+
+        // Spawn async provisioning
+        let ws_id = workspace.id;
+        let db = self.db.clone();
+        let branch_clone = params.branch.clone();
+        let template_name_clone = template_name.clone();
+        tokio::spawn(async move {
+            let client = crate::coder::CoderClient::new(coder_url, coder_token);
+
+            // Mark as creating
+            let _ = sqlx::query(
+                "UPDATE workspaces SET status = 'creating', updated_at = NOW() WHERE id = $1",
+            )
+            .bind(ws_id)
+            .execute(&db)
+            .await;
+
+            // Resolve template
+            let template = match client.get_template_by_name(&template_name_clone).await {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    let error_message =
+                        format!("Template '{}' not found in Coder", template_name_clone);
+                    let _ = sqlx::query(
+                        "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
+                    )
+                    .bind(ws_id)
+                    .bind(&error_message)
+                    .execute(&db)
+                    .await;
+                    return;
+                }
+                Err(e) => {
+                    let error_message = format!("Failed to resolve template: {e}");
+                    let _ = sqlx::query(
+                        "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
+                    )
+                    .bind(ws_id)
+                    .bind(&error_message)
+                    .execute(&db)
+                    .await;
+                    return;
+                }
+            };
+
+            let ws_name = format!("seam-{}", &ws_id.to_string()[..8]);
+            let mut rich_params = Vec::new();
+            if let Some(b) = branch_clone.as_deref() {
+                rich_params.push(crate::coder::RichParameterValue {
+                    name: "branch".to_string(),
+                    value: b.to_string(),
+                });
+            }
+
+            // Inject org credentials if available
+            if let Some(oid) = org_id {
+                // Use a placeholder user_id (nil) — MCP agents don't have a user record
+                match crate::credentials::credentials_for_workspace(&db, oid, Uuid::nil()).await {
+                    Ok(creds) if !creds.is_empty() => {
+                        let creds_map: serde_json::Map<String, serde_json::Value> = creds
+                            .into_iter()
+                            .map(|(k, v)| (k, serde_json::Value::String(v)))
+                            .collect();
+                        rich_params.push(crate::coder::RichParameterValue {
+                            name: "credentials_json".to_string(),
+                            value: serde_json::Value::Object(creds_map).to_string(),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+
+            let req = crate::coder::CreateWorkspaceRequest {
+                name: ws_name,
+                template_id: template.id,
+                rich_parameter_values: rich_params,
+            };
+
+            match client.create_workspace("me", req).await {
+                Ok(coder_ws) => {
+                    let _ = sqlx::query(
+                        "UPDATE workspaces SET
+                            coder_workspace_id = $2,
+                            coder_workspace_name = $3,
+                            status = 'running',
+                            started_at = NOW(),
+                            updated_at = NOW()
+                         WHERE id = $1",
+                    )
+                    .bind(ws_id)
+                    .bind(coder_ws.id)
+                    .bind(&coder_ws.name)
+                    .execute(&db)
+                    .await;
+
+                    let event = crate::events::DomainEvent::new(
+                        "workspace.running",
+                        "workspace",
+                        ws_id,
+                        None,
+                        serde_json::json!({ "coder_workspace_id": coder_ws.id }),
+                    );
+                    if let Err(e) = crate::events::emit(&db, &event).await {
+                        tracing::warn!("Failed to emit workspace.running event: {e}");
+                    }
+                }
+                Err(e) => {
+                    let error_message = format!("Coder workspace creation failed: {e}");
+                    let _ = sqlx::query(
+                        "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
+                    )
+                    .bind(ws_id)
+                    .bind(&error_message)
+                    .execute(&db)
+                    .await;
+                }
+            }
+        });
+
+        let result = serde_json::json!({
+            "id": workspace.id,
+            "status": "pending",
+            "template_name": template_name,
+            "branch": params.branch,
+            "message": "Workspace creation started. Use get_workspace to poll status.",
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(
+        description = "Destroy a Coder workspace, stopping it in Coder and marking it destroyed in the database."
+    )]
+    async fn destroy_workspace(
+        &self,
+        Parameters(params): Parameters<DestroyWorkspaceParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let workspace_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid workspace ID: must be a UUID",
+                )]))
+            }
+        };
+
+        let w: Option<crate::models::Workspace> =
+            sqlx::query_as("SELECT * FROM workspaces WHERE id = $1 AND project_id = $2")
+                .bind(workspace_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to fetch workspace: {e}"), None)
+                })?;
+
+        let w = match w {
+            Some(ws) => ws,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Workspace not found or does not belong to this project",
+                )]))
+            }
+        };
+
+        if w.status == crate::models::WorkspaceStatus::Destroyed {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Workspace is already destroyed",
+            )]));
+        }
+
+        let coder_url = std::env::var("CODER_URL").unwrap_or_default();
+        let coder_token = std::env::var("CODER_TOKEN").unwrap_or_default();
+        if coder_url.is_empty() || coder_token.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Coder integration is not configured on this server",
+            )]));
+        }
+        let client = crate::coder::CoderClient::new(coder_url, coder_token);
+
+        // Delete from Coder if it was created there
+        if let Some(coder_ws_id) = w.coder_workspace_id {
+            if let Err(e) = client.delete_workspace(coder_ws_id).await {
+                tracing::warn!("Failed to delete Coder workspace (may already be gone): {e}");
+            }
+        }
+
+        // Mark as destroyed
+        sqlx::query(
+            "UPDATE workspaces SET status = 'destroyed', stopped_at = NOW(), updated_at = NOW() WHERE id = $1",
+        )
+        .bind(workspace_id)
+        .execute(&self.db)
+        .await
+        .map_err(|e| {
+            McpError::internal_error(format!("Failed to update workspace status: {e}"), None)
+        })?;
+
+        let event = crate::events::DomainEvent::new(
+            "workspace.destroyed",
+            "workspace",
+            workspace_id,
+            None,
+            serde_json::json!({ "coder_workspace_id": w.coder_workspace_id }),
+        );
+        if let Err(e) = crate::events::emit(&self.db, &event).await {
+            tracing::warn!("Failed to emit workspace.destroyed domain event: {e}");
+        }
+
+        let result = serde_json::json!({
+            "id": workspace_id,
+            "status": "destroyed",
+            "message": "Workspace destroyed successfully",
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(
+        description = "Check what credentials are available for the current project's org and your user. Returns credential types and tier (org vs user) — never the values themselves."
+    )]
+    async fn check_credentials(
+        &self,
+        Parameters(params): Parameters<CheckCredentialsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        // Resolve org_id from project
+        let org_id: Option<Uuid> =
+            sqlx::query_as::<_, (Uuid,)>("SELECT org_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to fetch project: {e}"), None)
+                })?
+                .map(|(id,)| id);
+
+        let org_id = match org_id {
+            Some(id) => id,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Project not found",
+                )]))
+            }
+        };
+
+        // Query org credentials (metadata only)
+        let org_rows: Vec<(String, Option<String>)> = sqlx::query_as(
+            "SELECT credential_type, env_var_name FROM org_credentials
+             WHERE org_id = $1
+               AND ($2::text IS NULL OR credential_type = $2)
+             ORDER BY credential_type",
+        )
+        .bind(org_id)
+        .bind(&params.credential_type)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| {
+            McpError::internal_error(format!("Failed to list org credentials: {e}"), None)
+        })?;
+
+        // Query user credentials via sponsor_id on the participant
+        let participant_id = self.state.lock().ok().and_then(|s| s.participant_id);
+        let user_rows: Vec<(String, Option<String>)> = if let Some(pid) = participant_id {
+            sqlx::query_as(
+                "SELECT uc.credential_type, uc.env_var_name
+                 FROM user_credentials uc
+                 JOIN participants p ON p.sponsor_id = uc.user_id
+                 WHERE p.id = $1
+                   AND ($2::text IS NULL OR uc.credential_type = $2)
+                 ORDER BY uc.credential_type",
+            )
+            .bind(pid)
+            .bind(&params.credential_type)
+            .fetch_all(&self.db)
+            .await
+            .unwrap_or_default()
+        } else {
+            vec![]
+        };
+
+        let org_list: Vec<serde_json::Value> = org_rows
+            .iter()
+            .map(|(ctype, env_var)| {
+                serde_json::json!({
+                    "credential_type": ctype,
+                    "env_var_name": env_var,
+                    "tier": "org",
+                })
+            })
+            .collect();
+
+        let user_list: Vec<serde_json::Value> = user_rows
+            .iter()
+            .map(|(ctype, env_var)| {
+                serde_json::json!({
+                    "credential_type": ctype,
+                    "env_var_name": env_var,
+                    "tier": "user",
+                })
+            })
+            .collect();
+
+        let result = serde_json::json!({
+            "org_credentials": org_list,
+            "user_credentials": user_list,
+            "total": org_list.len() + user_list.len(),
+            "note": "Values are never returned — only types and env var names are shown.",
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
     }
 
     #[tool(
