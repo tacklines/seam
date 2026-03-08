@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { t } from "../../lib/i18n.js";
 import {
   fetchInvocation,
   type InvocationDetailView,
@@ -7,9 +8,13 @@ import {
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
 import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
 import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
+import "./invoke-dialog.js";
 
 const STATUS_VARIANT: Record<string, string> = {
   running: "success",
@@ -169,6 +174,7 @@ export class InvocationDetail extends LitElement {
   `;
 
   @property({ attribute: "invocation-id" }) invocationId = "";
+  @property({ attribute: "project-id" }) projectId = "";
   @state() private _invocation: InvocationDetailView | null = null;
   @state() private _loading = true;
   @state() private _pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -260,6 +266,17 @@ export class InvocationDetail extends LitElement {
     );
   }
 
+  private _onRerun(perspective: string) {
+    const inv = this._invocation;
+    if (!inv) return;
+    const dialog = this.shadowRoot?.querySelector("invoke-dialog") as
+      | (HTMLElement & { showWithPerspective: (p: string, prompt: string) => void })
+      | null;
+    if (dialog) {
+      dialog.showWithPerspective(perspective, inv.prompt);
+    }
+  }
+
   render() {
     if (this._loading) {
       return html`<div class="loading"><sl-spinner></sl-spinner></div>`;
@@ -283,17 +300,60 @@ export class InvocationDetail extends LitElement {
         <sl-badge variant=${STATUS_VARIANT[inv.status] ?? "neutral"} pill>
           ${inv.status}
         </sl-badge>
-        ${(inv.status === "completed" || inv.status === "failed") &&
-        inv.claude_session_id
+        ${inv.status === "completed" || inv.status === "failed"
           ? html`
-              <sl-button
-                size="small"
-                variant="success"
-                @click=${this._onContinue}
-              >
-                <sl-icon slot="prefix" name="arrow-repeat"></sl-icon>
-                Continue
-              </sl-button>
+              ${inv.claude_session_id
+                ? html`
+                    <sl-button
+                      size="small"
+                      variant="success"
+                      @click=${this._onContinue}
+                    >
+                      <sl-icon slot="prefix" name="arrow-repeat"></sl-icon>
+                      Continue
+                    </sl-button>
+                  `
+                : nothing}
+              ${this.projectId
+                ? html`
+                    <sl-dropdown>
+                      <sl-button
+                        slot="trigger"
+                        size="small"
+                        variant="neutral"
+                        caret
+                      >
+                        <sl-icon slot="prefix" name="arrow-clockwise"></sl-icon>
+                        ${t("invoke.rerun")}
+                      </sl-button>
+                      <sl-menu
+                        @sl-select=${(e: CustomEvent) =>
+                          this._onRerun(e.detail.item.value)}
+                      >
+                        <sl-menu-item value="coder">
+                          <sl-icon slot="prefix" name="code-slash"></sl-icon>
+                          ${t("invoke.rerunAs.coder")}
+                        </sl-menu-item>
+                        <sl-menu-item value="reviewer">
+                          <sl-icon slot="prefix" name="search"></sl-icon>
+                          ${t("invoke.rerunAs.reviewer")}
+                        </sl-menu-item>
+                        <sl-menu-item value="planner">
+                          <sl-icon slot="prefix" name="diagram-3"></sl-icon>
+                          ${t("invoke.rerunAs.planner")}
+                        </sl-menu-item>
+                        <sl-menu-item value="tester">
+                          <sl-icon slot="prefix" name="check2-circle"></sl-icon>
+                          ${t("invoke.rerunAs.tester")}
+                        </sl-menu-item>
+                        <sl-menu-item value="researcher">
+                          <sl-icon slot="prefix" name="book"></sl-icon>
+                          ${t("invoke.rerunAs.researcher")}
+                        </sl-menu-item>
+                      </sl-menu>
+                    </sl-dropdown>
+                  `
+                : nothing}
             `
           : nothing}
       </div>
@@ -398,6 +458,8 @@ export class InvocationDetail extends LitElement {
             </div>
           `
         : nothing}
+
+      <invoke-dialog project-id=${this.projectId}></invoke-dialog>
     `;
   }
 }

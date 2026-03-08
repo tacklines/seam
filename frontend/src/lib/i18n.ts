@@ -880,6 +880,12 @@ export const messagesEn: Record<string, string> = {
   "invoke.cancel": "Cancel",
   "invoke.launch": "Launch",
   "invoke.errorPromptRequired": "Prompt is required.",
+  "invoke.rerun": "Rerun",
+  "invoke.rerunAs.coder": "Rerun as Coder",
+  "invoke.rerunAs.reviewer": "Rerun as Reviewer",
+  "invoke.rerunAs.planner": "Rerun as Planner",
+  "invoke.rerunAs.tester": "Rerun as Tester",
+  "invoke.rerunAs.researcher": "Rerun as Researcher",
 
   // ── dispatch (task-metadata-panel) ──
   "dispatch.button": "Dispatch Agent",

@@ -691,6 +691,7 @@ export class ProjectWorkspace extends LitElement {
         ? html`
             <invocation-detail
               invocation-id=${this._selectedInvocationId}
+              project-id=${this.projectId}
               @back=${() => {
                 this._selectedInvocationId = "";
               }}
