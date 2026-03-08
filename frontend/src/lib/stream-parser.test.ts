@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseStreamOutput, type StreamEvent } from "./stream-parser.js";
+import { parseStreamOutput } from "./stream-parser.js";
 
 function line(content: string, fd = "stdout", ts = "2026-03-08T00:00:00Z") {
   return { line: content, fd, ts };
