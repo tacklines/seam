@@ -521,6 +521,7 @@ async fn main() {
                 mcp_db.clone(),
                 mcp_code_index.clone(),
                 mcp_connections.clone(),
+                mcp_auth_enabled,
             ))
         },
         Arc::new(LocalSessionManager::default()),

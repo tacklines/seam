@@ -1,4 +1,5 @@
 use crate::knowledge;
+use crate::mcp_auth::McpIdentity;
 use crate::models::{AgentJoinCode, Participant, Session, User};
 use crate::models::{Task, TaskComment, TaskStatus};
 use chrono::Utc;
@@ -15,7 +16,7 @@ use rmcp::{
 };
 use serde::Deserialize;
 use sqlx::PgPool;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 // --- Tool parameter schemas ---
@@ -399,8 +400,12 @@ pub(crate) struct SessionState {
 pub struct SeamMcp {
     pub(crate) db: PgPool,
     pub(crate) state: Mutex<SessionState>,
-    pub(crate) code_index: Option<std::sync::Arc<crate::code_search::CodeIndex>>,
-    pub(crate) connections: Option<std::sync::Arc<crate::ws::ConnectionManager>>,
+    pub(crate) code_index: Option<Arc<crate::code_search::CodeIndex>>,
+    pub(crate) connections: Option<Arc<crate::ws::ConnectionManager>>,
+    /// Whether MCP auth is enabled. When true, tool calls without a valid
+    /// McpIdentity in the request context return an authentication error
+    /// instead of a misleading "Session not found" from downstream handlers.
+    pub(crate) auth_enabled: bool,
     tool_router: ToolRouter<Self>,
 }
 
@@ -408,14 +413,16 @@ pub struct SeamMcp {
 impl SeamMcp {
     pub fn with_connections(
         db: PgPool,
-        code_index: Option<std::sync::Arc<crate::code_search::CodeIndex>>,
-        connections: std::sync::Arc<crate::ws::ConnectionManager>,
+        code_index: Option<Arc<crate::code_search::CodeIndex>>,
+        connections: Arc<crate::ws::ConnectionManager>,
+        auth_enabled: bool,
     ) -> Self {
         Self {
             db,
             state: Mutex::new(SessionState::default()),
             code_index,
             connections: Some(connections),
+            auth_enabled,
             tool_router: Self::tool_router(),
         }
     }
@@ -3779,6 +3786,26 @@ impl ServerHandler for SeamMcp {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
+        // When auth is enabled, every tool call must come from an authenticated
+        // connection. The HTTP-level middleware (McpAuthLayer) already blocks
+        // unauthenticated requests with 401, but we check here as well to
+        // catch any edge case and return a clear error instead of a misleading
+        // "Session not found" from downstream session-lookup logic.
+        if self.auth_enabled {
+            let has_identity = context
+                .extensions
+                .get::<http::request::Parts>()
+                .and_then(|parts| parts.extensions.get::<Arc<McpIdentity>>())
+                .is_some();
+
+            if !has_identity {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Authentication required for MCP access. \
+                     Reconnect to /mcp with a valid Bearer token.",
+                )]));
+            }
+        }
+
         let tool_name = request.name.to_string();
         let request_params = request
             .arguments
