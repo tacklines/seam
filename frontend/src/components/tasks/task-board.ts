@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, state, property } from "lit/decorators.js";
+import { customElement, state, property, query } from "lit/decorators.js";
 import { store } from "../../state/app-state.js";
 import {
   fetchTasks,
@@ -49,10 +49,12 @@ import "./task-create-dialog.js";
 import "./task-sprint-panel.js";
 import "./task-board-toolbar.js";
 import "./task-shortcuts-dialog.js";
+import "../invocations/invoke-dialog.js";
 
 import type { FilterChangedDetail } from "./task-board-toolbar.js";
 import type { SprintCreatedDetail } from "./task-sprint-panel.js";
 import type { TaskCreatedDetail } from "./task-create-dialog.js";
+import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 
 @customElement("task-board")
 export class TaskBoard extends LitElement {
@@ -513,6 +515,8 @@ export class TaskBoard extends LitElement {
   // ── Drag state (passed down to sprint panel) ──
   private _dragTaskId: string | null = null;
 
+  @query("#batch-invoke-dialog") private _batchInvokeDialog!: InvokeDialog;
+
   private _storeUnsub: (() => void) | null = null;
   private _keyHandler = (e: KeyboardEvent) => {
     const isInput = e.composedPath().some((el) => {
@@ -769,6 +773,18 @@ export class TaskBoard extends LitElement {
     }
   }
 
+  private _batchDispatchAgent() {
+    if (this._selectedIds.size === 0) return;
+    const selectedTasks = this._tasks.filter((tk) =>
+      this._selectedIds.has(tk.id),
+    );
+    const taskLines = selectedTasks
+      .map((tk) => `- [${tk.ticket_id}] ${tk.title}`)
+      .join("\n");
+    const prompt = `${t("taskBoard.batch.dispatchPrompt")}\n${taskLines}`;
+    this._batchInvokeDialog.showWithPrompt(prompt);
+  }
+
   private async _handleDelete(taskId: string) {
     try {
       await deleteTask(this.sessionCode, taskId);
@@ -969,6 +985,12 @@ export class TaskBoard extends LitElement {
         }}
       ></task-shortcuts-dialog>
 
+      ${this.projectId
+        ? html`<invoke-dialog
+            id="batch-invoke-dialog"
+            project-id=${this.projectId}
+          ></invoke-dialog>`
+        : nothing}
       ${this._toastMessage
         ? html`<div class="toast">${this._toastMessage}</div>`
         : nothing}
@@ -1075,6 +1097,19 @@ export class TaskBoard extends LitElement {
             ?loading=${this._batchLoading}
             >${t("taskBoard.batch.reopen")}</sl-button
           >
+          ${this.projectId
+            ? html`
+                <sl-button
+                  size="small"
+                  variant="primary"
+                  outline
+                  @click=${() => this._batchDispatchAgent()}
+                >
+                  <sl-icon slot="prefix" name="robot"></sl-icon>
+                  ${t("taskBoard.batch.dispatchAgent")}
+                </sl-button>
+              `
+            : nothing}
           <sl-button
             size="small"
             variant="danger"

@@ -41,6 +41,7 @@ pub enum DispatchError {
 /// 3. If no workspace exists at all, create one via Coder API
 ///
 /// Returns the workspace_id of a running (or soon-to-be-running) workspace.
+#[tracing::instrument(skip(db), fields(project_id = %project_id, branch = ?branch))]
 pub async fn resolve_workspace(
     db: &PgPool,
     project_id: Uuid,
@@ -114,6 +115,7 @@ fn pool_key_for(project_id: Uuid, branch: Option<&str>) -> String {
 }
 
 /// Wake a stopped Coder workspace via the API.
+#[tracing::instrument(skip(db), fields(workspace_id = %workspace_id, coder_workspace_id = %coder_workspace_id))]
 async fn wake_workspace(
     db: &PgPool,
     workspace_id: Uuid,
@@ -124,10 +126,14 @@ async fn wake_workspace(
         std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
 
     let client = crate::coder::CoderClient::new(coder_url, coder_token);
+    tracing::info!("Waking stopped workspace via Coder API");
     client
         .start_workspace(coder_workspace_id)
         .await
-        .map_err(|e| DispatchError::CoderApi(e.to_string()))?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to wake workspace via Coder API");
+            DispatchError::CoderApi(e.to_string())
+        })?;
 
     // Update status to running
     sqlx::query(
@@ -151,12 +157,15 @@ async fn wake_workspace(
     }
 
     // Wait briefly for workspace to be SSH-ready
+    tracing::info!("Waiting for workspace to become SSH-ready after wake");
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
+    tracing::info!("Workspace woken and ready");
     Ok(())
 }
 
 /// Create a new workspace in the pool via Coder API.
+#[tracing::instrument(skip(db), fields(project_id = %project_id, pool_key = %pool_key, branch = ?branch))]
 async fn create_pool_workspace(
     db: &PgPool,
     project_id: Uuid,
@@ -253,6 +262,7 @@ async fn create_pool_workspace(
         rich_parameter_values: params,
     };
 
+    tracing::info!(workspace_id = %workspace_id, template = template_name, "Creating Coder workspace");
     match client.create_workspace("me", req).await {
         Ok(coder_ws) => {
             sqlx::query(
@@ -285,12 +295,14 @@ async fn create_pool_workspace(
             tracing::info!(workspace_id = %workspace_id, "Pool workspace created and running");
 
             // Wait for workspace startup to complete
+            tracing::info!(workspace_id = %workspace_id, "Waiting for new workspace to complete startup");
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
             Ok(workspace_id)
         }
         Err(e) => {
             let msg = format!("Failed to create Coder workspace: {e}");
+            tracing::error!(workspace_id = %workspace_id, error = %e, "Coder workspace creation failed");
             let _ = sqlx::query(
                 "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
             )
@@ -513,6 +525,7 @@ fn bash_single_quote_escape(s: &str) -> String {
 
 /// Core dispatch function. Loads the invocation, shells out via `coder ssh`,
 /// streams output to the log buffer and WebSocket, then finalises the record.
+#[tracing::instrument(skip(db, log_buffer, connections), fields(invocation_id = %invocation_id))]
 pub async fn dispatch_invocation(
     db: &PgPool,
     log_buffer: &LogBuffer,
@@ -571,6 +584,14 @@ pub async fn dispatch_invocation(
 
     let inv = inv.ok_or(DispatchError::NotFound)?;
 
+    tracing::info!(
+        workspace_id = %inv.workspace_id,
+        perspective = %inv.agent_perspective,
+        resume_session_id = ?inv.resume_session_id,
+        model_hint = ?inv.model_hint,
+        "Dispatch: invocation loaded"
+    );
+
     // 2. Load workspace — must have a coder_workspace_name and be running
     let ws: Option<(Option<String>, String)> =
         sqlx::query_as("SELECT coder_workspace_name, status FROM workspaces WHERE id = $1")
@@ -580,9 +601,20 @@ pub async fn dispatch_invocation(
 
     let (coder_workspace_name, status) = ws.ok_or(DispatchError::WorkspaceNotReady)?;
     if status != "running" {
+        tracing::warn!(
+            workspace_id = %inv.workspace_id,
+            workspace_status = %status,
+            "Dispatch: workspace is not running"
+        );
         return Err(DispatchError::WorkspaceNotReady);
     }
     let workspace_name = coder_workspace_name.ok_or(DispatchError::WorkspaceNotReady)?;
+
+    tracing::info!(
+        workspace_id = %inv.workspace_id,
+        workspace_name = %workspace_name,
+        "Dispatch: workspace resolved and running"
+    );
 
     // 3. Check Coder CLI is available and configured
     let coder_url = std::env::var("CODER_URL").map_err(|_| DispatchError::CoderNotConfigured)?;
@@ -679,6 +711,12 @@ pub async fn dispatch_invocation(
     let participant_id_str = inv.participant_id.map(|p| p.to_string());
 
     // 7. Spawn `coder ssh <workspace_name> -- bash -c '<cmd>'`
+    tracing::info!(
+        workspace_name = %workspace_name,
+        perspective = %inv.agent_perspective,
+        resuming = inv.resume_session_id.is_some(),
+        "Dispatch: spawning coder ssh process"
+    );
     let mut child = Command::new(&coder_bin)
         .arg("ssh")
         .arg(&workspace_name)
@@ -801,6 +839,24 @@ pub async fn dispatch_invocation(
     } else {
         Some(format!("Process exited with code {exit_code}"))
     };
+
+    if exit_status.success() {
+        tracing::info!(
+            workspace_id = %inv.workspace_id,
+            exit_code = exit_code,
+            model_used = ?model_used,
+            input_tokens = ?input_tokens,
+            output_tokens = ?output_tokens,
+            claude_session_id = ?claude_session_id,
+            "Dispatch: process completed successfully"
+        );
+    } else {
+        tracing::error!(
+            workspace_id = %inv.workspace_id,
+            exit_code = exit_code,
+            "Dispatch: process exited with non-zero status"
+        );
+    }
 
     sqlx::query(
         "UPDATE invocations

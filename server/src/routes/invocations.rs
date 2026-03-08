@@ -294,6 +294,7 @@ async fn generate_branch_name(db: &sqlx::PgPool, task_id: Uuid) -> Option<String
 }
 
 /// POST /api/projects/:project_id/invocations
+#[tracing::instrument(skip(state, claims, req), fields(project_id = %project_id))]
 pub async fn create_invocation(
     State(state): State<Arc<AppState>>,
     Path(project_id): Path<Uuid>,
@@ -328,6 +329,14 @@ pub async fn create_invocation(
         }
     };
 
+    tracing::info!(
+        perspective = %req.agent_perspective,
+        task_id = ?req.task_id,
+        branch = ?req.branch,
+        model_hint = ?req.model_hint,
+        "Invocation creation requested"
+    );
+
     // Resolve workspace: use provided ID or find/create from pool
     let workspace_id = match req.workspace_id {
         Some(ws_id) => {
@@ -351,10 +360,12 @@ pub async fn create_invocation(
                     Json(serde_json::json!({"error": "workspace not found"})),
                 ));
             }
+            tracing::info!(workspace_id = %ws_id, "Invocation: using explicitly specified workspace");
             ws_id
         }
         None => {
             // Resolve from pool: find running workspace or create one
+            tracing::info!(branch = ?effective_branch, "Invocation: resolving workspace from pool");
             crate::dispatch::resolve_workspace(
                 &state.db,
                 project_id,
@@ -362,6 +373,9 @@ pub async fn create_invocation(
                 user.id,
             )
             .await
+            .inspect(|ws_id| {
+                tracing::info!(workspace_id = %ws_id, "Invocation: pool workspace resolved");
+            })
             .map_err(|e| {
                 tracing::error!("Failed to resolve workspace from pool: {e}");
                 use crate::dispatch::DispatchError;
@@ -496,6 +510,16 @@ pub async fn create_invocation(
         )
     })?;
 
+    tracing::info!(
+        invocation_id = %inv.id,
+        workspace_id = %workspace_id,
+        perspective = %inv.agent_perspective,
+        task_id = ?inv.task_id,
+        model_hint = ?inv.model_hint,
+        resuming = inv.resume_session_id.is_some(),
+        "Invocation created"
+    );
+
     let event = crate::events::DomainEvent::new(
         "invocation.created",
         "invocation",
@@ -533,6 +557,7 @@ pub async fn create_invocation(
 }
 
 /// GET /api/projects/:project_id/invocations
+#[tracing::instrument(skip(state, claims, query), fields(project_id = %project_id))]
 pub async fn list_invocations(
     State(state): State<Arc<AppState>>,
     Path(project_id): Path<Uuid>,
@@ -573,6 +598,7 @@ pub async fn list_invocations(
 }
 
 /// GET /api/invocations/:invocation_id
+#[tracing::instrument(skip(state, claims), fields(invocation_id = %invocation_id))]
 pub async fn get_invocation(
     State(state): State<Arc<AppState>>,
     Path(invocation_id): Path<Uuid>,
@@ -608,6 +634,7 @@ pub async fn get_invocation(
 }
 
 /// GET /api/projects/:project_id/cost-summary
+#[tracing::instrument(skip(state, claims), fields(project_id = %project_id))]
 pub async fn get_project_cost_summary(
     State(state): State<Arc<AppState>>,
     Path(project_id): Path<Uuid>,
