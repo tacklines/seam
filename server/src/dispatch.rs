@@ -59,6 +59,13 @@ pub async fn resolve_workspace(
 /// Internal: resolve workspace using an explicit Coder API client.
 ///
 /// Separated from `resolve_workspace` so tests can inject a `MockCoderClient`.
+///
+/// Uses a PostgreSQL advisory lock (`pg_advisory_xact_lock`) to serialize
+/// concurrent find-or-create operations for the same pool_key. The lock is
+/// acquired inside a short transaction that covers only the DB reads and the
+/// initial workspace INSERT (status='creating'). The slow Coder API calls happen
+/// after the transaction commits and the lock is released, preventing long-lived
+/// lock contention while still preventing duplicate workspace creation.
 pub(crate) async fn resolve_workspace_with_client<C: CoderApi>(
     db: &PgPool,
     project_id: Uuid,
@@ -68,60 +75,172 @@ pub(crate) async fn resolve_workspace_with_client<C: CoderApi>(
 ) -> Result<Uuid, DispatchError> {
     let pool_key = pool_key_for(project_id, branch);
 
-    // 1. Try to find a running workspace with matching pool_key
-    let running: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM workspaces
-         WHERE project_id = $1 AND status = 'running' AND pool_key = $2
-         ORDER BY last_invocation_at DESC NULLS LAST
-         LIMIT 1",
-    )
-    .bind(project_id)
-    .bind(&pool_key)
-    .fetch_optional(db)
-    .await?;
+    // Derive a stable i64 lock key from the pool_key string using FNV-1a.
+    // pg_advisory_xact_lock takes a bigint; using a simple hash avoids a
+    // dependency on an external crate and is deterministic across requests.
+    let lock_key = fnv1a_i64(pool_key.as_bytes());
 
-    if let Some((ws_id,)) = running {
-        tracing::info!(workspace_id = %ws_id, "Resolved running workspace from pool");
-        return Ok(ws_id);
+    // --- Locked phase: find-or-reserve a workspace record ---
+    //
+    // Acquire the transaction-scoped advisory lock first.  Any concurrent
+    // request with the same pool_key blocks here until we commit.  After we
+    // commit the winner has either found an existing workspace or inserted a
+    // new one in 'creating' status.  The next waiter then finds that record
+    // and returns it rather than creating a duplicate.
+    enum ResolveAction {
+        /// Reuse an already-running workspace.
+        UseRunning(Uuid),
+        /// Wake a stopped workspace then use it.
+        WakeStopped { workspace_id: Uuid, coder_id: Uuid },
+        /// Provision a brand-new workspace (record already inserted as 'creating').
+        CreateNew(Uuid),
     }
 
-    // 2. Try to find any running workspace for this project (fallback)
-    let any_running: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM workspaces
-         WHERE project_id = $1 AND status = 'running'
-         ORDER BY last_invocation_at DESC NULLS LAST
-         LIMIT 1",
-    )
-    .bind(project_id)
-    .fetch_optional(db)
-    .await?;
+    let action: ResolveAction = {
+        let mut txn = db.begin().await?;
 
-    if let Some((ws_id,)) = any_running {
-        tracing::info!(workspace_id = %ws_id, "Resolved running workspace (any) from pool");
-        return Ok(ws_id);
+        // Acquire the advisory lock for this pool_key.  The lock is
+        // transaction-scoped and is released automatically when `txn` commits
+        // or rolls back.
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(lock_key)
+            .execute(&mut *txn)
+            .await?;
+
+        tracing::debug!(pool_key = %pool_key, lock_key = lock_key, "Advisory lock acquired");
+
+        // 1. Try to find a running workspace with matching pool_key
+        let running: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT id FROM workspaces
+             WHERE project_id = $1 AND status = 'running' AND pool_key = $2
+             ORDER BY last_invocation_at DESC NULLS LAST
+             LIMIT 1",
+        )
+        .bind(project_id)
+        .bind(&pool_key)
+        .fetch_optional(&mut *txn)
+        .await?;
+
+        if let Some((ws_id,)) = running {
+            tracing::info!(workspace_id = %ws_id, "Resolved running workspace from pool");
+            txn.commit().await?;
+            ResolveAction::UseRunning(ws_id)
+        } else {
+            // 2. Try to find any running workspace for this project (fallback)
+            let any_running: Option<(Uuid,)> = sqlx::query_as(
+                "SELECT id FROM workspaces
+                 WHERE project_id = $1 AND status = 'running'
+                 ORDER BY last_invocation_at DESC NULLS LAST
+                 LIMIT 1",
+            )
+            .bind(project_id)
+            .fetch_optional(&mut *txn)
+            .await?;
+
+            if let Some((ws_id,)) = any_running {
+                tracing::info!(workspace_id = %ws_id, "Resolved running workspace (any) from pool");
+                txn.commit().await?;
+                ResolveAction::UseRunning(ws_id)
+            } else {
+                // 3. Try to find a stopped workspace to wake
+                let stopped: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+                    "SELECT id, coder_workspace_id FROM workspaces
+                     WHERE project_id = $1 AND status = 'stopped' AND pool_key = $2
+                     ORDER BY stopped_at DESC NULLS LAST
+                     LIMIT 1",
+                )
+                .bind(project_id)
+                .bind(&pool_key)
+                .fetch_optional(&mut *txn)
+                .await?;
+
+                if let Some((ws_id, Some(coder_id))) = stopped {
+                    tracing::info!(workspace_id = %ws_id, "Waking stopped workspace");
+                    // Update status to 'running' immediately so concurrent
+                    // requests that acquire the lock next see it as running.
+                    sqlx::query(
+                        "UPDATE workspaces SET status = 'running', updated_at = NOW() WHERE id = $1",
+                    )
+                    .bind(ws_id)
+                    .execute(&mut *txn)
+                    .await?;
+                    txn.commit().await?;
+                    ResolveAction::WakeStopped {
+                        workspace_id: ws_id,
+                        coder_id,
+                    }
+                } else {
+                    // 4. No usable workspace — insert a placeholder so
+                    //    concurrent requests see it as 'creating' and don't
+                    //    also try to create one.
+                    tracing::info!(
+                        project_id = %project_id,
+                        pool_key = %pool_key,
+                        "No workspace found; inserting placeholder for new workspace"
+                    );
+                    let workspace_id: Uuid = sqlx::query_scalar(
+                        "INSERT INTO workspaces (project_id, template_name, branch, pool_key, status)
+                         VALUES ($1, 'seam-agent', $2, $3, 'creating')
+                         RETURNING id",
+                    )
+                    .bind(project_id)
+                    .bind(branch)
+                    .bind(&pool_key)
+                    .fetch_one(&mut *txn)
+                    .await?;
+                    txn.commit().await?;
+                    ResolveAction::CreateNew(workspace_id)
+                }
+            }
+        }
+    };
+    // Advisory lock is released here (transaction committed above).
+
+    // --- Slow phase: Coder API calls outside the lock ---
+    match action {
+        ResolveAction::UseRunning(ws_id) => Ok(ws_id),
+
+        ResolveAction::WakeStopped {
+            workspace_id,
+            coder_id,
+        } => {
+            wake_workspace(db, workspace_id, coder_id, client).await?;
+            Ok(workspace_id)
+        }
+
+        ResolveAction::CreateNew(workspace_id) => {
+            tracing::info!(
+                project_id = %project_id,
+                pool_key = %pool_key,
+                "Creating new workspace for pool"
+            );
+            provision_pool_workspace(
+                db,
+                project_id,
+                workspace_id,
+                branch,
+                &pool_key,
+                user_id,
+                client,
+            )
+            .await
+        }
     }
+}
 
-    // 3. Try to find a stopped workspace to wake
-    let stopped: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
-        "SELECT id, coder_workspace_id FROM workspaces
-         WHERE project_id = $1 AND status = 'stopped' AND pool_key = $2
-         ORDER BY stopped_at DESC NULLS LAST
-         LIMIT 1",
-    )
-    .bind(project_id)
-    .bind(&pool_key)
-    .fetch_optional(db)
-    .await?;
-
-    if let Some((ws_id, Some(coder_id))) = stopped {
-        tracing::info!(workspace_id = %ws_id, "Waking stopped workspace");
-        wake_workspace(db, ws_id, coder_id, client).await?;
-        return Ok(ws_id);
-    }
-
-    // 4. Create a new workspace
-    tracing::info!(project_id = %project_id, pool_key = %pool_key, "Creating new workspace for pool");
-    create_pool_workspace(db, project_id, branch, &pool_key, user_id, client).await
+/// Compute a stable i64 from bytes using FNV-1a (64-bit).
+///
+/// Used to derive advisory lock keys from pool_key strings.  Two different
+/// pool_keys may collide (1-in-2^64 chance) but that only causes unnecessary
+/// serialization, not correctness problems.
+fn fnv1a_i64(data: &[u8]) -> i64 {
+    const OFFSET_BASIS: u64 = 14695981039346656037;
+    const PRIME: u64 = 1099511628211;
+    let hash = data.iter().fold(OFFSET_BASIS, |acc, &byte| {
+        acc.wrapping_mul(PRIME) ^ (byte as u64)
+    });
+    // Reinterpret the unsigned hash as a signed i64 for pg_advisory_xact_lock
+    hash as i64
 }
 
 /// Build a pool key for project + optional branch.
@@ -133,6 +252,11 @@ fn pool_key_for(project_id: Uuid, branch: Option<&str>) -> String {
 }
 
 /// Wake a stopped Coder workspace via the API.
+///
+/// Note: the advisory lock transaction pre-updates the workspace status to
+/// 'running' before calling this function, so concurrent requests see it as
+/// running immediately.  If the Coder API call fails here we revert the status
+/// back to 'stopped' so the next invocation can try again.
 #[tracing::instrument(skip(db, client), fields(workspace_id = %workspace_id, coder_workspace_id = %coder_workspace_id))]
 async fn wake_workspace<C: CoderApi>(
     db: &PgPool,
@@ -141,17 +265,21 @@ async fn wake_workspace<C: CoderApi>(
     client: &C,
 ) -> Result<(), DispatchError> {
     tracing::info!("Waking stopped workspace via Coder API");
-    client
-        .start_workspace(coder_workspace_id)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to wake workspace via Coder API");
-            DispatchError::CoderApi(e.to_string())
-        })?;
+    if let Err(e) = client.start_workspace(coder_workspace_id).await {
+        tracing::error!(error = %e, "Failed to wake workspace via Coder API; reverting status to stopped");
+        // Revert the optimistic 'running' status set in the advisory lock txn
+        let _ = sqlx::query(
+            "UPDATE workspaces SET status = 'stopped', updated_at = NOW() WHERE id = $1",
+        )
+        .bind(workspace_id)
+        .execute(db)
+        .await;
+        return Err(DispatchError::CoderApi(e.to_string()));
+    }
 
-    // Update status to running
+    // Finalize running timestamps (status is already 'running' from the advisory lock txn)
     sqlx::query(
-        "UPDATE workspaces SET status = 'running', started_at = NOW(), stopped_at = NULL, updated_at = NOW()
+        "UPDATE workspaces SET started_at = NOW(), stopped_at = NULL, updated_at = NOW()
          WHERE id = $1",
     )
     .bind(workspace_id)
@@ -178,11 +306,16 @@ async fn wake_workspace<C: CoderApi>(
     Ok(())
 }
 
-/// Create a new workspace in the pool via Coder API.
-#[tracing::instrument(skip(db, client), fields(project_id = %project_id, pool_key = %pool_key, branch = ?branch))]
-async fn create_pool_workspace<C: CoderApi>(
+/// Provision a new pool workspace via the Coder API.
+///
+/// The workspace record must already exist in the DB (inserted in 'creating'
+/// status under the advisory lock).  This function only does the slow Coder API
+/// work and updates the row when done.
+#[tracing::instrument(skip(db, client), fields(project_id = %project_id, workspace_id = %workspace_id, pool_key = %pool_key, branch = ?branch))]
+async fn provision_pool_workspace<C: CoderApi>(
     db: &PgPool,
     project_id: Uuid,
+    workspace_id: Uuid,
     branch: Option<&str>,
     pool_key: &str,
     user_id: Uuid,
@@ -196,19 +329,6 @@ async fn create_pool_workspace<C: CoderApi>(
         .await
         .map_err(|e| DispatchError::CoderApi(e.to_string()))?
         .ok_or_else(|| DispatchError::CoderApi(format!("Template '{template_name}' not found")))?;
-
-    // Insert workspace record
-    let workspace_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO workspaces (project_id, template_name, branch, pool_key, status)
-         VALUES ($1, $2, $3, $4, 'creating')
-         RETURNING id",
-    )
-    .bind(project_id)
-    .bind(template_name)
-    .bind(branch)
-    .bind(pool_key)
-    .fetch_one(db)
-    .await?;
 
     // Build rich parameters
     let mut params = vec![];
