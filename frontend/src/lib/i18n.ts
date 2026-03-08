@@ -661,8 +661,11 @@ export const messagesEn: Record<string, string> = {
   "taskBoard.stat.hidden": "hidden",
   "taskBoard.empty": "No tasks yet. Create one to get started.",
   "taskBoard.createTask": "Create Task",
+  "taskBoard.batch.selectMode": "Select",
   "taskBoard.batch.selected": "{{count}} selected",
   "taskBoard.batch.clear": "Clear",
+  "taskBoard.batch.cancel": "Cancel",
+  "taskBoard.batch.dispatch": "Dispatch Agent",
   "taskBoard.batch.start": "Start",
   "taskBoard.batch.done": "Done",
   "taskBoard.batch.close": "Close",
@@ -918,6 +921,20 @@ export const messagesEn: Record<string, string> = {
   "dispatch.overview.action.summarize": "Summarize Recent Activity",
   "dispatch.overview.action.blockers": "Identify Blockers",
   "dispatch.overview.action.custom": "Custom...",
+
+  // ── workspace-level dispatch ──
+  "dispatch.workspace.button": "Dispatch Agent",
+  "dispatch.workspace.action.investigate": "Investigate Errors",
+  "dispatch.workspace.action.resume": "Resume Work",
+  "dispatch.workspace.action.review": "Review Changes",
+  "dispatch.workspace.action.custom": "Custom...",
+
+  // ── request-level dispatch ──
+  "dispatch.request.button": "Dispatch Agent",
+  "dispatch.request.action.analyze": "Analyze Request",
+  "dispatch.request.action.decompose": "Decompose into Tasks",
+  "dispatch.request.action.feasibility": "Assess Feasibility",
+  "dispatch.request.action.custom": "Custom...",
 };
 
 // Wire English into the locale map
