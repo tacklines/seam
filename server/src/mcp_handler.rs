@@ -415,6 +415,24 @@ struct CreateInvocationParams {
     provider: Option<String>,
 }
 
+// --- Model preference params ---
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UpdateModelPreferencesParams {
+    /// Default model to use for agent invocations (e.g. "claude-opus-4-6", "claude-sonnet-4-6")
+    default_model: Option<String>,
+    /// Default budget tier: "free", "economy", "moderate", "unlimited"
+    default_budget: Option<String>,
+    /// Default provider: "anthropic", "openrouter", "ollama"
+    default_provider: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ListAvailableModelsParams {
+    /// Filter by provider: "anthropic", "openrouter" (default: all built-in providers)
+    provider: Option<String>,
+}
+
 // --- Metrics params ---
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -4998,6 +5016,235 @@ impl SeamMcp {
             "total_output_tokens": total_output_tokens,
             "by_model": by_model,
         });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(
+        description = "Get your model preferences (default_model, default_budget, default_provider). These are the sponsor user's preferences that influence model routing for agent invocations."
+    )]
+    async fn get_model_preferences(&self) -> Result<CallToolResult, McpError> {
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        // Look up the sponsor user_id from the participant record
+        let user_id: Option<Uuid> =
+            sqlx::query_scalar("SELECT user_id FROM participants WHERE id = $1")
+                .bind(participant_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to look up participant: {e}"), None)
+                })?
+                .flatten();
+
+        let Some(user_id) = user_id else {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Could not determine sponsor user for this participant",
+            )]));
+        };
+
+        let rows: Vec<(String, serde_json::Value)> = sqlx::query_as(
+            "SELECT preference_key, preference_value
+             FROM user_model_preferences
+             WHERE user_id = $1
+             ORDER BY preference_key",
+        )
+        .bind(user_id)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| {
+            McpError::internal_error(format!("Failed to fetch model preferences: {e}"), None)
+        })?;
+
+        let mut prefs = serde_json::json!({
+            "user_id": user_id,
+            "default_model": null,
+            "default_budget": null,
+            "default_provider": null,
+        });
+
+        for (key, value) in rows {
+            prefs[key] = value;
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&prefs).unwrap(),
+        )]))
+    }
+
+    #[tool(
+        description = "Update your model preferences. These influence model routing for future agent invocations you create. Pass only the fields you want to change."
+    )]
+    async fn update_model_preferences(
+        &self,
+        Parameters(params): Parameters<UpdateModelPreferencesParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        // Look up the sponsor user_id from the participant record
+        let user_id: Option<Uuid> =
+            sqlx::query_scalar("SELECT user_id FROM participants WHERE id = $1")
+                .bind(participant_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to look up participant: {e}"), None)
+                })?
+                .flatten();
+
+        let Some(user_id) = user_id else {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Could not determine sponsor user for this participant",
+            )]));
+        };
+
+        // Build the list of updates to apply
+        let mut updates: Vec<(&str, serde_json::Value)> = Vec::new();
+
+        if let Some(ref model) = params.default_model {
+            updates.push(("default_model", serde_json::Value::String(model.clone())));
+        }
+        if let Some(ref budget) = params.default_budget {
+            let valid = matches!(
+                budget.as_str(),
+                "free" | "economy" | "moderate" | "unlimited"
+            );
+            if !valid {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid default_budget. Must be: free, economy, moderate, or unlimited",
+                )]));
+            }
+            updates.push(("default_budget", serde_json::Value::String(budget.clone())));
+        }
+        if let Some(ref provider) = params.default_provider {
+            let valid = matches!(provider.as_str(), "anthropic" | "openrouter" | "ollama");
+            if !valid {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid default_provider. Must be: anthropic, openrouter, or ollama",
+                )]));
+            }
+            updates.push((
+                "default_provider",
+                serde_json::Value::String(provider.clone()),
+            ));
+        }
+
+        if updates.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "No preferences to update. Provide at least one of: default_model, default_budget, default_provider",
+            )]));
+        }
+
+        for (key, value) in &updates {
+            sqlx::query(
+                "INSERT INTO user_model_preferences (user_id, preference_key, preference_value, updated_at)
+                 VALUES ($1, $2, $3, now())
+                 ON CONFLICT (user_id, preference_key)
+                 DO UPDATE SET preference_value = EXCLUDED.preference_value, updated_at = now()",
+            )
+            .bind(user_id)
+            .bind(key)
+            .bind(value)
+            .execute(&self.db)
+            .await
+            .map_err(|e| {
+                McpError::internal_error(
+                    format!("Failed to update model preference '{key}': {e}"),
+                    None,
+                )
+            })?;
+        }
+
+        // Return updated preferences
+        let rows: Vec<(String, serde_json::Value)> = sqlx::query_as(
+            "SELECT preference_key, preference_value
+             FROM user_model_preferences
+             WHERE user_id = $1
+             ORDER BY preference_key",
+        )
+        .bind(user_id)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| {
+            McpError::internal_error(format!("Failed to fetch updated preferences: {e}"), None)
+        })?;
+
+        let mut prefs = serde_json::json!({
+            "user_id": user_id,
+            "updated": updates.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            "default_model": null,
+            "default_budget": null,
+            "default_provider": null,
+        });
+
+        for (key, value) in rows {
+            prefs[key] = value;
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&prefs).unwrap(),
+        )]))
+    }
+
+    #[tool(
+        description = "List available models from all configured providers. Returns model IDs, names, providers, and context lengths. Use model IDs when setting default_model preferences or creating invocations."
+    )]
+    async fn list_available_models(
+        &self,
+        Parameters(params): Parameters<ListAvailableModelsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        // Always include built-in Anthropic models
+        let mut all_models = crate::model_discovery::anthropic_models();
+
+        // Include OpenRouter models if not filtered to anthropic-only
+        let include_openrouter = params
+            .provider
+            .as_deref()
+            .map(|p| p == "openrouter")
+            .unwrap_or(true);
+
+        if include_openrouter {
+            match crate::model_discovery::fetch_openrouter_models().await {
+                Ok(models) => all_models.extend(models),
+                Err(e) => {
+                    tracing::warn!("list_available_models: failed to fetch OpenRouter models: {e}");
+                    // Continue with Anthropic-only; don't fail
+                }
+            }
+        }
+
+        // Apply provider filter
+        if let Some(ref filter) = params.provider {
+            all_models.retain(|m| m.provider == *filter);
+        }
+
+        let items: Vec<serde_json::Value> = all_models
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "id": m.id,
+                    "name": m.name,
+                    "provider": m.provider,
+                    "context_length": m.context_length,
+                    "modality": m.modality,
+                    "pricing_prompt": m.pricing_prompt,
+                    "pricing_completion": m.pricing_completion,
+                })
+            })
+            .collect();
+
+        let result = serde_json::json!({
+            "count": items.len(),
+            "models": items,
+        });
+
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&result).unwrap(),
         )]))
