@@ -1,13 +1,15 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, property, query, state } from 'lit/decorators.js';
 import { fetchRequests, createRequest, type RequestListView, type RequestStatusType } from '../../state/requirement-api.js';
 import { fetchReactions, createReaction, updateReaction, type EventReaction } from '../../state/automation-api.js';
 import { t } from '../../lib/i18n.js';
 import { relativeTime } from '../../lib/date-utils.js';
+import type { InvokeDialog } from '../invocations/invoke-dialog.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
+import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -15,6 +17,7 @@ import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import '@shoelace-style/shoelace/dist/components/switch/switch.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
+import '../invocations/invoke-dialog.js';
 
 const STATUS_VARIANTS: Record<RequestStatusType, string> = {
   pending: 'neutral',
@@ -112,6 +115,8 @@ export class RequestList extends LitElement {
   `;
 
   @property() projectId = '';
+
+  @query('invoke-dialog') private _invokeDialog!: InvokeDialog;
 
   @state() private _requests: RequestListView[] = [];
   @state() private _loading = true;
@@ -250,6 +255,20 @@ export class RequestList extends LitElement {
               <sl-tooltip content=${t('requestList.updated', { time: relativeTime(r.updated_at) })}>
                 <span class="request-meta">${relativeTime(r.updated_at)}</span>
               </sl-tooltip>
+              <sl-tooltip content=${t('dispatch.request.action.analyze')}>
+                <sl-icon-button
+                  name="play-fill"
+                  label=${t('dispatch.request.action.analyze')}
+                  style="font-size: 0.9rem; color: var(--sl-color-primary-500);"
+                  @click=${(e: Event) => {
+                    e.stopPropagation();
+                    this._invokeDialog.showWithPerspective(
+                      'researcher',
+                      `Analyze request: ${r.title}`,
+                    );
+                  }}
+                ></sl-icon-button>
+              </sl-tooltip>
             </div>
           `)}
         </div>
@@ -272,6 +291,8 @@ export class RequestList extends LitElement {
           ${t('requestList.create')}
         </sl-button>
       </sl-dialog>
+
+      <invoke-dialog project-id=${this.projectId}></invoke-dialog>
     `;
   }
 }
