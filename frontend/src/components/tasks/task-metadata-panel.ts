@@ -701,7 +701,7 @@ export class TaskMetadataPanel extends LitElement {
         <sl-divider style="--spacing: 0.25rem;"></sl-divider>
 
         <!-- Model Config -->
-        <div class="sidebar-heading">Model Config</div>
+        <div class="sidebar-heading">${t("dispatch.modelConfig")}</div>
 
         <!-- Model Hint -->
         ${this._editingField === "model_hint"
@@ -730,7 +730,7 @@ export class TaskMetadataPanel extends LitElement {
                   this._editingField = "model_hint";
                 }}
               >
-                <span class="meta-label">Model</span>
+                <span class="meta-label">${t("dispatch.field.model")}</span>
                 <span class="meta-value">
                   ${task.model_hint
                     ? html`<span
@@ -738,7 +738,7 @@ export class TaskMetadataPanel extends LitElement {
                         >${task.model_hint}</span
                       >`
                     : html`<span style="color: var(--text-tertiary);"
-                        >default</span
+                        >${t("dispatch.field.default")}</span
                       >`}
                   <sl-icon class="edit-pencil" name="pencil"></sl-icon>
                 </span>
@@ -759,10 +759,14 @@ export class TaskMetadataPanel extends LitElement {
                   }}
                   style="width: 100%;"
                 >
-                  <sl-option value="">default</sl-option>
-                  <sl-option value="high">High</sl-option>
-                  <sl-option value="medium">Medium</sl-option>
-                  <sl-option value="low">Low</sl-option>
+                  <sl-option value="">${t("dispatch.field.default")}</sl-option>
+                  <sl-option value="high"
+                    >${t("dispatch.budget.high")}</sl-option
+                  >
+                  <sl-option value="medium"
+                    >${t("dispatch.budget.medium")}</sl-option
+                  >
+                  <sl-option value="low">${t("dispatch.budget.low")}</sl-option>
                 </sl-select>
               </div>
             `
@@ -773,12 +777,12 @@ export class TaskMetadataPanel extends LitElement {
                   this._editingField = "budget_tier";
                 }}
               >
-                <span class="meta-label">Budget</span>
+                <span class="meta-label">${t("dispatch.field.budget")}</span>
                 <span class="meta-value">
                   ${task.budget_tier
                     ? html`<span>${task.budget_tier}</span>`
                     : html`<span style="color: var(--text-tertiary);"
-                        >default</span
+                        >${t("dispatch.field.default")}</span
                       >`}
                   <sl-icon class="edit-pencil" name="pencil"></sl-icon>
                 </span>
@@ -812,12 +816,12 @@ export class TaskMetadataPanel extends LitElement {
                   this._editingField = "provider";
                 }}
               >
-                <span class="meta-label">Provider</span>
+                <span class="meta-label">${t("dispatch.field.provider")}</span>
                 <span class="meta-value">
                   ${task.provider
                     ? html`<span>${task.provider}</span>`
                     : html`<span style="color: var(--text-tertiary);"
-                        >default</span
+                        >${t("dispatch.field.default")}</span
                       >`}
                   <sl-icon class="edit-pencil" name="pencil"></sl-icon>
                 </span>
@@ -837,7 +841,7 @@ export class TaskMetadataPanel extends LitElement {
                   style="width: 100%;"
                 >
                   <sl-icon slot="prefix" name="robot"></sl-icon>
-                  Dispatch Agent
+                  ${t("dispatch.button")}
                 </sl-button>
                 <sl-menu
                   @sl-select=${(e: CustomEvent) =>
@@ -845,28 +849,28 @@ export class TaskMetadataPanel extends LitElement {
                 >
                   <sl-menu-item value="implement">
                     <sl-icon slot="prefix" name="code-slash"></sl-icon>
-                    Implement
+                    ${t("dispatch.action.implement")}
                   </sl-menu-item>
                   <sl-menu-item value="plan">
                     <sl-icon slot="prefix" name="diagram-3"></sl-icon>
-                    Plan / Explore
+                    ${t("dispatch.action.plan")}
                   </sl-menu-item>
                   <sl-menu-item value="review">
                     <sl-icon slot="prefix" name="search"></sl-icon>
-                    Review Code
+                    ${t("dispatch.action.review")}
                   </sl-menu-item>
                   <sl-menu-item value="test">
                     <sl-icon slot="prefix" name="check2-circle"></sl-icon>
-                    Run Tests
+                    ${t("dispatch.action.test")}
                   </sl-menu-item>
                   <sl-menu-item value="research">
                     <sl-icon slot="prefix" name="book"></sl-icon>
-                    Research
+                    ${t("dispatch.action.research")}
                   </sl-menu-item>
                   <sl-divider></sl-divider>
                   <sl-menu-item value="custom">
                     <sl-icon slot="prefix" name="gear"></sl-icon>
-                    Custom...
+                    ${t("dispatch.action.custom")}
                   </sl-menu-item>
                 </sl-menu>
               </sl-dropdown>

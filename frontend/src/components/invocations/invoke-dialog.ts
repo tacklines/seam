@@ -168,8 +168,7 @@ export class InvokeDialog extends LitElement {
             ? html`<sl-alert variant="warning" open>
                 <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
                 ${t("invoke.coderConnectionIssue")}
-                ${this._coderStatus.error ||
-                t("invoke.coderConnectionUnknown")}
+                ${this._coderStatus.error || t("invoke.coderConnectionUnknown")}
               </sl-alert>`
             : nothing}
         ${this._resumeSessionId
@@ -187,11 +186,21 @@ export class InvokeDialog extends LitElement {
             @sl-change=${(e: Event) =>
               (this._perspective = (e.target as HTMLInputElement).value)}
           >
-            <sl-option value="coder">${t("invoke.perspective.coder")}</sl-option>
-            <sl-option value="reviewer">${t("invoke.perspective.reviewer")}</sl-option>
-            <sl-option value="planner">${t("invoke.perspective.planner")}</sl-option>
-            <sl-option value="tester">${t("invoke.perspective.tester")}</sl-option>
-            <sl-option value="researcher">${t("invoke.perspective.researcher")}</sl-option>
+            <sl-option value="coder"
+              >${t("invoke.perspective.coder")}</sl-option
+            >
+            <sl-option value="reviewer"
+              >${t("invoke.perspective.reviewer")}</sl-option
+            >
+            <sl-option value="planner"
+              >${t("invoke.perspective.planner")}</sl-option
+            >
+            <sl-option value="tester"
+              >${t("invoke.perspective.tester")}</sl-option
+            >
+            <sl-option value="researcher"
+              >${t("invoke.perspective.researcher")}</sl-option
+            >
           </sl-select>
         </div>
 
@@ -248,8 +257,12 @@ export class InvokeDialog extends LitElement {
           >
             <sl-option value="free">${t("invoke.budget.free")}</sl-option>
             <sl-option value="economy">${t("invoke.budget.economy")}</sl-option>
-            <sl-option value="moderate">${t("invoke.budget.moderate")}</sl-option>
-            <sl-option value="unlimited">${t("invoke.budget.unlimited")}</sl-option>
+            <sl-option value="moderate"
+              >${t("invoke.budget.moderate")}</sl-option
+            >
+            <sl-option value="unlimited"
+              >${t("invoke.budget.unlimited")}</sl-option
+            >
           </sl-select>
         </div>
 
@@ -265,7 +278,9 @@ export class InvokeDialog extends LitElement {
           : ""}
 
         <div class="actions">
-          <sl-button @click=${() => this.hide()}>${t("invoke.cancel")}</sl-button>
+          <sl-button @click=${() => this.hide()}
+            >${t("invoke.cancel")}</sl-button
+          >
           <sl-button
             variant="primary"
             ?loading=${this._submitting}

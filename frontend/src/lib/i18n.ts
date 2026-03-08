@@ -843,6 +843,53 @@ export const messagesEn: Record<string, string> = {
   "auth.error.fetchFailed": "Failed to load error details",
   "auth.error.unknown": "An unknown error occurred",
   "auth.error.backToLogin": "Back to login",
+
+  // ── invoke-dialog ──
+  "invoke.titleNew": "New Invocation",
+  "invoke.titleContinue": "Continue Invocation",
+  "invoke.coderNotConfigured":
+    "Coder is not configured. Agent dispatch requires a running Coder instance with the seam-agent template.",
+  "invoke.coderConnectionIssue": "Coder connection issue:",
+  "invoke.coderConnectionUnknown": "unknown error",
+  "invoke.coderSettingsHint":
+    "Check Coder integration status at Settings → Integrations.",
+  "invoke.continuingSession": "Continuing previous session",
+  "invoke.perspectiveLabel": "Agent Perspective",
+  "invoke.perspective.coder": "Coder",
+  "invoke.perspective.reviewer": "Reviewer",
+  "invoke.perspective.planner": "Planner",
+  "invoke.perspective.tester": "Tester",
+  "invoke.perspective.researcher": "Researcher",
+  "invoke.promptLabel": "Prompt",
+  "invoke.promptPlaceholder": "What should the agent do?",
+  "invoke.branchLabel": "Branch (optional)",
+  "invoke.systemPromptLabel": "System Prompt Append (optional)",
+  "invoke.modelLabel": "Model (optional)",
+  "invoke.budgetLabel": "Budget Tier (optional)",
+  "invoke.budget.free": "Free",
+  "invoke.budget.economy": "Economy",
+  "invoke.budget.moderate": "Moderate",
+  "invoke.budget.unlimited": "Unlimited",
+  "invoke.cancel": "Cancel",
+  "invoke.launch": "Launch",
+  "invoke.errorPromptRequired": "Prompt is required.",
+
+  // ── dispatch (task-metadata-panel) ──
+  "dispatch.button": "Dispatch Agent",
+  "dispatch.action.implement": "Implement",
+  "dispatch.action.plan": "Plan / Explore",
+  "dispatch.action.review": "Review Code",
+  "dispatch.action.test": "Run Tests",
+  "dispatch.action.research": "Research",
+  "dispatch.action.custom": "Custom...",
+  "dispatch.modelConfig": "Model Config",
+  "dispatch.field.model": "Model",
+  "dispatch.field.budget": "Budget",
+  "dispatch.field.provider": "Provider",
+  "dispatch.field.default": "default",
+  "dispatch.budget.high": "High",
+  "dispatch.budget.medium": "Medium",
+  "dispatch.budget.low": "Low",
 };
 
 // Wire English into the locale map
