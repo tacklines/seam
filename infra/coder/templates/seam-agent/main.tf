@@ -315,7 +315,7 @@ FORWARDER
 
       # MCP server config must go in .mcp.json (not settings.local.json)
       # for headers support. Double $$ escapes Terraform interpolation so
-      # the literal ${SEAM_TOKEN} and ${SEAM_URL} reach the file for Claude
+      # the literal SEAM_TOKEN and SEAM_URL reach the file for Claude
       # Code's runtime env var expansion.
       cat > /workspace/.mcp.json << EOF
 {
