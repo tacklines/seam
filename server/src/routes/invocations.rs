@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
+use rand::Rng;
+
 use crate::auth::AuthUser;
 use crate::db;
 use crate::log_buffer::LogLine;
@@ -130,9 +132,149 @@ fn to_view(inv: Invocation) -> InvocationView {
     }
 }
 
+fn generate_code(len: usize) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let mut rng = rand::rng();
+    (0..len)
+        .map(|_| {
+            let idx = rng.random_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
+}
+
+/// Ensures the task is in a session and the user has an agent join code for it.
+/// If the task has no session, creates a project-level session and links the task.
+/// Returns the agent join code string.
+async fn ensure_agent_code(
+    db: &sqlx::PgPool,
+    task_id: Uuid,
+    project_id: Uuid,
+    user_id: Uuid,
+) -> Option<String> {
+    // Find existing session for this task
+    let session_id: Uuid = match sqlx::query_as::<_, (Uuid,)>(
+        "SELECT s.id FROM sessions s
+         JOIN session_tasks st ON st.session_id = s.id
+         WHERE st.task_id = $1 AND s.closed_at IS NULL
+         ORDER BY s.created_at DESC LIMIT 1",
+    )
+    .bind(task_id)
+    .fetch_optional(db)
+    .await
+    {
+        Ok(Some((id,))) => id,
+        Ok(None) => {
+            // No session — find or create a project-level one
+            let existing: Option<(Uuid,)> = sqlx::query_as(
+                "SELECT id FROM sessions
+                 WHERE project_id = $1 AND name = 'Project Tasks' AND closed_at IS NULL
+                 LIMIT 1",
+            )
+            .bind(project_id)
+            .fetch_optional(db)
+            .await
+            .unwrap_or(None);
+
+            let sid = if let Some((id,)) = existing {
+                id
+            } else {
+                // Create project-level session
+                let sid = Uuid::new_v4();
+                let code = generate_code(6);
+                let join_code = generate_code(6);
+                if let Err(e) = sqlx::query(
+                    "INSERT INTO sessions (id, project_id, code, join_code, name, created_by)
+                     VALUES ($1, $2, $3, $4, 'Project Tasks', $5)",
+                )
+                .bind(sid)
+                .bind(project_id)
+                .bind(&code)
+                .bind(&join_code)
+                .bind(user_id)
+                .execute(db)
+                .await
+                {
+                    tracing::warn!("ensure_agent_code: failed to create session: {e}");
+                    return None;
+                }
+
+                // Add creator as participant
+                let pid = Uuid::new_v4();
+                let _ = sqlx::query(
+                    "INSERT INTO participants (id, session_id, user_id, display_name, participant_type)
+                     VALUES ($1, $2, $3, 'System', 'human')",
+                )
+                .bind(pid)
+                .bind(sid)
+                .bind(user_id)
+                .execute(db)
+                .await;
+
+                tracing::info!(session_id = %sid, "Created project-level session for agent dispatch");
+                sid
+            };
+
+            // Link task to session
+            let _ = sqlx::query(
+                "INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            )
+            .bind(sid)
+            .bind(task_id)
+            .execute(db)
+            .await;
+
+            sid
+        }
+        Err(e) => {
+            tracing::warn!("ensure_agent_code: failed to find session: {e}");
+            return None;
+        }
+    };
+
+    // Find existing agent code for this user+session, or create one
+    let existing_code: Option<(String,)> = sqlx::query_as(
+        "SELECT code FROM agent_join_codes WHERE session_id = $1 AND user_id = $2 LIMIT 1",
+    )
+    .bind(session_id)
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+    .unwrap_or(None);
+
+    if let Some((code,)) = existing_code {
+        return Some(code);
+    }
+
+    // Create new agent join code
+    let agent_code = generate_code(8);
+    let code_id = Uuid::new_v4();
+    match sqlx::query(
+        "INSERT INTO agent_join_codes (id, session_id, user_id, code, created_at)
+         VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(code_id)
+    .bind(session_id)
+    .bind(user_id)
+    .bind(&agent_code)
+    .execute(db)
+    .await
+    {
+        Ok(_) => Some(agent_code),
+        Err(e) => {
+            tracing::warn!("ensure_agent_code: failed to create agent code: {e}");
+            None
+        }
+    }
+}
+
 /// Fetches full task context for a given task ID and formats it as markdown.
 /// Returns None (with a warning log) if the task cannot be found or the query fails.
-async fn build_task_context(db: &sqlx::PgPool, task_id: Uuid) -> Option<String> {
+async fn build_task_context(
+    db: &sqlx::PgPool,
+    task_id: Uuid,
+    agent_code: Option<&str>,
+) -> Option<String> {
     // Task detail joined with project for ticket_prefix.
     // Enums are cast to TEXT for safe tuple decoding.
     let task_row: Option<(i32, String, String, Option<String>, String, String, String)> =
@@ -234,27 +376,11 @@ async fn build_task_context(db: &sqlx::PgPool, task_id: Uuid) -> Option<String> 
         }
     }
 
-    // Session codes — so the agent knows which session(s) this task belongs to
-    let session_codes: Vec<(String,)> = sqlx::query_as(
-        "SELECT s.code FROM sessions s
-         JOIN session_tasks st ON st.session_id = s.id
-         WHERE st.task_id = $1
-         ORDER BY s.created_at DESC",
-    )
-    .bind(task_id)
-    .fetch_all(db)
-    .await
-    .unwrap_or_else(|e| {
-        tracing::warn!("build_task_context: failed to fetch session codes: {e}");
-        vec![]
-    });
-
-    if !session_codes.is_empty() {
-        let codes: Vec<&str> = session_codes.iter().map(|(c,)| c.as_str()).collect();
+    // Agent join code — so the agent can call join_session to access MCP tools
+    if let Some(code) = agent_code {
         md.push_str(&format!(
             "\n## Session\n\
-             Use `join_session` with code **{}** to connect to this task's session.\n",
-            codes[0]
+             Use `join_session` with code **{code}** to connect to this task's session.\n"
         ));
     }
 
@@ -428,10 +554,15 @@ pub async fn create_invocation(
         }
     }
 
-    // Build task context markdown when a task_id is provided; merge with any user-supplied
-    // system_prompt_append. Failures are non-fatal — log and proceed without context.
+    // Ensure the task has a session and the user has an agent join code, then build
+    // task context markdown. Failures are non-fatal — log and proceed without context.
+    let agent_code = if let Some(tid) = req.task_id {
+        ensure_agent_code(&state.db, tid, project_id, user.id).await
+    } else {
+        None
+    };
     let task_context = if let Some(tid) = req.task_id {
-        build_task_context(&state.db, tid).await
+        build_task_context(&state.db, tid, agent_code.as_deref()).await
     } else {
         None
     };
