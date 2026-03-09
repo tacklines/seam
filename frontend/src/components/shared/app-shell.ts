@@ -8,6 +8,7 @@ import {
   type SessionParticipant,
 } from "../../state/app-state.js";
 import { disconnectSession } from "../../state/session-connection.js";
+import { agentStream } from "../../state/agent-stream.js";
 import {
   fetchUnreadMentions,
   clearUnreadMentions,
@@ -421,12 +422,22 @@ export class AppShell extends LitElement {
   }
 
   private _onLocationChanged() {
-    if (
-      this._appState.sessionState &&
-      !window.location.pathname.startsWith("/sessions/")
-    ) {
+    const session = this._appState.sessionState;
+    if (!session) return;
+
+    const onSessionRoute = window.location.pathname.startsWith("/sessions/");
+    const currentCode = session.code;
+    // Detect session-to-session navigation: on a /sessions/ route but different code
+    const routeCode = onSessionRoute
+      ? window.location.pathname.split("/")[2]?.toUpperCase()
+      : null;
+    const leavingSession = !onSessionRoute || (routeCode !== currentCode);
+
+    if (leavingSession) {
+      agentStream.disconnect();
       disconnectSession();
       store.clearSession();
+      this._sidebarCollapsed = false;
     }
   }
 
@@ -470,8 +481,10 @@ export class AppShell extends LitElement {
   private _leaveSession() {
     const orgSlug = this._currentOrg?.slug;
     const projectId = this._appState.sessionState?.session.project_id;
+    agentStream.disconnect();
     disconnectSession();
     store.clearSession();
+    this._sidebarCollapsed = false;
     if (orgSlug && projectId) {
       navigateTo(`/orgs/${orgSlug}/projects/${projectId}`);
     } else {
@@ -690,11 +703,13 @@ export class AppShell extends LitElement {
       >
         <header class="header">
           <div class="header-left">
-            <sl-icon-button
-              name="list"
-              label="${t("app.sidebar.toggleLabel")}"
-              @click=${this._toggleSidebar}
-            ></sl-icon-button>
+            ${session
+              ? html`<sl-icon-button
+                  name="list"
+                  label="${t("app.sidebar.toggleLabel")}"
+                  @click=${this._toggleSidebar}
+                ></sl-icon-button>`
+              : nothing}
             <span
               class="logo-wordmark"
               @click=${() => navigateTo("/")}
