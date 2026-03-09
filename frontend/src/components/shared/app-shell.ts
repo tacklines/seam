@@ -354,6 +354,7 @@ export class AppShell extends LitElement {
   private _authUnsub: (() => void) | null = null;
   private _appUnsub: (() => void) | null = null;
   private _orgUnsub: (() => void) | null = null;
+  private _boundOnLocationChanged: (() => void) | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -397,6 +398,12 @@ export class AppShell extends LitElement {
     if (window.location.pathname.startsWith("/auth/")) {
       this._initRouter();
     }
+
+    this._boundOnLocationChanged = this._onLocationChanged.bind(this);
+    window.addEventListener(
+      "vaadin-router-location-changed",
+      this._boundOnLocationChanged,
+    );
   }
 
   disconnectedCallback() {
@@ -404,6 +411,23 @@ export class AppShell extends LitElement {
     this._authUnsub?.();
     this._appUnsub?.();
     this._orgUnsub?.();
+    if (this._boundOnLocationChanged) {
+      window.removeEventListener(
+        "vaadin-router-location-changed",
+        this._boundOnLocationChanged,
+      );
+      this._boundOnLocationChanged = null;
+    }
+  }
+
+  private _onLocationChanged() {
+    if (
+      this._appState.sessionState &&
+      !window.location.pathname.startsWith("/sessions/")
+    ) {
+      disconnectSession();
+      store.clearSession();
+    }
   }
 
   private _initRouter() {
