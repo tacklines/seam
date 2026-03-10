@@ -86,6 +86,8 @@ pub struct ActionContext {
     pub project_id: Uuid,
     /// Source identifier for logging (reaction name or job name)
     pub source: String,
+    /// User who created this automation (for credential resolution in dispatch)
+    pub user_id: Option<Uuid>,
 }
 
 /// Dispatch an action by type. Returns Ok(()) on success.
@@ -173,6 +175,11 @@ async fn dispatch_invoke_agent(
     if let Some(task_id) = &config.task_id {
         let rendered = interpolate_template(task_id, ctx.event_payload.as_ref());
         body["task_id"] = serde_json::Value::String(rendered);
+    }
+    // Pass the creating user's ID so that dispatch can resolve their
+    // personal credentials (e.g. Claude OAuth tokens) for the workspace.
+    if let Some(user_id) = ctx.user_id {
+        body["dispatch_user_id"] = serde_json::Value::String(user_id.to_string());
     }
 
     let client = Client::new();

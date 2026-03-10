@@ -24,6 +24,7 @@ struct EventReaction {
     action_type: String,
     action_config: serde_json::Value,
     filter: serde_json::Value,
+    created_by_user_id: Option<Uuid>,
 }
 
 /// Run the reactions consumer loop.
@@ -101,7 +102,7 @@ async fn handle_event(
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     // Find matching reactions
     let reactions: Vec<EventReaction> = sqlx::query_as(
-        "SELECT id, project_id, name, action_type, action_config, filter
+        "SELECT id, project_id, name, action_type, action_config, filter, created_by_user_id
          FROM event_reactions
          WHERE aggregate_type = $1
            AND event_type = $2
@@ -218,6 +219,7 @@ async fn dispatch_action(
         event_payload: Some(event.payload.clone()),
         project_id: reaction.project_id,
         source: format!("reaction:{}", reaction.name),
+        user_id: reaction.created_by_user_id,
     };
     super::actions::dispatch(pool, &reaction.action_type, &reaction.action_config, &ctx).await
 }

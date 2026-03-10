@@ -16,6 +16,7 @@ struct ScheduledJob {
     cron_expr: String,
     action_type: String,
     action_config: serde_json::Value,
+    created_by_user_id: Option<Uuid>,
 }
 
 /// Run the cron scheduler loop.
@@ -45,7 +46,7 @@ async fn poll_and_dispatch(
 
     // Fetch due jobs
     let jobs: Vec<ScheduledJob> = sqlx::query_as(
-        "SELECT id, project_id, name, cron_expr, action_type, action_config
+        "SELECT id, project_id, name, cron_expr, action_type, action_config, created_by_user_id
          FROM scheduled_jobs
          WHERE enabled = true AND next_run_at <= $1
          ORDER BY next_run_at
@@ -140,6 +141,7 @@ async fn dispatch_job_action(
         event_payload: None,
         project_id: job.project_id,
         source: format!("schedule:{}", job.name),
+        user_id: job.created_by_user_id,
     };
     super::actions::dispatch(pool, &job.action_type, &job.action_config, &ctx).await
 }

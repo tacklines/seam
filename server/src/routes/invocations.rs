@@ -35,6 +35,10 @@ pub struct CreateInvocationRequest {
     pub model_hint: Option<String>,
     pub budget_tier: Option<String>,
     pub provider: Option<String>,
+    /// User ID for credential resolution when invocation is created by the worker
+    /// on behalf of a user (e.g. from a reaction or scheduled job). If not set,
+    /// the authenticated user's ID is used.
+    pub dispatch_user_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -652,7 +656,9 @@ pub async fn create_invocation(
     let invocation_id = inv.id;
     let dispatch_state = Arc::clone(&state);
     let dispatch_branch = effective_branch.clone();
-    let dispatch_user_id = user.id;
+    // Use the explicit dispatch_user_id from the request (set by worker on behalf
+    // of a user) or fall back to the authenticated user's ID.
+    let dispatch_user_id = req.dispatch_user_id.unwrap_or(user.id);
     let dispatch_project_id = project_id;
     tokio::spawn(async move {
         let db = dispatch_state.db.clone();

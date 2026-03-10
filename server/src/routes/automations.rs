@@ -166,8 +166,8 @@ pub async fn create_reaction(
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let reaction = sqlx::query_as::<_, EventReactionView>(
-        "INSERT INTO event_reactions (id, project_id, name, event_type, aggregate_type, filter, action_type, action_config)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        "INSERT INTO event_reactions (id, project_id, name, event_type, aggregate_type, filter, action_type, action_config, created_by_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id, project_id, name, event_type, aggregate_type, filter, action_type, action_config, enabled, created_at, updated_at",
     )
     .bind(Uuid::new_v4())
@@ -178,6 +178,7 @@ pub async fn create_reaction(
     .bind(&body.filter)
     .bind(&body.action_type)
     .bind(&body.action_config)
+    .bind(user.id)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
@@ -372,8 +373,8 @@ pub async fn create_scheduled_job(
     })?;
 
     let job = sqlx::query_as::<_, ScheduledJobView>(
-        "INSERT INTO scheduled_jobs (id, project_id, name, cron_expr, action_type, action_config, next_run_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        "INSERT INTO scheduled_jobs (id, project_id, name, cron_expr, action_type, action_config, next_run_at, created_by_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id, project_id, name, cron_expr, action_type, action_config, enabled, last_run_at, next_run_at, created_at, updated_at",
     )
     .bind(Uuid::new_v4())
@@ -383,6 +384,7 @@ pub async fn create_scheduled_job(
     .bind(&body.action_type)
     .bind(&body.action_config)
     .bind(next_run_at)
+    .bind(user.id)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
