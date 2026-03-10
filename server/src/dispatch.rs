@@ -85,7 +85,7 @@ pub(crate) async fn resolve_workspace_with_client<C: CoderApi>(
     user_id: Uuid,
     client: &C,
 ) -> Result<Uuid, DispatchError> {
-    let pool_key = pool_key_for(project_id, branch);
+    let pool_key = pool_key_for(project_id, branch, user_id);
 
     // Derive a stable i64 lock key from the pool_key string using FNV-1a.
     // pg_advisory_xact_lock takes a bigint; using a simple hash avoids a
@@ -255,11 +255,15 @@ fn fnv1a_i64(data: &[u8]) -> i64 {
     hash as i64
 }
 
-/// Build a pool key for project + optional branch.
-fn pool_key_for(project_id: Uuid, branch: Option<&str>) -> String {
+/// Build a pool key for project + user + optional branch.
+///
+/// Pool keys include user_id to ensure workspace isolation between users.
+/// This prevents one user's credentials (especially personal OAuth tokens)
+/// from leaking to another user's invocations via workspace reuse.
+fn pool_key_for(project_id: Uuid, branch: Option<&str>, user_id: Uuid) -> String {
     match branch {
-        Some(b) => format!("project:{}:branch:{}", project_id, b),
-        None => format!("project:{}", project_id),
+        Some(b) => format!("project:{}:user:{}:branch:{}", project_id, user_id, b),
+        None => format!("project:{}:user:{}", project_id, user_id),
     }
 }
 
@@ -448,6 +452,12 @@ async fn provision_pool_workspace<C: CoderApi>(
         if let Ok(creds) = crate::credentials::credentials_for_workspace(db, org_id, user_id).await
         {
             if !creds.is_empty() {
+                let cred_keys: Vec<&str> = creds.iter().map(|(k, _)| k.as_str()).collect();
+                tracing::info!(
+                    credential_keys = ?cred_keys,
+                    count = creds.len(),
+                    "Dispatch: injecting credentials into workspace"
+                );
                 let creds_map: serde_json::Map<String, serde_json::Value> = creds
                     .into_iter()
                     .map(|(k, v)| (k, serde_json::Value::String(v)))
@@ -456,6 +466,8 @@ async fn provision_pool_workspace<C: CoderApi>(
                     name: "credentials_json".to_string(),
                     value: serde_json::Value::Object(creds_map).to_string(),
                 });
+            } else {
+                tracing::warn!("Dispatch: no credentials found for workspace");
             }
         }
     }
@@ -1006,6 +1018,38 @@ pub async fn dispatch_invocation(
         }
     }
 
+    // 7b. Probe credential env vars inside the workspace
+    {
+        let probe_output = Command::new(&coder_bin)
+            .arg("ssh")
+            .arg(&workspace_name)
+            .arg("--")
+            .arg("bash")
+            .arg("-c")
+            .arg("echo GIT_TOKEN=${GIT_TOKEN:+set} CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:+set} ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:+set}")
+            .env("CODER_URL", &coder_url)
+            .env("CODER_SESSION_TOKEN", &coder_token)
+            .output()
+            .await;
+        match probe_output {
+            Ok(out) => {
+                let stdout_str = String::from_utf8_lossy(&out.stdout);
+                tracing::info!(
+                    workspace_name = %workspace_name,
+                    env_probe = %stdout_str.trim(),
+                    "Dispatch: credential env var probe"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    workspace_name = %workspace_name,
+                    error = %e,
+                    "Dispatch: failed to probe credential env vars"
+                );
+            }
+        }
+    }
+
     // 8. Spawn `coder ssh <workspace_name> -- bash -c '<cmd>'`
     tracing::info!(
         workspace_name = %workspace_name,
@@ -1495,27 +1539,30 @@ mod tests {
     #[test]
     fn pool_key_without_branch() {
         let project_id = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
-        let key = pool_key_for(project_id, None);
-        assert_eq!(key, "project:00000000-0000-0000-0000-000000000001");
+        let user_id = Uuid::parse_str("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa").unwrap();
+        let key = pool_key_for(project_id, None, user_id);
+        assert_eq!(key, "project:00000000-0000-0000-0000-000000000001:user:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     }
 
     #[test]
     fn pool_key_with_branch() {
         let project_id = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
-        let key = pool_key_for(project_id, Some("main"));
+        let user_id = Uuid::parse_str("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").unwrap();
+        let key = pool_key_for(project_id, Some("main"), user_id);
         assert_eq!(
             key,
-            "project:00000000-0000-0000-0000-000000000002:branch:main"
+            "project:00000000-0000-0000-0000-000000000002:user:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb:branch:main"
         );
     }
 
     #[test]
     fn pool_key_with_feature_branch() {
         let project_id = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
-        let key = pool_key_for(project_id, Some("feat/my-feature"));
+        let user_id = Uuid::parse_str("cccccccc-cccc-cccc-cccc-cccccccccccc").unwrap();
+        let key = pool_key_for(project_id, Some("feat/my-feature"), user_id);
         assert_eq!(
             key,
-            "project:00000000-0000-0000-0000-000000000003:branch:feat/my-feature"
+            "project:00000000-0000-0000-0000-000000000003:user:cccccccc-cccc-cccc-cccc-cccccccccccc:branch:feat/my-feature"
         );
     }
 
