@@ -138,7 +138,6 @@ pub async fn create_credential(
 
     // Validate credential_type
     let valid_types = [
-        "claude_oauth",
         "anthropic_api_key",
         "openai_api_key",
         "google_api_key",
@@ -146,6 +145,12 @@ pub async fn create_credential(
         "ssh_key",
         "custom",
     ];
+    // claude_oauth is a personal subscription token that must not be shared
+    // across users via org credentials. Use user credentials (/api/me/credentials)
+    // instead, or use anthropic_api_key for org-wide API access.
+    if req.credential_type == "claude_oauth" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     if !valid_types.contains(&req.credential_type.as_str()) {
         return Err(StatusCode::BAD_REQUEST);
     }
