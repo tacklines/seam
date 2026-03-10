@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@shoelace-style/shoelace/dist/themes/light.css";
 @import "@shoelace-style/shoelace/dist/themes/dark.css";
 
 :root {
@@ -13,17 +14,23 @@
   --sl-color-primary-800: #3730a3;
   --sl-color-primary-900: #312e81;
   --sl-color-primary-950: #1e1b4b;
-  --sl-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+  --sl-font-mono:
+    "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
 
+  --color-primary: var(--sl-color-primary-500);
+  --color-primary-muted: rgba(99, 102, 241, 0.15);
+  --color-primary-border: rgba(99, 102, 241, 0.4);
+  --color-primary-glow: rgba(99, 102, 241, 0.04);
+  --color-primary-glow-hover: rgba(99, 102, 241, 0.1);
+}
+
+.sl-theme-dark {
   --surface-0: #0a0c14;
   --surface-1: #111320;
   --surface-2: #1a1d2e;
   --border-color: rgba(255, 255, 255, 0.07);
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-medium: rgba(255, 255, 255, 0.12);
-
-  --color-primary-glow: rgba(99, 102, 241, 0.04);
-  --color-primary-glow-hover: rgba(99, 102, 241, 0.1);
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
@@ -46,14 +53,47 @@
   --avatar-bg-default: #374151;
   --avatar-overflow-bg: #252836;
   --avatar-agent-gradient: linear-gradient(135deg, #1e3a5f, #1a4a5f);
+}
 
-  --color-primary: var(--sl-color-primary-500);
-  --color-primary-muted: rgba(99, 102, 241, 0.15);
-  --color-primary-border: rgba(99, 102, 241, 0.4);
+.sl-theme-light {
+  --surface-0: #ffffff;
+  --surface-1: #f8f9fb;
+  --surface-2: #f1f3f6;
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-medium: rgba(0, 0, 0, 0.15);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --text-primary: rgba(0, 0, 0, 0.9);
+  --text-secondary: rgba(0, 0, 0, 0.65);
+  --text-tertiary: rgba(0, 0, 0, 0.45);
+
+  --surface-header: #ffffff;
+  --surface-hover: rgba(0, 0, 0, 0.04);
+  --surface-active: rgba(0, 0, 0, 0.07);
+  --surface-bg: #f8f9fb;
+  --surface-card: #ffffff;
+  --surface-card-hover: #f8f9fb;
+
+  --avatar-status-online: #16a34a;
+  --avatar-status-offline: rgba(0, 0, 0, 0.25);
+  --avatar-bg-default: #d1d5db;
+  --avatar-overflow-bg: #e5e7eb;
+  --avatar-agent-gradient: linear-gradient(135deg, #bfdbfe, #a5f3fc);
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-size: 14px;
   line-height: 1.5;
+  background: var(--surface-0);
+  color: var(--text-primary);
 }

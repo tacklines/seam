@@ -421,6 +421,15 @@ export class AppShell extends LitElement {
     this._sidebarCollapsed = !this._sidebarCollapsed;
   }
 
+  private _toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.classList.contains("sl-theme-dark");
+    const newTheme = isDark ? "light" : "dark";
+    html.className = `sl-theme-${newTheme}`;
+    localStorage.setItem("seam-theme", newTheme);
+    this.requestUpdate();
+  }
+
   private async _copyToClipboard(text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -772,6 +781,15 @@ export class AppShell extends LitElement {
                   </sl-tooltip>
                 `
               : nothing}
+            <sl-icon-button
+              name=${document.documentElement.classList.contains(
+                "sl-theme-dark",
+              )
+                ? "sun"
+                : "moon"}
+              label="Toggle theme"
+              @click=${this._toggleTheme}
+            ></sl-icon-button>
             <sl-dropdown>
               <sl-button slot="trigger" size="small" variant="text" caret>
                 ${this._authState.user?.name}
