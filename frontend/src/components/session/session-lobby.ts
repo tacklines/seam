@@ -283,11 +283,9 @@ export class SessionLobby extends LitElement {
   @query("invoke-dialog") private _invokeDialog!: InvokeDialog;
 
   private _unsubscribe: (() => void) | null = null;
-  private _popstateHandler = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
-    window.addEventListener("popstate", this._popstateHandler);
     this._unsubscribe = store.subscribe((event) => {
       if (
         event.type === "session-connected" ||
@@ -321,7 +319,6 @@ export class SessionLobby extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
-    window.removeEventListener("popstate", this._popstateHandler);
   }
 
   private async _tryJoinFromRoute() {
@@ -365,7 +362,8 @@ export class SessionLobby extends LitElement {
       connectSession(code);
       this._requestNotificationPermission();
     } catch (err) {
-      navigateTo("/projects");
+      // Show error in-page rather than navigating away — the code in the URL
+      // is invalid or the session doesn't exist, so display a friendly message.
       this._error = err instanceof Error ? err.message : t("lobby.errorRejoin");
       this._lobbyState = "landing";
     } finally {
@@ -491,6 +489,11 @@ export class SessionLobby extends LitElement {
       <div class="landing">
         <h1>${t("lobby.title")}</h1>
         <p class="subtitle">${t("lobby.subtitle")}</p>
+        ${this._error
+          ? html`<sl-alert variant="danger" open class="error-msg"
+              >${this._error}</sl-alert
+            >`
+          : nothing}
         <div class="landing-options">
           <div
             class="option-card option-card--create"

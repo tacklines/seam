@@ -19,19 +19,20 @@ let activeSessionCode: string | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let backoffMs = INITIAL_BACKOFF_MS;
 let intentionalDisconnect = false;
+// Generation counter: bumped on every connect/disconnect so stale close handlers skip reconnect
+let generation = 0;
 
 export function connectSession(code: string): void {
-  // Clean up any existing socket without poisoning reconnect state
   if (reconnectTimer !== null) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
   if (activeSocket) {
-    intentionalDisconnect = true; // prevent old socket's close handler from reconnecting
     activeSocket.close();
     activeSocket = null;
   }
 
+  generation++; // invalidate any pending close handlers from old sockets
   intentionalDisconnect = false;
   activeSessionCode = code;
   backoffMs = INITIAL_BACKOFF_MS;
@@ -40,6 +41,7 @@ export function connectSession(code: string): void {
 
 export function disconnectSession(): void {
   intentionalDisconnect = true;
+  generation++; // prevent any in-flight close handlers from reconnecting
   activeSessionCode = null;
 
   if (reconnectTimer !== null) {
@@ -54,6 +56,7 @@ export function disconnectSession(): void {
 }
 
 function openSocket(code: string): void {
+  const myGeneration = generation; // capture at socket creation time
   const ws = new WebSocket(WS_BASE);
   activeSocket = ws;
 
@@ -182,7 +185,7 @@ function openSocket(code: string): void {
     if (activeSocket === ws) {
       activeSocket = null;
     }
-    if (!intentionalDisconnect && activeSessionCode) {
+    if (!intentionalDisconnect && activeSessionCode && myGeneration === generation) {
       scheduleReconnect(activeSessionCode);
     }
   });
@@ -211,10 +214,11 @@ async function showQuestionNotification(sessionCode: string) {
 
 function scheduleReconnect(code: string): void {
   if (reconnectTimer !== null) return;
+  const myGeneration = generation;
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    if (!intentionalDisconnect && activeSessionCode === code) {
+    if (!intentionalDisconnect && activeSessionCode === code && myGeneration === generation) {
       backoffMs = Math.min(backoffMs * BACKOFF_FACTOR, MAX_BACKOFF_MS);
       openSocket(code);
     }
