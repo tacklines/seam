@@ -68,7 +68,7 @@ export async function fetchProjectTask(projectId: string, taskId: string): Promi
 
 export async function createTask(
   sessionCode: string,
-  data: { task_type: string; title: string; description?: string; parent_id?: string; assigned_to?: string; priority?: string; complexity?: string; source_task_id?: string },
+  data: { task_type: string; title: string; description?: string; parent_id?: string; assigned_to?: string; priority?: string; complexity?: string; status?: string; source_task_id?: string },
 ): Promise<TaskView> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks`, {
     method: 'POST',
@@ -80,7 +80,7 @@ export async function createTask(
 
 export async function createProjectTask(
   projectId: string,
-  data: { task_type: string; title: string; description?: string; parent_id?: string; assigned_to?: string; priority?: string; complexity?: string },
+  data: { task_type: string; title: string; description?: string; parent_id?: string; assigned_to?: string; priority?: string; complexity?: string; status?: string },
 ): Promise<TaskView> {
   const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks`, {
     method: 'POST',

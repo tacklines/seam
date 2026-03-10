@@ -1,6 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { createTask, createProjectTask, updateTask } from "../../state/task-api.js";
+import { createTask, createProjectTask } from "../../state/task-api.js";
 import { t } from "../../lib/i18n.js";
 import {
   type TaskView,
@@ -114,18 +114,14 @@ export class TaskCreateDialog extends LitElement {
         priority: this._priority !== "medium" ? this._priority : undefined,
         complexity:
           this._complexity !== "medium" ? this._complexity : undefined,
+        status:
+          this.initialStatus && this.initialStatus !== "open"
+            ? this.initialStatus
+            : undefined,
       };
       const task = this.sessionCode
         ? await createTask(this.sessionCode, taskData)
         : await createProjectTask(this.projectId, taskData);
-      // If a non-default status was requested (e.g. from kanban column "+"), update it
-      if (this.initialStatus && this.initialStatus !== "open") {
-        if (this.sessionCode) {
-          await updateTask(this.sessionCode, task.id, {
-            status: this.initialStatus,
-          });
-        }
-      }
       this.dispatchEvent(
         new CustomEvent<TaskCreatedDetail>("task-created", {
           detail: { task },

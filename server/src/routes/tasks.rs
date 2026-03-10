@@ -42,6 +42,7 @@ pub struct CreateTaskRequest {
     pub assigned_to: Option<Uuid>,
     pub priority: Option<String>,
     pub complexity: Option<String>,
+    pub status: Option<String>,
     pub source_task_id: Option<Uuid>,
     pub model_hint: Option<String>,
     pub budget_tier: Option<String>,
@@ -229,6 +230,9 @@ pub async fn resolve_session_pub(db: &sqlx::PgPool, code: &str) -> Result<Sessio
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+const VALID_TASK_TYPES: &[&str] = &["epic", "story", "task", "subtask", "bug"];
+const VALID_TASK_STATUSES: &[&str] = &["open", "in_progress", "done", "closed"];
+
 // --- Handlers ---
 
 pub async fn create_task(
@@ -243,8 +247,7 @@ pub async fn create_task(
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let participant = resolve_participant(&state.db, session.id, user.id).await?;
 
-    let valid_types = ["epic", "story", "task", "subtask", "bug"];
-    if !valid_types.contains(&req.task_type.as_str()) {
+    if !VALID_TASK_TYPES.contains(&req.task_type.as_str()) {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -279,6 +282,7 @@ pub async fn create_task(
     .bind(priority)
     .bind(complexity)
     .bind(req.assigned_to)
+    // created_by holds participant.id in session context
     .bind(participant.id)
     .bind(req.source_task_id)
     .bind(&req.model_hint)
@@ -351,8 +355,23 @@ pub async fn create_project_task(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let valid_types = ["epic", "story", "task", "subtask", "bug"];
-    if !valid_types.contains(&req.task_type.as_str()) {
+    // Verify user is a member of this project
+    sqlx::query_scalar::<_, Uuid>(
+        "SELECT project_id FROM project_members WHERE project_id = $1 AND user_id = $2",
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::FORBIDDEN)?;
+
+    if !VALID_TASK_TYPES.contains(&req.task_type.as_str()) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let status = req.status.as_deref().unwrap_or("open");
+    if !VALID_TASK_STATUSES.contains(&status) {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -374,7 +393,7 @@ pub async fn create_project_task(
     let task_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, source_task_id, model_hint, budget_tier, provider, created_at, updated_at)
-         VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, 'open', $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())"
+         VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())"
     )
     .bind(task_id)
     .bind(project_id)
@@ -383,9 +402,11 @@ pub async fn create_project_task(
     .bind(&req.task_type)
     .bind(&req.title)
     .bind(&req.description)
+    .bind(status)
     .bind(priority)
     .bind(complexity)
     .bind(req.assigned_to)
+    // created_by holds user.id in project context (no session/participant)
     .bind(user.id)
     .bind(req.source_task_id)
     .bind(&req.model_hint)
