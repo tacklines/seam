@@ -845,13 +845,14 @@ pub async fn dispatch_invocation(
     );
 
     // 2. Load workspace — must have a coder_workspace_name and be running
-    let ws: Option<(Option<String>, String)> =
-        sqlx::query_as("SELECT coder_workspace_name, status FROM workspaces WHERE id = $1")
+    let ws: Option<(Option<String>, String, Option<String>)> =
+        sqlx::query_as("SELECT coder_workspace_name, status, branch FROM workspaces WHERE id = $1")
             .bind(inv_workspace_id)
             .fetch_optional(db)
             .await?;
 
-    let (coder_workspace_name, status) = ws.ok_or(DispatchError::WorkspaceNotReady)?;
+    let (coder_workspace_name, status, workspace_branch) =
+        ws.ok_or(DispatchError::WorkspaceNotReady)?;
     if status != "running" {
         tracing::warn!(
             workspace_id = %inv_workspace_id,
@@ -963,7 +964,25 @@ pub async fn dispatch_invocation(
             bash_single_quote_escape(prov)
         ));
     }
-    let claude_cmd = format!("{model_env}{claude_cmd}");
+    // Build workspace sanitization prefix: reset tracked changes, remove untracked
+    // files, and restore the expected branch before each invocation so agents
+    // always start from a clean, known-good state regardless of what a previous
+    // invocation left behind.
+    let sanitize_prefix = {
+        let mut s =
+            "git -C /workspace checkout . 2>/dev/null || true && git -C /workspace clean -fd 2>/dev/null || true"
+                .to_string();
+        if let Some(ref branch) = workspace_branch {
+            s.push_str(&format!(
+                " && git -C /workspace checkout '{}' 2>/dev/null || true",
+                bash_single_quote_escape(branch)
+            ));
+        }
+        s.push_str(" && ");
+        s
+    };
+
+    let claude_cmd = format!("{model_env}{sanitize_prefix}{claude_cmd}");
 
     // 6. Resolve session code for WebSocket broadcast (best-effort)
     let session_code: Option<String> = if let Some(sid) = inv.session_id {
